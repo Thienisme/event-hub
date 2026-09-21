@@ -1,14 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { register, login } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
-import { authRateLimiter } from '../middlewares/rateLimit.middleware';
 import { validateBody, registerSchema, loginSchema } from '../utils/validation';
 import prisma from '../utils/prisma';
 
 const router = Router();
 
-router.post('/register', authRateLimiter, validateBody(registerSchema), register);
-router.post('/login', authRateLimiter, validateBody(loginSchema), login);
+router.post('/register', validateBody(registerSchema), register);
+router.post('/login', validateBody(loginSchema), login);
 
 // Private Route: Yêu cầu đính kèm Bearer Token
 router.get('/me', authenticate, async (req: Request, res: Response) => {
