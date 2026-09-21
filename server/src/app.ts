@@ -20,7 +20,28 @@ import { apiRateLimiter } from './middlewares/rateLimit.middleware';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// CORS: chỉ cho phép origin của frontend (khai báo qua CORS_ORIGINS, phân tách bằng dấu phẩy).
+// - Không có Origin (curl, k6, server-to-server) -> cho qua.
+// - Có Origin nhưng không nằm trong whitelist -> không gắn header CORS;
+//   trình duyệt sẽ tự chặn. Không ném lỗi để tránh biến thành 500 gây nhiễu log.
+const allowedOrigins = (
+  process.env.CORS_ORIGINS ??
+  'http://localhost:5173,http://127.0.0.1:5173'
+)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+  })
+);
 app.use(express.json());
 
 // Áp dụng rate limiter chung cho toàn bộ API
