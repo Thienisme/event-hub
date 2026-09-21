@@ -35,6 +35,7 @@ export const createEventSchema = z.object({
   endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),
   ticketTypes: z.array(
     z.object({
+      id: z.string().uuid('ID loại vé không hợp lệ!').optional(),
       name: z.string().min(1, 'Tên loại vé không được để trống!'),
       price: z.number().min(0, 'Giá vé không được âm!'),
       totalQuantity: z.number().int().min(1, 'Số lượng vé phải lớn hơn 0!'),
