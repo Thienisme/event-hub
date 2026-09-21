@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '../stores/event';
 import type { TicketType } from '../stores/event';
 import { useOrderStore } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
+import apiClient from '../api/axios';
 import { formatPrice, formatDateTime } from '../utils/format';
 import AppAlert from '../components/AppAlert.vue';
 import EventBanner from '../components/EventBanner.vue';
@@ -15,19 +16,30 @@ const eventStore = useEventStore();
 const orderStore = useOrderStore();
 const authStore = useAuthStore();
 
-const loadError = ref('');
-const errorMessage = ref('');
-const submittingId = ref<string | null>(null);
+  const loadError = ref('');
+  const errorMessage = ref('');
+  const submittingId = ref<string | null >(null);
+
+  const isDeleting = ref(false);
+  const deleteError = ref('');
 
 /** Số lượng vé user chọn cho từng loại vé, key = ticketTypeId */
 const quantities = ref<Record<string, number>>({});
 
+// Huỷ request cũ khi đổi route nhanh (/events/a -> /events/b) để response
+// của sự kiện cũ không về muộn và ghi đè sự kiện mới.
+let eventAbort: AbortController | undefined;
+
 const loadEvent = async (id: string) => {
+  eventAbort?.abort();
+  const controller = new AbortController();
+  eventAbort = controller;
+
   loadError.value = '';
   errorMessage.value = '';
 
   try {
-    const event = await eventStore.fetchEventById(id);
+    const event = await eventStore.fetchEventById(id, controller.signal);
 
     if (!event) {
       loadError.value = 'Không tìm thấy sự kiện này!';
@@ -39,6 +51,8 @@ const loadEvent = async (id: string) => {
       (event.ticketTypes ?? []).map((ticket) => [ticket.id, 1])
     );
   } catch (error: any) {
+    // Request bị chính mình huỷ -> bỏ qua, không phải lỗi thật.
+    if (error?.code === 'ERR_CANCELED') return;
     loadError.value =
       error.response?.status === 404
         ? 'Không tìm thấy sự kiện này!'
@@ -56,6 +70,10 @@ watch(
     if (newId) loadEvent(String(newId));
   }
 );
+
+onUnmounted(() => {
+  eventAbort?.abort();
+});
 
 /**
  * Ô số lượng là type="number" nên khi user xoá trắng, v-model.number trả về ''.
@@ -116,6 +134,31 @@ const handleBook = async (ticket: TicketType) => {
     submittingId.value = null;
   }
 };
+
+const handleDelete = async () => {
+  const eventId = route.params.id;
+  if (!eventId) return;
+
+  if (!confirm(`Bạn có chắc muốn xóa sự kiện "${eventStore.currentEvent?.title}"?`)) {
+    return;
+  }
+
+  isDeleting.value = true;
+  deleteError.value = '';
+
+  try {
+    // Dùng apiClient: tự gắn token + tự xử lý 401 (điều fetch trần không làm).
+    await apiClient.delete(`/events/${eventId}`);
+
+    // Quay về trang chủ sau khi xóa thành công
+    router.push({ name: 'Home' });
+  } catch (error: any) {
+    deleteError.value =
+      error.response?.data?.message || 'Xóa sự kiện thất bại!';
+  } finally {
+    isDeleting.value = false;
+  }
+};
 </script>
 
 <template>
@@ -157,6 +200,25 @@ const handleBook = async (ticket: TicketType) => {
           :src="eventStore.currentEvent.bannerUrl"
           :alt="eventStore.currentEvent.title"
         />
+      </div>
+
+      <!-- Nút quản lý sự kiện (chỉ hiển thị cho organizer/admin) -->
+      <div v-if="authStore.isOrganizer" class="mt-4 flex items-center gap-3">
+        <router-link
+          :to="{ name: 'EditEvent', params: { id: eventStore.currentEvent.id } }"
+          class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+        >
+          Chỉnh sửa sự kiện
+        </router-link>
+        <button
+          :disabled="isDeleting"
+          @click="handleDelete"
+          class="px-4 py-2 text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <span v-if="isDeleting">Đang xóa...</span>
+          <span v-else>Xóa sự kiện</span>
+        </button>
+        <AppAlert v-if="deleteError" :message="deleteError" type="error" />
       </div>
 
       <h1 class="mt-6 text-3xl font-extrabold text-gray-900 tracking-tight">

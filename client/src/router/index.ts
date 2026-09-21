@@ -16,6 +16,18 @@ const router = createRouter({
       component: () => import('@/views/EventDetailView.vue'),
     },
     {
+      path: '/events/create',
+      name: 'CreateEvent',
+      component: () => import('@/views/EventFormView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
+      path: '/events/:id/edit',
+      name: 'EditEvent',
+      component: () => import('@/views/EventFormView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
       path: '/my-orders',
       name: 'MyOrders',
       component: () => import('@/views/MyOrdersView.vue'),
@@ -43,8 +55,8 @@ const router = createRouter({
 });
 
 // Guard kiểm tra quyền truy cập
-// Dùng kiểu `return` thay cho `next(...)`: đây là cách vue-router khuyến nghị,
-// `next` chỉ còn được giữ lại để tương thích ngược và sẽ bị xoá ở bản sau.
+// Dùng kiểu `return` thay vì `next(...)`: đây là cách vue-router khuyến nghị,
+// `next` chỉ còn được giữ lại để tương thích ngược và sẽ bị xóa ở bản sau.
 router.beforeEach((to) => {
   const authStore = useAuthStore();
 
@@ -55,6 +67,11 @@ router.beforeEach((to) => {
 
   // Đã đăng nhập mà cố vào /login hoặc /register -> chuyển về Home
   if (to.meta.guestOnly && authStore.isAuthenticated) {
+    return { name: 'Home' };
+  }
+
+  // Route yêu cầu quyền organizer/admin
+  if (to.meta.organizerOnly && authStore.isAuthenticated && !authStore.isOrganizer) {
     return { name: 'Home' };
   }
 
