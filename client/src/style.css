@@ -1,0 +1,15 @@
+/* Tailwind CSS v4: đây là "cửa vào" duy nhất của toàn bộ CSS.
+   Một dòng @import này sẽ nạp: preflight (reset) + toàn bộ utility class.
+   Không cần @tailwind base/components/utilities như v3 nữa. */
+@import "tailwindcss";
+
+/* App dùng layout full-height, các view tự set nền (bg-gray-50) và min-h-screen */
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}

@@ -1,0 +1,97 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  ORGANIZER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  fullName  String
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events    Event[]  @relation("OrganizerEvents")
+  orders    Order[]
+
+  @@map("users")
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  location    String
+  bannerUrl   String?
+  startTime   DateTime
+  endTime     DateTime
+  organizerId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizer   User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  ticketTypes TicketType[]
+
+  @@map("events")
+}
+
+model TicketType {
+  id          String   @id @default(uuid())
+  eventId     String
+  name        String   // VD: VIP, Standard
+  price       Decimal  @db.Decimal(10, 2)
+  totalQuantity Int
+  availableQuantity Int
+  createdAt   DateTime @default(now())
+
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tickets     Ticket[]
+
+  @@map("ticket_types")
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  userId       String
+  totalAmount  Decimal     @db.Decimal(10, 2)
+  status       OrderStatus @default(PENDING)
+  expiresAt    DateTime?   // Giữ chỗ trong 10 phút
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user         User        @relation(fields: [userId], references: [id])
+  tickets      Ticket[]
+
+  @@map("orders")
+}
+
+model Ticket {
+  id           String     @id @default(uuid())
+  orderId      String
+  ticketTypeId String
+  qrCode       String?    @unique
+  createdAt    DateTime   @default(now())
+
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+
+  @@map("tickets")
+}
