@@ -19,8 +19,6 @@ const Redis = require('ioredis');
 const prisma = new PrismaClient();
 const redis = new Redis({ host: '127.0.0.1', port: 6379 });
 const BASE = 'http://localhost:5000/api';
-const TICKET_TYPE = 'f8978946-4c77-4911-8422-4c36624554ac'; // Vé VIP4
-const LOCK_KEY = `locks:ticketType:${TICKET_TYPE}`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('  ', ...a);
@@ -31,22 +29,31 @@ async function api(path, opts) {
   return { status: res.status, body };
 }
 
-async function qty() {
+async function qty(ticketTypeId) {
   const rows = await prisma.$queryRawUnsafe(
-    `SELECT availableQuantity AS q FROM ticket_types WHERE id = '${TICKET_TYPE}'`
+    `SELECT availableQuantity AS q FROM ticket_types WHERE id = '${ticketTypeId}'`
   );
   return rows[0].q;
 }
 
 (async () => {
-  let token, email;
+  let TICKET_TYPE, LOCK_KEY, token, email;
   try {
     // ---------- 0. Chuan bi ----------
-    await prisma.ticketType.update({
-      where: { id: TICKET_TYPE },
-      data: { availableQuantity: 1 },
+    const created = await prisma.ticketType.create({
+      data: {
+        eventId: (await prisma.event.findFirst()).id,
+        name: `Oversell Test ${Date.now()}`,
+        price: 100000,
+        totalQuantity: 1,
+        availableQuantity: 1,
+        saleStart: new Date(),
+        saleEnd: new Date(Date.now() + 86400000),
+      },
     });
-    console.log('\n[0] Dat so ve kha dung = 1 (de 2 nguoi cung mua 1 ve cuoi)\n');
+    TICKET_TYPE = created.id;
+    LOCK_KEY = `locks:ticketType:${TICKET_TYPE}`;
+    console.log('\n[0] Tao ticket type:', TICKET_TYPE, '(availableQuantity = 1)\n');
 
     email = `oversell_${Date.now()}@test.local`;
     const reg = await api('/auth/register', {
@@ -93,7 +100,7 @@ async function qty() {
     });
     await sleep(500);
     log('[2] A da giu lock:', (await redis.get(LOCK_KEY)) ? 'CO' : 'KHONG');
-    log('    So ve DB luc nay (A chua commit):', await qty());
+    log('    So ve DB luc nay (A chua commit):', await qty(TICKET_TYPE));
 
     // ---------- 3. Lock bi mat giua transaction ----------
     await sleep(1400);
@@ -109,7 +116,7 @@ async function qty() {
     });
     await sleep(400);
     log('[4] B da giu lock:', (await redis.get(LOCK_KEY)) ? 'CO' : 'KHONG');
-    log('    B doc duoc so ve nao?', await qty(), '(A chua commit nen B van thay 1)');
+    log('    B doc duoc so ve nao?', await qty(TICKET_TYPE), '(A chua commit nen B van thay 1)');
 
     // ---------- 5. Nha row lock ----------
     await sleep(600);
@@ -120,7 +127,7 @@ async function qty() {
     await Promise.allSettled([holder]);
 
     // ---------- 6. Ket qua ----------
-    const finalQty = await qty();
+    const finalQty = await qty(TICKET_TYPE);
     const orders = await prisma.order.count({ where: { user: { email } } });
 
     const oversell = finalQty < 0 || orders > 1;

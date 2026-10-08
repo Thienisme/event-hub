@@ -26,7 +26,10 @@ const PORT = process.env.PORT || 5000;
 //   trình duyệt sẽ tự chặn. Không ném lỗi để tránh biến thành 500 gây nhiễu log.
 const allowedOrigins = (
   process.env.CORS_ORIGINS ??
-  'http://localhost:5173,http://127.0.0.1:5173'
+  'http://localhost:5173,http://127.0.0.1:5173',
+  'http://localhost:5174,http://127.0.0.1:5174',
+  'http://localhost:5176,http://127.0.0.1:5176',
+  'http://localhost:5175,http://127.0.0.1:5175'
 )
   .split(',')
   .map((origin) => origin.trim())

@@ -444,7 +444,7 @@ Lợi ích: chặn input rác/injection từ sớm, và message lỗi đã viế
 
 15 lần/5 phút vì người thật thường đặt 1–3 lần/sự kiện; đủ cho nhu cầu mua nhiều vé nhưng chặn bot.
 
-> **Điểm chưa làm (nêu thẳng):** hiện **chưa có** limiter riêng cho `/auth/login` và `/auth/register`. Chúng chỉ được bảo vệ bởi `apiRateLimiter` chung (100/phút), nên brute-force mật khẩu vẫn có không gian. Đây là hạng mục nên bổ sung — ví dụ 5 lần/15 phút cho auth.
+> **Đã bổ sung:** `authRateLimiter` (`rateLimit.middleware.ts`) áp dụng cho `/auth/login` và `/auth/register`: **5 lần thất bại thì chặn 1 phút** (`windowMs: 60s`, `max: 5`, `skipSuccessfulRequests: true`). `skipSuccessfulRequests` khiến chỉ request lỗi (4xx/5xx) mới bị đếm — đăng nhập thành công không trừ hạn, nên user gõ sai 4 lần rồi nhập đúng vẫn dùng bình thường. Lưu ý: limiter key mặc định là `req.ip`, nếu đặt sau reverse proxy (nginx/LB) phải bật `app.set('trust proxy', 1)` để không gộp mọi user vào một IP.
 
 ### 6.7 RBAC — phân quyền theo role
 
@@ -649,7 +649,7 @@ Vì nó không "đọc rồi ghi" — nó dùng `updateMany` có điều kiện 
 
 **Scale:** queue-based booking thay vì real-time; event-driven (Kafka/RabbitMQ) cho order processing; tách microservices (auth/event/order); CDN cho static asset.
 
-**Bảo mật còn thiếu:** rate limiter riêng cho `/auth/*`; refresh token; HTTPS/HSTS; thêm `helmet` cho secure headers.
+**Bảo mật còn thiếu:** refresh token; HTTPS/HSTS; thêm `helmet` cho secure headers. (rate limit cho `/auth/*` đã có — mục 6.6)
 
 **Tính năng:** tích hợp VNPay/MoMo; email/SMS xác nhận & nhắc hết hạn; WebSocket cập nhật tồn kho real-time; admin dashboard.
 
@@ -805,7 +805,7 @@ Hệ quả: **không có endpoint thanh toán/xác nhận**, nên mọi đơn r�
 | 1 | Update event reset kho đã bán / lỗi FK | ✅ Đã sửa | Mục 15.1 — reconcile theo id + transaction + atomic inventory |
 | 1b | Delete event đã bán vé vẫn lỗi FK | ✅ Đã sửa | Bắt `P2003` → 400 (`event.controller.ts`) |
 | 2 | Không có thanh toán → `CONFIRMED`/`CANCELLED`/`qrCode` không dùng | Trung bình | Mục 15.2 |
-| 3 | Không có rate limit riêng cho `/auth/login`, `/auth/register` | **Cao** | Brute-force mật khẩu; mục 6.6 |
+| 3 | Không có rate limit riêng cho `/auth/login`, `/auth/register` | ✅ Đã sửa | `authRateLimiter` (5 lần thất bại/1 phút, `skipSuccessfulRequests`) cho login; `registerRateLimiter` (10 lần/1 phút, **không skip**) cho register — mục 6.6 |
 | 4 | CORS mở mọi origin | ✅ Đã sửa | Whitelist qua `CORS_ORIGINS`; mục 15.4 |
 | 5 | Frontend bypass axios ở 3 chỗ | ✅ Đã sửa | Gom về `apiClient`; mục 15.4 |
 | 6 | Prisma log query mọi môi trường | ✅ Đã sửa | Chỉ log `query/info` ngoài production; mục 15.4 |
