@@ -36,15 +36,14 @@ async function qty(ticketTypeId) {
   let TICKET_TYPE, LOCK_KEY, token, email;
   try {
     // ---------- 0. Tao ticket type moi cho test nay ----------
+    const event = await prisma.event.findFirst();
     const created = await prisma.ticketType.create({
       data: {
-        eventId: (await prisma.event.findFirst()).id,
+        eventId: event.id,
         name: `Natural Test ${Date.now()}`,
         price: 100000,
         totalQuantity: 1,
         availableQuantity: 1,
-        saleStart: new Date(),
-        saleEnd: new Date(Date.now() + 86400000),
       },
     });
     TICKET_TYPE = created.id;
