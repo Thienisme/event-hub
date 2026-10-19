@@ -1,0 +1,73 @@
+# Hạ tầng dev cho EventHub: MySQL + Redis.
+#
+# BE/FE vẫn chạy local (npm run dev) và kết nối qua 127.0.0.1, nên không cần
+# sửa gì trong server/.env nếu dùng đúng các cổng mặc định dưới đây.
+#
+#   docker compose up -d     # bật
+#   docker compose ps        # xem trạng thái/health
+#   docker compose down      # tắt (giữ dữ liệu trong volume)
+#   docker compose down -v   # tắt và XÓA dữ liệu
+#
+# Lưu ý: nếu đang chạy MySQL/Redis cài bằng brew (hoặc container của project
+# khác) thì phải tắt trước, không thì hai bên tranh nhau cổng 3306/6379:
+#   brew services stop mysql && brew services stop redis
+#
+# Nếu không muốn tắt, đổi cổng phía host bằng biến môi trường, ví dụ:
+#   MYSQL_PORT=3307 docker compose up -d
+# rồi sửa DATABASE_URL trong server/.env thành ...@127.0.0.1:3307/eventhub
+
+name: event-hub
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: event-hub-mysql
+    restart: unless-stopped
+    environment:
+      # Mật khẩu root cho dev. Override bằng biến môi trường nếu muốn, nhưng phải
+      # sửa DATABASE_URL trong server/.env cho khớp.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-eventhub}
+    ports:
+      # Chỉ mở trên loopback: DB không lộ ra LAN/Wi-Fi công cộng.
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
+    command:
+      # Khớp charset/collation mà các migration của Prisma đang dùng.
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # Lần đầu khởi tạo database mất vài chục giây.
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: event-hub-redis
+    restart: unless-stopped
+    command:
+      # AOF: lock/queue của Redlock sống sót qua restart container.
+      - redis-server
+      - --appendonly
+      - "yes"
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mysql_data:
+  redis_data:
