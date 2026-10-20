@@ -37,6 +37,23 @@ const eventStore = useEventStore();
 const eventId = computed(() => (route.params.id as string | undefined) || undefined);
 const isEditMode = computed(() => !!eventId.value);
 
+/**
+ * Giới hạn nhập liệu — PHẢI khớp với cột DB và với LIMITS ở
+ * server/src/utils/validation.ts.
+ *
+ * Mục đích: chặn lỗi NGAY LÚC GÕ, thay vì để dữ liệu vượt giới hạn bay tới
+ * MySQL rồi mới nhận về 500 "Lỗi máy chủ" không rõ nguyên nhân.
+ */
+const LIMITS = {
+  TITLE: 255,
+  DESCRIPTION: 5000,
+  LOCATION: 255,
+  BANNER_URL: 500,
+  TICKET_NAME: 100,
+  PRICE: 9_999_999_999.99,
+  QUANTITY: 2_147_483_647,
+} as const;
+
 const title = ref('');
 const description = ref('');
 const location = ref('');
@@ -49,6 +66,9 @@ const isLoading = ref(false);
 const isLoadingEvent = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
+
+/** Số ký tự mô tả còn lại — để người dùng thấy được giới hạn trước khi gõ quá. */
+const descriptionRemaining = computed(() => LIMITS.DESCRIPTION - description.value.length);
 
 /** Timer chuyển hướng sang trang chi tiết sau khi tạo sự kiện (xem handleSubmit). */
 let redirectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -235,6 +255,7 @@ onUnmounted(() => {
             v-model="title"
             type="text"
             required
+            :maxlength="LIMITS.TITLE"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             placeholder="Nhập tiêu đề sự kiện"
           />
@@ -245,9 +266,18 @@ onUnmounted(() => {
           <textarea
             v-model="description"
             rows="4"
+            :maxlength="LIMITS.DESCRIPTION"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             placeholder="Nhập mô tả chi tiết về sự kiện..."
           ></textarea>
+          <!-- Bộ đếm ký tự: chỉ hiện khi sắp chạm giới hạn, tránh rối mắt. -->
+          <p
+            v-if="descriptionRemaining < 500"
+            class="text-xs text-right mt-1"
+            :class="descriptionRemaining < 100 ? 'text-red-600 font-medium' : 'text-gray-400'"
+          >
+            Còn {{ descriptionRemaining }} ký tự
+          </p>
         </div>
 
         <div>
@@ -256,6 +286,7 @@ onUnmounted(() => {
             v-model="location"
             type="text"
             required
+            :maxlength="LIMITS.LOCATION"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             placeholder="Nhập địa điểm tổ tổ chức"
           />
@@ -266,6 +297,7 @@ onUnmounted(() => {
           <input
             v-model="bannerUrl"
             type="url"
+            :maxlength="LIMITS.BANNER_URL"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             placeholder="https://example.com/banner.jpg"
           />
@@ -327,6 +359,7 @@ onUnmounted(() => {
                 <input
                   v-model="ticket.name"
                   type="text"
+                  :maxlength="LIMITS.TICKET_NAME"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   placeholder="VD: VIP, Standard"
                 />
@@ -339,6 +372,8 @@ onUnmounted(() => {
                     v-model.number="ticket.price"
                     type="number"
                     min="0"
+                    step="0.01"
+                    :max="LIMITS.PRICE"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   />
                 </div>
@@ -348,6 +383,7 @@ onUnmounted(() => {
                     v-model.number="ticket.totalQuantity"
                     type="number"
                     min="1"
+                    :max="LIMITS.QUANTITY"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   />
                 </div>

@@ -37,10 +37,18 @@ model User {
 
 model Event {
   id          String   @id @default(uuid())
-  title       String
-  description String?
-  location    String
-  bannerUrl   String?
+  // Độ dài cột được đặt tường minh thay vì để Prisma mặc định VARCHAR(191).
+  //
+  // VARCHAR(191) là HỆ QUẢ của giới hạn index utf8mb4 (191 * 4 = 764 byte < 767),
+  // KHÔNG phải một quyết định thiết kế. Nhưng khi mọi cột chuỗi đều dừng ở 191
+  // ký tự thì một mô tả dài hơn 191 ký tự sẽ chết ở tầng DB với lỗi 500 chung
+  // chung, thay vì 400 kèm thông báo rõ ràng. Ta chọn độ dài vừa đủ cho nội dung
+  // thực tế và KHỚP với giới hạn ở tầng validation (xem utils/validation.ts).
+  title       String   @db.VarChar(255)
+  // Mô tả sự kiện là nội dung dài, không có lý do gì cắt cụt ở 191 ký tự.
+  description String?  @db.Text
+  location    String   @db.VarChar(255)
+  bannerUrl   String?  @db.VarChar(500)
   startTime   DateTime
   endTime     DateTime
   organizerId String
@@ -56,8 +64,10 @@ model Event {
 model TicketType {
   id          String   @id @default(uuid())
   eventId     String
-  name        String   // VD: VIP, Standard
-  price       Decimal  @db.Decimal(10, 2)
+  name        String   @db.VarChar(100)
+  // DECIMAL(12,2): tối đa 9.999.999.999,99 — đủ cho giá vé VNĐ, và khớp với
+  // thang của orders.totalAmount (xem model Order).
+  price       Decimal  @db.Decimal(12, 2)
   totalQuantity Int
   availableQuantity Int
   createdAt   DateTime @default(now())
@@ -71,7 +81,9 @@ model TicketType {
 model Order {
   id           String      @id @default(uuid())
   userId       String
-  totalAmount  Decimal     @db.Decimal(10, 2)
+  // Thang tiền phải khớp với ticket_types.price, nếu không một đơn mua vé đắt
+  // sẽ không lưu được vào bảng orders.
+  totalAmount  Decimal     @db.Decimal(12, 2)
   status       OrderStatus @default(PENDING)
   expiresAt    DateTime?   // Giữ chỗ trong 10 phút
   createdAt    DateTime    @default(now())
