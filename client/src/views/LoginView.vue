@@ -67,8 +67,8 @@ const handleLogin = async () => {
         </p>
       </div>
 
-      <AppAlert :message="successMessage" type="success" />
-      <AppAlert :message="errorMessage" type="error" />
+      <AppAlert :message="successMessage" type="success" class="mb-4" />
+      <AppAlert :message="errorMessage" type="error" class="mb-4" />
 
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
         <div class="space-y-4">

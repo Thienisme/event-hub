@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useEventStore } from '../stores/event';
 import apiClient from '../api/axios';
 import AppAlert from '../components/AppAlert.vue';
+import { toAppDateTimeInput, fromAppDateTimeInput } from '../utils/format';
 import type { EventItem, TicketType } from '../stores/event';
 
 interface TicketTypeForm {
@@ -25,8 +26,16 @@ const router = useRouter();
 const authStore = useAuthStore();
 const eventStore = useEventStore();
 
-const eventId = route.params.id;
-const isEditMode = computed(() => !!eventId);
+/**
+ * id phải là COMPUTED, không phải giá trị capture một lần.
+ *
+ * Trước đây `const eventId = route.params.id` chỉ đọc param đúng một lần lúc
+ * component được setup. Vue-router tái sử dụng component khi chỉ khác param,
+ * nên điều hướng /events/1/edit -> /events/2/edit sẽ vẫn tải và CẬP NHẬT
+ * sự kiện 1 trong khi user đang nhìn sự kiện 2.
+ */
+const eventId = computed(() => (route.params.id as string | undefined) || undefined);
+const isEditMode = computed(() => !!eventId.value);
 
 const title = ref('');
 const description = ref('');
@@ -36,10 +45,29 @@ const startTime = ref('');
 const endTime = ref('');
 const ticketTypes = ref<TicketTypeForm[]>([]);
 const isLoading = ref(false);
+/** Đang nạp dữ liệu sự kiện để sửa -> chặn submit để không lưu nhầm form rỗng. */
+const isLoadingEvent = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 
+/** Timer chuyển hướng sang trang chi tiết sau khi tạo sự kiện (xem handleSubmit). */
+let redirectTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Xoá sạch form trước khi nạp sự kiện khác, tránh để lại dữ liệu cũ. */
+const resetForm = () => {
+  title.value = '';
+  description.value = '';
+  location.value = '';
+  bannerUrl.value = '';
+  startTime.value = '';
+  endTime.value = '';
+  ticketTypes.value = [];
+  errorMessage.value = '';
+  successMessage.value = '';
+};
+
 const loadEventForEdit = async (id: string) => {
+  isLoadingEvent.value = true;
   try {
     const event = await eventStore.fetchEventById(id);
     if (event) {
@@ -47,8 +75,10 @@ const loadEventForEdit = async (id: string) => {
       description.value = event.description || '';
       location.value = event.location;
       bannerUrl.value = event.bannerUrl || '';
-      startTime.value = event.startTime.slice(0, 16);
-      endTime.value = event.endTime.slice(0, 16);
+      // Chuyển từ UTC (BE) sang giờ nghiệp vụ cho ô datetime-local.
+      // Cắt chuỗi ISO thẳng sẽ đưa nhầm giờ UTC vào ô nhập -> lệch múi giờ.
+      startTime.value = toAppDateTimeInput(event.startTime);
+      endTime.value = toAppDateTimeInput(event.endTime);
       // Phải giữ `id`: BE dựa vào id để update tại chỗ và giữ nguyên số vé đã bán.
       // Bỏ id đi thì mỗi lần lưu sẽ tạo loại vé mới và xoá loại chưa bán.
       ticketTypes.value = event.ticketTypes?.map((t: TicketType) => ({
@@ -57,9 +87,13 @@ const loadEventForEdit = async (id: string) => {
         price: t.price,
         totalQuantity: t.totalQuantity,
       })) || [];
+    } else {
+      errorMessage.value = 'Không tìm thấy sự kiện này!';
     }
   } catch (error: any) {
     errorMessage.value = error.response?.data?.message || 'Không tải được thông tin sự kiện!';
+  } finally {
+    isLoadingEvent.value = false;
   }
 };
 
@@ -74,8 +108,30 @@ onMounted(() => {
     return;
   }
 
-  if (isEditMode.value) {
-    loadEventForEdit(eventId as string);
+  if (eventId.value) {
+    loadEventForEdit(eventId.value);
+  }
+});
+
+// Chuyển /events/1/edit -> /events/2/edit: component được tái sử dụng, phải nạp
+// lại dữ liệu sự kiện mới, nếu không form sẽ hiển thị (và lưu) sự kiện cũ.
+watch(eventId, (newId, oldId) => {
+  if (newId === oldId) return;
+
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: route.fullPath } });
+    return;
+  }
+
+  if (!authStore.isOrganizer) {
+    router.push({ name: 'Home' });
+    return;
+  }
+
+  resetForm();
+
+  if (newId) {
+    loadEventForEdit(newId);
   }
 });
 
@@ -106,8 +162,9 @@ const handleSubmit = async () => {
     description: description.value || null,
     location: location.value,
     bannerUrl: bannerUrl.value || null,
-    startTime: new Date(startTime.value).toISOString(),
-    endTime: new Date(endTime.value).toISOString(),
+    // Ô datetime-local trả về giờ nghiệp vụ -> quy đổi sang UTC để BE lưu đúng.
+    startTime: fromAppDateTimeInput(startTime.value),
+    endTime: fromAppDateTimeInput(endTime.value),
     // Luôn gửi mảng (kể cả rỗng) ở chế độ edit: mảng rỗng = người dùng xoá hết loại vé.
     // Ở chế độ create, mảng rỗng cũng vô hại vì createEvent chỉ tạo khi length > 0.
     ticketTypes: ticketTypes.value.map(t => ({
@@ -122,14 +179,15 @@ const handleSubmit = async () => {
     // Dùng apiClient thay vì fetch trần: tự gắn Bearer token, tự xử lý 401,
     // message lỗi nằm ở error.response.data.message.
     if (isEditMode.value) {
-      const { data } = await apiClient.put<ApiResponse>(`/events/${eventId}`, payload);
+      const { data } = await apiClient.put<ApiResponse>(`/events/${eventId.value}`, payload);
       successMessage.value = data.message;
     } else {
       const { data } = await apiClient.post<ApiResponse>('/events', payload);
       successMessage.value = data.message;
       // Chuyển hướng đến trang chi tiết sự kiện vừa tạo
       if (data.event) {
-        setTimeout(() => {
+        redirectTimer = setTimeout(() => {
+          redirectTimer = undefined;
           router.push({ name: 'EventDetail', params: { id: data.event!.id } });
         }, 1500);
       }
@@ -141,6 +199,15 @@ const handleSubmit = async () => {
     isLoading.value = false;
   }
 };
+
+// Rời trang trước khi hết 1.5s thì huỷ chuyển hướng, tránh bị kéo lại sau khi
+// user đã chuyển sang trang khác.
+onUnmounted(() => {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer);
+    redirectTimer = undefined;
+  }
+});
 </script>
 
 <template>
@@ -158,8 +225,8 @@ const handleSubmit = async () => {
         </button>
       </div>
 
-      <AppAlert :message="errorMessage" type="error" />
-      <AppAlert :message="successMessage" type="success" />
+      <AppAlert :message="errorMessage" type="error" class="mb-4" />
+      <AppAlert :message="successMessage" type="success" class="mb-4" />
 
       <form @submit.prevent="handleSubmit" class="bg-white rounded-xl shadow border border-gray-100 p-6 space-y-6">
         <div>
@@ -300,10 +367,11 @@ const handleSubmit = async () => {
         <div class="pt-4 border-t">
           <button
             type="submit"
-            :disabled="isLoading"
+            :disabled="isLoading || isLoadingEvent"
             class="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
           >
             <span v-if="isLoading">{{ isEditMode ? 'Đang cập nhật...' : 'Đang tạo...' }}</span>
+            <span v-else-if="isLoadingEvent">Đang tải dữ liệu sự kiện...</span>
             <span v-else>{{ isEditMode ? 'Cập nhật sự kiện' : 'Tạo sự kiện' }}</span>
           </button>
         </div>

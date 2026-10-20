@@ -89,6 +89,9 @@ export const useEventStore = defineStore('event', () => {
   // Lấy chi tiết 1 sự kiện (kèm `signal` để huỷ khi đổi route nhanh)
   async function fetchEventById(id: string, signal?: AbortSignal): Promise<EventItem | null> {
     beginRequest();
+    // Xoá sự kiện cũ ngay khi bắt đầu fetch: nếu giữ lại, người dùng sẽ thấy
+    // nội dung của sự kiện trước đó trong lúc sự kiện mới đang tải.
+    currentEvent.value = null;
     try {
       const response = await apiClient.get<EventDetailResponse>(`/events/${id}`, { signal });
       currentEvent.value = response.data.data;

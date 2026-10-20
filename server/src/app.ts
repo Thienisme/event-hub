@@ -80,6 +80,9 @@ assertAuthConfig();
 
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  // Node không có date_default_timezone_set như PHP -> múi giờ server do biến
+  // môi trường TZ quyết định (xem server/.env.example).
+  console.log(`🕒 Server timezone: ${process.env.TZ || '(theo múi giờ của OS)'}`);
 
   // Job dọn các đơn giữ chỗ quá hạn, trả vé về kho
   startExpireOrdersJob();

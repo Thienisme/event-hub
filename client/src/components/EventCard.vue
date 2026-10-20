@@ -32,7 +32,7 @@ const formatDate = (dateString: string) => formatDateTime(dateString);
       <div>
         <!-- Thời gian -->
         <p class="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">
-          {{ formatDate(event.startTime) }}
+          {{ formatDate(event.startTime) }} - {{ formatDate(event.endTime) }}
         </p>
 
         <!-- Tiêu đề -->

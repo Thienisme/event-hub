@@ -54,7 +54,7 @@ const handleRegister = async () => {
         </p>
       </div>
 
-      <AppAlert :message="errorMessage" type="error" />
+      <AppAlert :message="errorMessage" type="error" class="mb-4" />
 
       <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
         <div class="space-y-4">
