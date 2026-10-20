@@ -12,6 +12,8 @@ import prisma from './utils/prisma';
 import authRoutes from './routes/auth.routes';
 import eventRoutes from './routes/event.routes';
 import orderRoutes from './routes/order.routes';
+import adminRoutes from './routes/admin.routes';
+import organizerRoutes from './routes/organizer.routes';
 import { startExpireOrdersJob } from './jobs/expireOrders.job';
 import { logUnexpectedError } from './utils/errors';
 import { assertAuthConfig } from './config/auth';
@@ -54,6 +56,9 @@ app.use('/api/', apiRateLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/orders', orderRoutes);
+// Quản trị (chỉ ADMIN) và quản lý sự kiện của bản thân (ORGANIZER/ADMIN).
+app.use('/api/admin', adminRoutes);
+app.use('/api/organizer', organizerRoutes);
 
 // Health Check
 app.get('/api/health', async (req: Request, res: Response) => {

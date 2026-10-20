@@ -71,6 +71,14 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác!' });
     }
 
+    // Tài khoản bị khoá: vẫn kiểm tra mật khẩu trước để không lộ ra việc
+    // "email này tồn tại nhưng đã bị khoá" cho người lạ.
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: 'Tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên!',
+      });
+    }
+
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       getJwtSecret(),

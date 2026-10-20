@@ -183,8 +183,10 @@ export const updateEvent = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Không tìm thấy sự kiện!' });
     }
 
-    // Chỉ organizer của sự kiện hoặc admin mới được sửa
-    if (existingEvent.organizerId !== userId && req.user?.role !== 'ADMIN') {
+    // Chỉ organizer của sự kiện hoặc admin mới được sửa.
+    // Dùng `currentRole` (đọc từ DB) chứ không phải `role` trong JWT: token có
+    // thể đã cũ sau khi admin bị hạ quyền.
+    if (existingEvent.organizerId !== userId && req.user?.currentRole !== 'ADMIN') {
       return res.status(403).json({ message: 'Bạn không có quyền sửa sự kiện này!' });
     }
 
@@ -369,8 +371,9 @@ export const deleteEvent = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Không tìm thấy sự kiện!' });
     }
 
-    // Chỉ organizer của sự kiện hoặc admin mới được xóa
-    if (existingEvent.organizerId !== userId && req.user?.role !== 'ADMIN') {
+    // Chỉ organizer của sự kiện hoặc admin mới được xóa.
+    // Dùng `currentRole` (đọc từ DB) chứ không phải `role` trong JWT.
+    if (existingEvent.organizerId !== userId && req.user?.currentRole !== 'ADMIN') {
       return res.status(403).json({ message: 'Bạn không có quyền xóa sự kiện này!' });
     }
 

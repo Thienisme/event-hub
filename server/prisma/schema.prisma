@@ -26,13 +26,43 @@ model User {
   password  String
   fullName  String
   role      Role     @default(CUSTOMER)
+  // Tài khoản bị khoá: không đăng nhập được, và token đang cầm cũng mất tác dụng.
+  isActive  Boolean  @default(true)
+  // Mốc thay đổi role. Dùng để biết token đã cấp còn hợp lệ hay không.
+  roleChangedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   events    Event[]  @relation("OrganizerEvents")
   orders    Order[]
+  auditLogs AdminAuditLog[] @relation("AuditActor")
 
+  @@index([role])
+  @@index([isActive])
   @@map("users")
+}
+
+// Nhật ký thao tác quản trị: ai làm gì lên ai, lúc nào.
+model AdminAuditLog {
+  id      String  @id @default(uuid())
+  // actorId CÓ THỂ null: khi tài khoản admin bị xoá, nhật ký vẫn phải được giữ
+  // lại (đó là mục đích của nhật ký). `onDelete: SetNull` cho phép xoá user mà
+  // không phá vỡ lịch sử.
+  actorId String?
+  // Ảnh chụp email của người thực hiện tại thời điểm ghi. Nhật ký tồn tại lâu
+  // hơn tài khoản, nên phải lưu kèm thông tin nhận diện để đọc lại vẫn hiểu
+  // "ai đã làm" ngay cả khi user đã bị xoá.
+  actorEmail String
+  action     String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
 }
 
 model Event {

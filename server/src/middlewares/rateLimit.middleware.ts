@@ -13,8 +13,23 @@ export const apiRateLimiter = rateLimit({
 });
 
 /**
+ * Rate limiter cho nhóm API quản trị.
+ *
+ * Giới hạn chặt hơn API thường (30/phút thay vì 100/phút) vì đây là nhóm thao tác
+ * nhạy cảm: đổi vai trò, khoá tài khoản. Nếu bị lạm dụng thì hậu quả nặng hơn
+ * nhiều so với việc đọc danh sách sự kiện.
+ */
+export const adminRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 phút
+  max: 30, // tối đa 30 request/phút
+  message: 'Quá nhiều thao tác quản trị. Vui lòng giảm tốc độ.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
  * Rate limiter cho đặt vé.
- * 
+ *
  * Thiết kế linh hoạt theo thực tế nền tảng vé thực tế:
  * - Cho phép đặt vé liên tiếp trong một khoảng thời gian ngắn (burst)
  * - Nhưng giới hạn tổng số vé đặt trong một khung thời gian dài
