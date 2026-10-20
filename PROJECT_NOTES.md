@@ -88,6 +88,7 @@ User 1─n Order
 Event 1─n TicketType  (cascade delete)
 Order 1─n Ticket
 TicketType 1─n Ticket
+User 1─n AdminAuditLog (ON DELETE SET NULL)
 ```
 
 Bốn điều cần nhớ:
@@ -96,6 +97,25 @@ Bốn điều cần nhớ:
 2. **Một `Ticket` = một vé vật lý**. Đặt `quantity = 3` tạo ra 3 record `Ticket`, không phải 1 record kèm cột số lượng. Nhờ vậy job hết hạn chỉ cần đếm số `Ticket` để biết trả bao nhiêu vé.
 3. **`Order.expiresAt`** là mốc giữ chỗ. `PENDING` + quá `expiresAt` = sẽ bị job nền dọn.
 4. **`@@map(...)`** đặt tên bảng snake_case trong MySQL (`ticket_types`), trong khi model Prisma vẫn PascalCase.
+
+### Nhật ký quản trị — vì sao `actorId` phải nullable
+
+`AdminAuditLog` trỏ về `User` bằng khoá ngoại. Nếu để mặc định (`ON DELETE RESTRICT`),
+ta **không xoá được một admin từng thao tác quản trị** — chính nhật ký do hành động
+của họ sinh ra lại chặn việc xoá họ. Hai cách thoát đều sai:
+
+| Cách | Hậu quả |
+|------|---------|
+| `ON DELETE CASCADE` | Xoá user là mất nhật ký — đúng lúc cần truy vết thì không còn gì |
+| `ON DELETE RESTRICT` | Không xoá được user, dù user đó đã lỡ tay tạo hậu quả |
+| **`ON DELETE SET NULL` + cột `actorEmail`** | ✅ User xoá được, nhật ký **vẫn còn**, và vẫn biết "ai đã làm" |
+
+Cột `actorEmail` là **bản chụp** (denormalize) tại thời điểm ghi. Nguyên tắc: dữ liệu
+lịch sử tồn tại lâu hơn thực thể nó mô tả, nên phải tự mang theo thông tin nhận diện
+thay vì phụ thuộc vào bảng ngoài.
+
+Migration `20261020150000_audit_log_setnull` thực hiện: cho `actorId` nullable, thêm
+`actorEmail`, `UPDATE ... JOIN` để backfill dữ liệu cũ, rồi đổi FK sang SET NULL.
 
 ### CHECK constraint — "lưới an toàn cuối cùng"
 
@@ -110,7 +130,36 @@ ALTER TABLE `ticket_types`
 
 Tác dụng: **kể cả khi toàn bộ logic chống oversell ở tầng ứng dụng bị vô hiệu**
 (Redis mất dữ liệu, lock hết TTL giữa chừng, một câu UPDATE viết sai trong tương lai),
-MySQL vẫn từ chối ghi số âm. Đây là ví dụ của nguyên tắc **defense in depth**: mỗi lớp giả định lớp trên đã thất bại.
+MySQL vẫn từ chối ghi số âm. Đây là ví dụ của nguyên cắm **defense in depth**: mỗi lớp giả định lớp trên đã thất bại.
+
+### Độ dài cột — `VARCHAR(191)` là HỆ QUẢ, không phải thiết kế
+
+Prisma mặc định mọi cột `String` thành `VARCHAR(191)`. Con số 191 đến từ giới hạn
+index utf8mb4 (191 × 4 byte = 764 < 767 byte), **không** phải quyết định thiết kế.
+
+Hậu quả khi bỏ qua nó: Zod không giới hạn độ dài, form không có `maxlength`, nên một
+mô tả dài hơn 191 ký tự đi thẳng tới MySQL. MySQL từ chối → Prisma ném `P2000` →
+controller trả về **500 `{"message":"Lỗi máy chủ"}`** — người dùng không biết mình
+sai ở đâu. Migration `20261020120000_widen_content_columns` sửa cả ba tầng:
+
+| Cột | Trước | Sau |
+|-----|-------|-----|
+| `events.title` | `VARCHAR(191)` | `VARCHAR(255)` |
+| `events.description` | `VARCHAR(191)` | `TEXT` |
+| `events.location` | `VARCHAR(191)` | `VARCHAR(255)` |
+| `events.bannerUrl` | `VARCHAR(191)` | `VARCHAR(500)` |
+| `ticket_types.name` | `VARCHAR(191)` | `VARCHAR(100)` |
+| `ticket_types.price` | `DECIMAL(10,2)` | `DECIMAL(12,2)` |
+| `orders.totalAmount` | `DECIMAL(10,2)` | `DECIMAL(12,2)` |
+
+Giới hạn ở tầng validation (`utils/validation.ts`, hằng `LIMITS`) và ở form
+(`EventFormView.vue`, `maxlength`) **phải khớp** với bảng trên. `orders.totalAmount`
+phải cùng thang với `ticket_types.price`, nếu không một đơn mua vé giá lớn sẽ không
+lưu được vào bảng `orders`.
+
+> Áp dụng migration này bằng `npx prisma migrate deploy`, **không** dùng
+> `prisma migrate dev`: dự án có CHECK constraint viết tay mà Prisma không
+> introspect, `migrate dev` có thể đòi reset database.
 
 ---
 
@@ -422,7 +471,7 @@ Lưu ý: `registerSchema` (`validation.ts:15`) có khai báo `role: z.enum(['CUS
 
 ### 6.5 Validation bằng Zod
 
-`validation.ts:11-51` định nghĩa schema, `validateBody` (`validation.ts:58-70`) là middleware parse `req.body` và trả 400 kèm message nếu sai. Ví dụ:
+`validation.ts` định nghĩa schema, `validateBody` là middleware parse `req.body` và trả 400 kèm message nếu sai. Ví dụ:
 
 ```ts
 export const createOrderSchema = z.object({
@@ -432,6 +481,21 @@ export const createOrderSchema = z.object({
 ```
 
 Lợi ích: chặn input rác/injection từ sớm, và message lỗi đã viết cho người dùng cuối. Route áp dụng: `order.routes.ts:10`, `event.routes.ts:13-14`, `auth.routes.ts:9-10`.
+
+**Giới hạn độ dài phải có `.max()` khớp cột DB.** Hằng `LIMITS` trong `validation.ts`
+là nguồn sự thật duy nhất, và nó phải khớp với bảng ở mục 3:
+
+```ts
+export const LIMITS = {
+  TITLE: 255, DESCRIPTION: 5000, LOCATION: 255, BANNER_URL: 500,
+  TICKET_NAME: 100, PRICE: 9_999_999_999.99, QUANTITY: 2_147_483_647,
+} as const;
+```
+
+Vì sao phải có: nếu không, dữ liệu quá dài đi thẳng tới MySQL rồi mới chết, và lỗi
+quay về là 500 chung chung thay vì 400 nói rõ "trường nào vượt, vượt bao nhiêu".
+Cùng giới hạn đó được áp lần nữa ở form (`maxlength`) để chặn **ngay lúc gõ** —
+ba tầng (UI → validation → DB) cùng một con số.
 
 ### 6.6 Rate limiting
 
@@ -448,27 +512,94 @@ Lợi ích: chặn input rác/injection từ sớm, và message lỗi đã viế
 
 ### 6.7 RBAC — phân quyền theo role
 
-`auth.middleware.ts:32-44`:
+**Ba tầng kiểm tra, thiếu một tầng là lỗ hổng:**
 
-```ts
-export const authorize = (...roles: string[]) => (req, res, next) => {
-  if (!req.user) return res.status(401).json({ message: 'Chưa được xác thực!' });
-  if (!roles.includes(req.user.role)) return res.status(403).json({ message: 'Bạn không có quyền...' });
-  next();
-};
+```
+Request ──► [1] authenticate   "ai đây?"      token hợp lệ + tài khoản còn hoạt động?
+              │                                 (đọc DB, có cache Redis)
+              ▼
+           [2] authorize        "được làm gì?"  role trong DB có nằm trong danh sách?
+              │
+              ▼
+           [3] ownership        "trên cái này?" có phải chủ sở hữu tài nguyên?
 ```
 
-Áp dụng: `event.routes.ts:13-15` yêu cầu `ORGANIZER`/`ADMIN` cho tạo/sửa/xoá sự kiện. Ở tầng controller còn kiểm tra **quyền sở hữu**: chỉ organizer tạo ra event hoặc ADMIN mới sửa/xoá được event đó (`event.controller.ts:179-181`, `243-245`). Đây là điểm nhiều dự án bỏ sót — RBAC thô ("có role ORGANIZER") không đủ, phải kiểm tra "có phải chủ sở hữu".
+**Tầng 1 — `authenticate`** (`auth.middleware.ts`): verify chữ ký JWT, rồi **hỏi DB**
+xem tài khoản còn tồn tại và còn `isActive` không. Không làm bước hỏi này thì admin
+khoá một tài khoản, tài khoản đó vẫn đặt vé và gọi API được cho tới khi token hết
+hạn (tối đa 1 ngày).
+
+**Tầng 2 — `authorize`** (`auth.middleware.ts`): so sánh role với danh sách cho phép.
+Áp dụng: `event.routes.ts:13-15` yêu cầu `ORGANIZER`/`ADMIN` cho tạo/sửa/xoá sự
+kiện; `admin.routes.ts:18` yêu cầu `ADMIN` cho toàn bộ API quản trị.
+
+**Tầng 3 — quyền sở hữu**: chỉ organizer tạo ra event hoặc ADMIN mới sửa/xoá được
+event đó (`event.controller.ts`, đọc `req.user.currentRole`). Đây là điểm nhiều dự án
+bỏ sót — RBAC thô ("có role ORGANIZER") không đủ, phải kiểm tra "có phải chủ sở hữu".
+Ngoài ra endpoint của organizer **lọc ngay trong query** (`organizer.controller.ts`:
+`where: { organizerId: userId }`) thay vì lọc sau.
+
+#### Role phải lấy từ DB, không tin token
+
+Role nằm trong payload JWT và token sống tới 1 ngày. Nếu chỉ tin token thì khi
+admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn. Vì vậy:
+
+- `authenticate` gán `req.user.currentRole = <role lấy từ DB>`.
+- Controller đọc `currentRole`, **không** đọc `req.user.role` (`role` trong token
+  có thể đã cũ).
+
+Trạng thái tài khoản được cache trong Redis (`utils/userState.ts`, TTL 30s) để đường
+đặt vé không phải đọc DB mỗi request; `invalidateUserState` được gọi ngay trong
+request hạ quyền/khoá nên hiệu lực **tức thì**, không đợi cache hết hạn.
+
+#### Vì sao không tách bảng `roles` / `permissions` / `role_user` / `permission_role`
+
+Mô hình 5 bảng là **RBAC động** (tạo role lúc runtime, gán quyền theo từng hành
+động). EventHub dùng **RBAC tĩnh**: vai trò là enum `Role` trong schema, quyền được
+viết thẳng trong route dưới dạng `authorize('ORGANIZER','ADMIN')`.
+
+Lý do chọn mô hình tĩnh khi quy mô chỉ 3 vai trò:
+
+1. **Không có drift giữa code và DB** — policy nằm ngay cạnh endpoint.
+2. **Hiệu năng** — đọc role là 1 lượt đọc theo PK (đo được 0,32 ms), có cache thành ~0,1 ms; không phải join 3 bảng.
+3. **Type-safe** — `Role` là enum của Prisma nên `authorize('ORGANIZER')` sai chính tả sẽ **lỗi compile**, không phải lỗi runtime.
+4. **Đúng nhu cầu** — đổi vai trò là sự kiện hiếm, không cần UI tạo role.
+
+Khi nào phải chuyển: cần vai trò tùy biến theo tổ chức, quyền theo từng hành động,
+một người mang nhiều vai trò, hoặc multi-tenant. Lúc đó chỉ cần thay **tầng tra cứu
+quyền** (thêm bảng `permissions` + `role_permissions`, đổi `authorize` sang tra
+permission code), phần xác thực và phần quản lý cache quyền đã có sẵn.
 
 ### 6.8 Không rò rỉ chi tiết lỗi ra client
 
 `utils/errors.ts`:
 
-- `AppError` (`errors.ts:11-19`): message viết cho người dùng, an toàn để trả nguyên văn.
-- `logUnexpectedError` (`errors.ts:27-32`): log đầy đủ `name`, `message`, `stack` ở server.
-- `handleControllerError` (`errors.ts:43-59`): `AppError` → trả đúng status/message; mọi lỗi khác → log server, trả câu chung.
+- `AppError`: message viết cho người dùng, an toàn để trả nguyên văn.
+- `logUnexpectedError`: log đầy đủ `name`, `message`, `stack` ở server.
+- `mapPrismaError`: dịch lỗi hạ tầng của Prisma/MySQL sang thông điệp tiếng Việt + status code đúng.
+- `handleControllerError`: `AppError` → trả đúng status/message; lỗi Prisma đã biết → 400/409 có thông báo rõ ràng; mọi lỗi khác → log server, trả câu chung.
 
-Mọi controller đi qua hàm này, nên không còn chỗ nào tự nối `error.message` (có thể chứa tên bảng, câu SQL, host, stack) vào response. Ngay cả `/api/health` (`app.ts:35-51`) cũng chỉ trả `"Database connection failed"` chung chung.
+Mọi controller đi qua hàm này, nên không còn chỗ nào tự nối `error.message` (có thể chứa tên bảng, câu SQL, host, stack) vào response. Ngay cả `/api/health` cũng chỉ trả `"Database connection failed"` chung chung.
+
+**`mapPrismaError` là lớp phòng thủ cuối, không phải lớp thay thế cho validation.**
+Nếu chỉ có `mapPrismaError` mà không có `.max()` ở Zod, người dùng vẫn gặp lỗi —
+nhưng là lỗi **400 nói rõ nguyên nhân** thay vì 500 mù. Ngược lại, nếu chỉ có `.max()`
+mà không có `mapPrismaError`, một trường nào đó lọt qua validation vẫn chết ở tầng DB
+với 500. Cả hai cùng nhau thì không còn đường nào dẫn tới 500 "Lỗi máy chủ".
+
+Các mã Prisma được ánh xạ:
+
+| Mã | Nguyên nhân | Trả về |
+|----|-----------|---------|
+| `P2000` | giá trị quá dài cho cột (`meta.column_name`) | 400 — nêu đúng tên cột |
+| `P2002` | vi phạm UNIQUE | 409 |
+| `P2003` | vi phạm FOREIGN KEY | 400 |
+| `P2020` | giá trị ngoài khoảng của kiểu (`meta.details`) | 400 — nêu đúng tên cột |
+
+Lưu ý khi viết regex: Prisma **che** message gốc của MySQL. Lỗi "Data too long for
+column 'x'" của MySQL bị Prisma đổi thành *"The provided value for the column is too
+long for the column's type. Column: x"*. Vì vậy phải bắt theo **mã lỗi** (`error.code`)
+và đọc tên cột từ `error.meta`, chứ không bắt theo chuỗi message của MySQL.
 
 ### 6.9 Vấn đề .env timing (bài học kinh điển)
 
@@ -564,7 +695,7 @@ k6 run -e VUS=500 -e BASE_URL=http://localhost:5055/api load-test-read.js
 
 ### 8.4 JWT security — `test-jwt-security.cjs`
 
-Chạy `npm run test:security` (cần server đang chạy + `.env` có secret). Gồm 13 case:
+Chạy `npm run test:security` (cần server đang chạy + `.env` có secret). Gồm 17 case:
 
 **Phần A — cấu hình (chạy `getJwtSecret()` trong process con):**
 
@@ -588,8 +719,53 @@ Chạy `npm run test:security` (cần server đang chạy + `.env` có secret). 
 | 11 | Sửa `role` trong payload, giữ chữ ký cũ | 403 |
 | 12 | Token hợp lệ | **200** (chứng minh 403 trên là do chữ ký, không phải chặn hết) |
 | 13 | CUSTOMER gọi endpoint ORGANIZER/ADMIN | 403 (phân quyền, message chứa "quyền") |
+| 14 | Token hợp lệ nhưng tài khoản **không tồn tại** trong DB | 401 |
+| 15 | Tài khoản bị **khoá**, token còn hạn | 403 "Tài khoản đã bị khoá!" |
+| 16 | Tài khoản bị khoá, gọi endpoint **chỉ cần đăng nhập** | 403 (khoá phải mất quyền ở mọi endpoint) |
+| 17 | Đổi `role` trong DB, token vẫn mang role cũ | token nhận quyền **mới** ngay (role trong token bị bỏ qua) |
+
+Các case 14–17 chỉ chạy được với **user có thật trong DB**: middleware `authenticate`
+hỏi DB xem tài khoản còn tồn tại và còn hoạt động không, nên token của user ảo sẽ bị
+401 trước khi tới bước kiểm tra role. Test tự đăng ký một user thật (`createRealCustomer`)
+rồi xoá lại lúc dọn dẹp.
 
 Chi tiết hay: `probeSecret` trỏ `DOTENV_CONFIG_PATH` vào file không tồn tại để `.env` không "hồi sinh" secret — nếu không, test luôn thấy secret hợp lệ và không kiểm tra được gì.
+
+### 8.5 RBAC — `test-admin-race.cjs`
+
+Chạy `npm run test:race`. Mô phỏng tình huống nguy hiểm: hệ thống chỉ còn đúng 2 admin
+(A và B), A gọi "hạ quyền B" và B gọi "hạ quyền A" **cùng lúc**.
+
+Nếu hai request cùng thấy "còn admin khác" thì cả hai đều được phép → hệ thống không
+còn admin nào quản trị được. Bản vá dùng transaction + `SELECT ... FOR UPDATE` để
+xếp hai giao dịch thành hàng đợi; giao dịch sau luôn thấy trạng thái đã commit của
+giao dịch trước.
+
+Điểm hay: **đếm bằng locking read rồi đếm trong JS**, KHÔNG dùng `count()` — trong
+MySQL, `count()` là consistent read theo snapshot của transaction nên có thể đọc
+trạng thái CŨ hơn trạng thái mà locking read vừa khoá, mở lại đúng lỗ hổng đang
+cố chặn.
+
+### 8.6 Giới hạn dữ liệu — `test-event-limits.cjs` / `test-error-mapping.cjs` / `test-order-amount.cjs`
+
+Chạy `npm run test:limits`, `npm run test:errors`, `npm run test:order`.
+
+| File | Kiểm chứng |
+|------|-----------|
+| `test-event-limits.cjs` | mô tả 3000 ký tự → **201** (trước là 500); tiêu đề/banner/tên vé/giá/số lượng vượt giới hạn → **400 kèm message tiếng Việt**; kiểm cả đường `PUT` (sửa sự kiện) |
+| `test-error-mapping.cjs` | `mapPrismaError`: P2000→400, P2002→409, P2003→400, P2020→400, lỗi MySQL thô→400, lỗi lạ→`null` (rơi về 500) |
+| `test-order-amount.cjs` | tổng tiền đơn 100.000.000 lưu và đọc lại chính xác sau khi đổi `totalAmount` sang `DECIMAL(12,2)` |
+
+### 8.7 Bài học khi chạy load test nhiều lần liên tiếp
+
+`k6 run load-test-concurrent.js` dùng 200 VU → ~250 request trong vài giây, vượt
+`apiRateLimiter` (100 request/phút). Request login bị chặn 429, login 429 được
+`authRateLimiter` tính là **thất bại**, nên sau 5 lần là mọi request còn lại bị chặn
+tiếp. Kết quả: chỉ ~45/200 lần login thành công, `orders_created` có thể bằng 0.
+
+Đây là **hành vi đúng của rate limiter**, không phải bug. Muốn đo chính xác thì phải
+chờ hết cửa sổ (60s cho API, **5 phút** cho đặt vé) trước khi chạy. Chỉ số cần
+đối chiếu: `orders_created` = số vé có sẵn, `server_errors` = 0.
 
 ---
 
@@ -610,6 +786,8 @@ Chi tiết hay: `probeSecret` trỏ `DOTENV_CONFIG_PATH` vào file không tồn 
 | 11 | Token hỏng vẫn "đăng nhập ma" sau F5 | `token` ở localStorage sống dai, `user` chỉ ở RAM | `main.ts:19-22` gọi lại `/auth/me`; lỗi thì `logout()` |
 | 12 | Edit event làm mất/oversell kho đã bán | `deleteMany` rồi tạo lại toàn bộ ticketType | Reconcile theo `id` + transaction + `increment delta`; FE gửi kèm id — xem mục 15.1 |
 | 13 | FE bỏ `id` khi submit edit | Map ticketTypes chỉ lấy `name/price/totalQuantity` | Giữ `id` trong `TicketTypeForm` và payload (`EventFormView.vue`) |
+| 14 | Tạo sự kiện ra **500 "Lỗi máy chủ"** | Mọi cột chuỗi là `VARCHAR(191)` (hệ quả index utf8mb4), Zod không có `.max()`, form không có `maxlength` → dữ liệu quá dài chết ở MySQL (`P2000`) | Nới cột (`@db.VarChar`/`@db.Text`) + `LIMITS.max()` ở Zod + `maxlength` ở form + `mapPrismaError` dịch P2000/P2020 thành 400 — xem mục 3 và 6.8 |
+| 15 | Đơn hàng lớn không lưu được | `orders.totalAmount` là `DECIMAL(10,2)` (biên 99.999.999,99) trong khi `ticket_types.price` có thể lớn hơn | Nới cả hai cùng thang `DECIMAL(12,2)` — xem mục 3 |
 
 ---
 
@@ -651,7 +829,9 @@ Vì nó không "đọc rồi ghi" — nó dùng `updateMany` có điều kiện 
 
 **Bảo mật còn thiếu:** refresh token; HTTPS/HSTS; thêm `helmet` cho secure headers. (rate limit cho `/auth/*` đã có — mục 6.6)
 
-**Tính năng:** tích hợp VNPay/MoMo; email/SMS xác nhận & nhắc hết hạn; WebSocket cập nhật tồn kho real-time; admin dashboard.
+**Tính năng:** tích hợp VNPay/MoMo; email/SMS xác nhận & nhắc hết hạn; WebSocket cập nhật tồn kho real-time; **RBAC động** (role/permission tùy biến — xem mục 6.7); xuất CSV báo cáo doanh thu; trang quản lý người dùng cho organizer.
+
+> ~~admin dashboard~~ — **đã có** (mục 15.5).
 
 ---
 
@@ -664,7 +844,8 @@ Vì nó không "đọc rồi ghi" — nó dùng `updateMany` có điều kiện 
 cd server
 npm install
 cp .env.example .env      # sửa DATABASE_URL, JWT_SECRET, Redis nếu khác mặc định
-npx prisma migrate dev    # chạy cả migration CHECK constraint
+npx prisma migrate deploy # áp dụng migration (KÈM cả migration CHECK constraint viết tay)
+npx prisma generate
 npm run dev               # http://localhost:5000
 
 # 2. Client (terminal khác)
@@ -674,13 +855,20 @@ npm run dev               # Vite dev server
 
 # 3. Test
 cd server
-npm run test:security                      # bộ test JWT
+npm run test:security                      # bộ test JWT (17 case)
+npm run test:race                         # race hạ quyền admin
+npm run test:limits                       # giới hạn dữ liệu (201/400 thay vì 500)
+npm run test:errors                       # mapPrismaError
+npm run test:order                        # totalAmount DECIMAL(12,2)
 npx k6 run load-test.js                    # 100 VUs đường ghi
 npx k6 run load-test-concurrent.js         # 200 VUs, 10 vé
 npx k6 run load-test-read.js               # cache hit/miss (nhớ xoá cache trước)
 node oversell-natural.cjs                  # lock hết hạn tự nhiên
 node oversell-repro.cjs                    # mô phỏng mất lock
 ```
+
+> `npx prisma migrate dev` sẽ hỏi **reset database** vì dự án có CHECK constraint viết
+> tay mà Prisma không introspect. Dùng `migrate deploy` cho an toàn.
 
 ### Biến môi trường
 
@@ -726,13 +914,24 @@ NODE_ENV=development                               # production -> Prisma chỉ 
 | `server/src/config/redis.ts` | Vì sao 2 client, cấu hình fail-fast |
 | `server/src/jobs/expireOrders.job.ts` | CAS + transaction + cache invalidation ở job nền |
 | `server/src/config/auth.ts` | Fail-fast JWT secret, chống algorithm confusion (gián tiếp) |
-| `server/src/middlewares/auth.middleware.ts` | Verify + authorize |
-| `server/src/utils/errors.ts` | AppError vs lỗi nội bộ, không rò rỉ chi tiết |
-| `server/src/utils/validation.ts` | Zod schema + middleware |
+| `server/src/middlewares/auth.middleware.ts` | Verify + đọc role/isActive từ DB + authorize |
+| `server/src/utils/errors.ts` | AppError vs lỗi nội bộ, `mapPrismaError`, không rò rỉ chi tiết |
+| `server/src/utils/validation.ts` | Zod schema + `LIMITS` + middleware |
+| `server/src/utils/userState.ts` | Cache trạng thái user (role/isActive) 30s + invalidate tức thì |
+| `server/src/utils/audit.ts` | Ghi `AdminAuditLog` cho mọi thay đổi quyền/trạng thái |
+| `server/src/controllers/admin.controller.ts` | Dashboard, quản lý user, đổi role, khoá tài khoản, audit log |
+| `server/src/controllers/organizer.controller.ts` | Danh sách sự kiện + thống kê của organizer (lọc theo chủ sở hữu) |
 | `server/prisma/migrations/*add_check*/migration.sql` | Lưới an toàn cuối cùng ở DB |
+| `server/prisma/migrations/*widen_content_columns*/migration.sql` | Nới độ dài cột để không còn 500 do dữ liệu quá dài |
+| `client/src/views/AdminDashboardView.vue` | Dashboard quản trị (thẻ số liệu, biểu đồ) |
+| `client/src/views/AdminUsersView.vue` | Bảng user, filter/pagination, đổi role, khoá tài khoản |
+| `client/src/views/AdminAuditView.vue` | Nhật ký thao tác quản trị (ai làm gì, lên ai, lúc nào) |
+| `client/src/views/ManageEventsView.vue` | Trang quản lý sự kiện của organizer |
 | `client/src/views/EventDetailView.vue` | Chống double-click + phối hợp thông báo lỗi |
 | `client/src/api/axios.ts` | Interceptor token/401 |
-| `server/test-jwt-security.cjs` | 13 case bảo mật, cách test token giả |
+| `server/test-jwt-security.cjs` | 17 case bảo mật, cách test token giả |
+| `server/test-admin-race.cjs` | Race khi 2 admin cùng hạ quyền nhau |
+| `server/test-event-limits.cjs` | Giới hạn dữ liệu ở API (201/400 thay vì 500) |
 
 ---
 
@@ -796,6 +995,46 @@ Hệ quả: **không có endpoint thanh toán/xác nhận**, nên mọi đơn r�
 - **Prisma chỉ log query ngoài production**. `utils/prisma.ts` đọc `NODE_ENV`: production chỉ `['warn','error']`, ngược lại `['query','info','warn','error']`. Tránh ồn và tránh lộ dữ liệu truy vấn vào log.
 - **CORS whitelist**. `app.ts` thay `cors()` (mọi origin) bằng whitelist đọc từ `CORS_ORIGINS` (mặc định `http://localhost:5173,http://127.0.0.1:5173`). Request không có `Origin` (curl, k6, server-to-server) vẫn qua; origin lạ bị bỏ header CORS để trình duyệt chặn (không ném lỗi, tránh 500 gây nhiễu log). Đã bổ sung biến vào `.env.example`.
 
+### 15.5 Quản trị người dùng & RBAC — bảo vệ "hệ thống có người quản trị"
+
+Thêm: `User.isActive`, `User.roleChangedAt`, model `AdminAuditLog`, middleware `authorize` đọc DB, `utils/userState.ts` (cache trạng thái), `utils/audit.ts`, `admin.controller.ts` + `admin.routes.ts`, `organizer.controller.ts` + `organizer.routes.ts`, và 3 view mới (`AdminDashboardView`, `AdminUsersView`, `ManageEventsView`).
+
+#### 4 quy tắc "không tự sát" của tài khoản quản trị
+
+Một hệ thống RBAC có một lỗi tự sát rất dễ mắc: **admin cuối cùng tự hạ quyền mình** → không ai quản trị được nữa, và phải sửa trực tiếp trong DB. Bốn quy tắc chặn:
+
+1. **Admin không tự hạ quyền chính mình.** Trả 400, thay vì âm thầm cho phép.
+2. **Admin không tự khoá chính mình.** Trả 400.
+3. **Không hạ quyền / khoá admin cuối cùng đang active.** Đếm số admin active trong transaction có `SELECT ... FOR UPDATE`; nếu chỉ còn 1 thì chặn.
+4. **Mọi thay đổi đều ghi audit log** — actor, hành động, target, metadata JSON.
+
+#### Vì sao quy tắc 3 cần transaction + locking read
+
+Hai admin gọi "hạ quyền nhau" cùng lúc (mỗi người thấy "còn 1 admin khác" nên cả hai đều hợp lệ) → cả hai bị hạ → **0 admin**. Sửa: transaction `SELECT ... FOR UPDATE` trên các dòng admin để xếp thứ tự; giao dịch sau phải đọc trạng thái đã commit của giao dịch trước.
+
+Bẫy con: dùng `count()` để đếm sẽ **không** chặn được, vì `count()` là consistent read theo snapshot của transaction — nó có thể đọc trạng thái cũ hơn trạng thái mà locking read vừa khoá. Phải đếm **số dòng locking read trả về** trong JS. Test: `test-admin-race.cjs` (mục 8.5).
+
+#### Audit log không được làm hỏng request chính
+
+Ghi `AdminAuditLog` là thao tác phụ. Nếu nó lỗi (bảng chưa migrate, DB chết) mà làm fail cả request đổi role thì admin **không thay đổi được quyền** nhưng lại nhận lỗi 500 — tệ hơn cả khi không có audit. Vì vậy audit log được bọc try/catch: lỗi thì log ở server, **không** ném ra ngoài, request chính vẫn thành công.
+
+#### Ba bẫy khi xoá dữ liệu test — bài học về khoá ngoại
+
+Khi viết test tạo user rồi xoá, ba thứ có thể chặn việc xoá mà không báo lỗi rõ ràng:
+
+1. **Khoá ngoại từ audit log** — admin đã thao tác thì có dòng audit trỏ tới, xoá user bị chặn. Đã xử lý bằng `SET NULL` (mục 3).
+2. **Khoá ngoại từ dữ liệu nghiệp vụ** — user đã tạo sự kiện thì `events.organizerId` giữ nó lại (`ON DELETE RESTRICT` là chủ ý, vì xoá organizer sẽ làm mất sự kiện).
+3. **Tài khoản admin còn sót từ lần chạy trước** — làm **sai tiền đề** của phép thử.
+
+Bài học: dọn dẹp trong test phải **xoá theo thứ tự phụ thuộc** (con → cha), và test phải
+tự chuẩn bị tiền đề thay vì hy vọng DB "sạch". `test-admin-race.cjs` hiện tự xoá user
+`race-admin-*` còn sót trước khi bắt đầu — nếu không, một admin thừa làm cả hai request
+hạ quyền đều thành công (hành vi **đúng**, nhưng sai bài toán).
+
+#### Quyền sở hữu: lọc trong query, không lọc sau
+
+Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: userId }` **ngay trong query**. Cách sai là lấy hết về rồi `filter()` trong JS: tốn băng thông, tốn RAM, và dễ sót sót. Tương tự, endpoint admin sửa sự kiện cho phép `ADMIN` bypass kiểm tra chủ sở hữu — nhưng **vẫn phải** kiểm tra `isActive` của chính actor (đã xử lý ở tầng `authenticate`).
+
 ---
 
 ## 16. Khoảng Trống Đã Biết (Known Gaps) — Tổng Hợp
@@ -813,6 +1052,14 @@ Hệ quả: **không có endpoint thanh toán/xác nhận**, nên mọi đơn r�
 | 8 | `registerSchema` cho phép gửi `role: ORGANIZER` rồi controller bỏ qua | Thấp | Không phải lỗ hổng, nhưng gây hiểu nhầm; nên bỏ field khỏi schema |
 | 9 | Không validate `endTime > startTime` | Thấp | `createEventSchema` chỉ kiểm tra parse được ngày |
 | 10 | Không có test tự động (unit/integration), chỉ có script thủ công | Trung bình | `test-jwt-security.cjs` + k6 là script rời, không chạy trong CI |
+| 11 | Tài khoản bị khoá vẫn giữ token cũ | ✅ Đã sửa | `authenticate` hỏi DB mỗi request (cache 30s + invalidate tức thì); token hết hạn 1 ngày nhưng quyền bị thu hồi ngay — mục 6.7 |
+| 12 | Admin tự hạ quyền / khoá chính mình | ✅ Đã sửa | Chặn ở `admin.controller.ts` + audit log |
+| 13 | Hạ quyền admin cuối cùng → hệ thống mất người quản trị | ✅ Đã sửa | Đếm admin active trong transaction có `FOR UPDATE`; test race 2 admin cùng hạ quyền nhau (`test-admin-race.cjs`) — mục 8.5 |
+| 14 | Đổi role không có dấu vết | ✅ Đã sửa | `AdminAuditLog` ghi actor, hành động, target, metadata — mục 6.7 |
+| 15 | Endpoint organizer có thể xem sự kiện của người khác | ✅ Đã sửa | Lọc `organizerId` ngay trong query, không lọc sau |
+| 16 | Dữ liệu quá dài → 500 | ✅ Đã sửa | `.max()` ở Zod + `maxlength` ở form + `mapPrismaError` → 400 — mục 3, 6.5, 6.8 |
+| 17 | Không xoá được admin từng thao tác quản trị | ✅ Đã sửa | FK `AdminAuditLog.actorId` là `RESTRICT`; đổi sang `SET NULL` + cột `actorEmail` chụp lại — mục 3 |
+| 18 | API `/admin/audit-logs` có nhưng UI không dùng | ✅ Đã sửa | Thêm `AdminAuditView.vue` + route `/admin/audit-logs` |
 
 ### Câu hỏi phỏng vấn bổ sung
 
@@ -826,8 +1073,20 @@ Vì chưa có endpoint thanh toán/xác nhận — chỉ có job chuyển `PENDI
 Vì `onMounted` chạy **sau** lần render đầu. Nếu chỉ kiểm tra `events.length === 0`, lần render đầu sẽ hiện "Không có sự kiện" trong tích tắc dù đang tải. Cờ `loaded` phân biệt "chưa gọi API" với "gọi xong và rỗng".
 
 **12. Vì sao axios interceptor chỉ logout khi 401 mà view còn bắt 403?**
-Vì backend phân biệt: **401** = thiếu/sai định dạng token, **403** = token không hợp lệ/hết hạn/hết quyền (`auth.middleware.ts:9-27`). Interceptor chỉ xử lý 401, nên các view cần tự dọn state khi gặp 403 để tránh trạng thái đăng nhập sai.
+Vì backend phân biện: **401** = thiếu/sai định dạng token, **403** = token không hợp lệ/hết hạn/hết quyền (`auth.middleware.ts:9-27`). Interceptor chỉ xử lý 401, nên các view cần tự dọn state khi gặp 403 để tránh trạng thái đăng nhập sai.
+
+**13. Vì sao không dùng bảng `roles`/`permissions` mà chỉ có enum `Role`?**
+Vì hệ thống chỉ có 3 vai trò cố định và quyền gắn với từng route. Mô hình tĩnh giúp: policy nằm cạnh endpoint, đọc role là 1 lượt đọc PK (~0,32 ms, cache ~0,1 ms), và `Role` là enum Prisma nên sai chính tả là **lỗi compile** chứ không phải lỗi runtime. Đổi sang RBAC động chỉ khi cần role tùy biến, multi-tenant, hay một người mang nhiều vai trò — và khi đó chỉ thay tầng tra cứu quyền, phần xác thực/cache đã có sẵn. Chi tiết ở mục 6.7.
+
+**14. Vì sao không tin role trong JWT?**
+Vì JWT sống tới 1 ngày. Nếu tin token, sau khi admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn — đúng thứ mà tính năng "hạ quyền" sinh ra để chặn. Nên `authenticate` luôn hỏi DB và gán `req.user.currentRole`; controller chỉ đọc `currentRole`. Cache Redis 30s giữ đường đặt vé không phải đọc DB mỗi request, nhưng khi đổi quyền thì `invalidateUserState` chạy ngay trong request nên hiệu lực tức thì.
+
+**15. Vì sao có cả Zod `.max()` lẫn `mapPrismaError` — thừa không?**
+Không thừa, chúng bắt 2 lớp lỗi khác nhau. `.max()` chặn ở **biên** và trả 400 nói rõ trường nào vượt, bao nhiêu — trải nghiệm tốt nhưng chỉ bảo vệ những trường đã khai báo. `mapPrismaError` là lưới an toàn cuối cho mọi trường còn lại: nếu một lý do khác làm giá trị vượt (ví dụ DB bị đổi schema, có cột khác chưa khai báo `.max()`), Prisma báo `P2000`/`P2020` và hệ thống vẫn trả 400 thay vì 500 "Lỗi máy chủ". Cùng nguyên tắc **defense in depth** với CHECK constraint của `availableQuantity`.
+
+**16. Vì sao `count()` trong transaction lại không đủ để chặn hạ quyền admin cuối?**
+Vì `count()` trong MySQL là consistent read theo snapshot của transaction: nó có thể đọc trạng thái **cũ hơn** trạng thái mà một locking read (`SELECT ... FOR UPDATE`) vừa khoá. Hai transaction song song đều thấy "còn 1 admin khác" → cả hai hạ quyền → mất người quản trị. Cách đúng: locking read để chặn, rồi **đếm kết quả trả về trong JS** (`rows.length`) chứ không `count()` lần nữa trong cùng transaction.
 
 ---
 
-*Tài liệu học tập — cập nhật 21/09/2026. Khi code thay đổi, hãy cập nhật lại số dòng và số liệu tương ứng.*
+*Tài liệu học tập — cập nhật 20/10/2026. Khi code thay đổi, hãy cập nhật lại số dòng và số liệu tương ứng.*
