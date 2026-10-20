@@ -107,6 +107,57 @@ async function request(pathname, opts) {
 }
 
 // ---------------------------------------------------------------------------
+// Tiện ích: user thật + Prisma
+// ---------------------------------------------------------------------------
+
+/**
+ * Tạo một user CUSTOMER CÓ THẬT trong DB (qua API đăng ký).
+ *
+ * Cần user thật vì `authorize` đọc role từ DB chứ không tin token: user giả sẽ
+ * bị chặn ở bước "không tìm thấy tài khoản" chứ không tới bước kiểm tra role.
+ */
+async function createRealCustomer() {
+  const email = `jwt-sec-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.local`;
+
+  const res = await request('/auth/register', {
+    method: 'POST',
+    body: { email, password: 'MatKhauDaiHon8KyTu', fullName: 'JWT Security Test' },
+  });
+
+  if (!res.body || !res.body.user || !res.body.user.id) {
+    throw new Error(`Không tạo được user test: HTTP ${res.status} ${JSON.stringify(res.body)}`);
+  }
+
+  return res.body.user;
+}
+
+/** Mở kết nối Prisma (nạp động để file này vẫn chạy được khi thiếu DB). */
+async function getPrisma() {
+  const { PrismaClient } = require('@prisma/client');
+  return new PrismaClient();
+}
+
+/**
+ * Xoá cache trạng thái tài khoản trong Redis.
+ *
+ * Server cache role/isActive của user trong Redis (TTL 30s) để đường nóng không
+ * phải đọc DB. Khi test sửa DB trực tiếp thì phải xoá cache đi, đúng như
+ * `invalidateUserState` mà admin API gọi khi đổi role / khoá tài khoản.
+ */
+async function invalidateUserStateCache(userId) {
+  const Redis = require('ioredis');
+  const client = new Redis({
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: Number(process.env.REDIS_PORT) || 6379,
+  });
+  try {
+    await client.del(`user:state:${userId}`);
+  } finally {
+    await client.quit();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Phần A — kiểm tra cấu hình (chạy getJwtSecret() trong process riêng)
 // ---------------------------------------------------------------------------
 
@@ -241,7 +292,14 @@ async function runTokenTests() {
   );
 
   // 8. Token hợp lệ -> phải ĐƯỢC CHẤP NHẬN (nếu không thì các test trên vô nghĩa)
-  const validRes = await request(AUTH_ONLY_PATH, { token: valid });
+  //
+  //    Phải là user CÓ THẬT: middleware `authenticate` hỏi DB xem tài khoản còn
+  //    tồn tại và còn hoạt động không, nên token của user không có trong DB sẽ bị
+  //    401. Đó là hành vi đúng — token của tài khoản đã bị xoá không được dùng.
+  const realUser = await createRealCustomer();
+  const realToken = tokenFor(realUser.id, 'CUSTOMER');
+
+  const validRes = await request(AUTH_ONLY_PATH, { token: realToken });
   check(
     'token hợp lệ -> 200 (chứng minh 403 ở trên là do chữ ký, không phải chặn hết)',
     validRes.status === 200 && Array.isArray(validRes.body),
@@ -251,8 +309,11 @@ async function runTokenTests() {
   // 9. Phân quyền vẫn chạy: role CUSTOMER gọi endpoint chỉ ORGANIZER/ADMIN
   //    Gửi body rỗng để nếu authorize CÓ lỗi thì createEvent trả 400 (validate),
   //    chứ không tạo ra sự kiện rác.
+  //
+  //    Role được đọc từ DB chứ không tin token, nên role CUSTOMER trong token của
+  //    user thật vẫn bị chặn đúng như mong đợi.
   const forbidden = await request(ROLE_ONLY_PATH, {
-    token: valid,
+    token: realToken,
     method: 'POST',
     body: {},
   });
@@ -261,6 +322,77 @@ async function runTokenTests() {
     forbidden.status === 403 && /quyền/i.test((forbidden.body || {}).message || ''),
     `nhận ${forbidden.status} — "${(forbidden.body || {}).message}"`
   );
+
+  // 9b. ★ Token hợp lệ nhưng tài khoản KHÔNG tồn tại -> 401
+  const ghost = await request(AUTH_ONLY_PATH, { token: valid });
+  check(
+    'token hợp lệ nhưng tài khoản không tồn tại -> 401',
+    ghost.status === 401,
+    `nhận ${ghost.status}`
+  );
+
+  // 10. ★ Tài khoản bị khoá -> token còn hạn vẫn mất quyền ngay lập tức
+  const prisma = await getPrisma();
+  await prisma.user.update({
+    where: { id: realUser.id },
+    data: { isActive: false },
+  });
+  await invalidateUserStateCache(realUser.id);
+
+  const locked = await request(ROLE_ONLY_PATH, {
+    token: realToken,
+    method: 'POST',
+    body: {},
+  });
+  check(
+    'tài khoản bị khoá -> 403 dù token còn hạn',
+    locked.status === 403 && /khoá/i.test((locked.body || {}).message || ''),
+    `nhận ${locked.status} — "${(locked.body || {}).message}"`
+  );
+
+  // 10b. ★ Tài khoản bị khoá cũng mất quyền trên endpoint CHỈ cần đăng nhập
+  //      (đặt vé, xem đơn) — không chỉ endpoint có kiểm tra role.
+  const lockedAuthOnly = await request(AUTH_ONLY_PATH, { token: realToken });
+  check(
+    'tài khoản bị khoá -> 403 cả với endpoint chỉ cần đăng nhập',
+    lockedAuthOnly.status === 403 && /khoá/i.test((lockedAuthOnly.body || {}).message || ''),
+    `nhận ${lockedAuthOnly.status} — "${(lockedAuthOnly.body || {}).message}"`
+  );
+
+  await prisma.user.update({
+    where: { id: realUser.id },
+    data: { isActive: true },
+  });
+  await invalidateUserStateCache(realUser.id);
+
+  // 11. ★ Role trong DB là nguồn sự thật, không phải role trong token
+  //     Token vẫn mang role CUSTOMER, nhưng DB đã đổi thành ORGANIZER -> phải
+  //     QUA được bước authorize (nếu không sẽ là 403 "không có quyền"; qua
+  //     được thì rơi xuống validateBody và trả 400 vì body rỗng).
+  await prisma.user.update({
+    where: { id: realUser.id },
+    data: { role: 'ORGANIZER', roleChangedAt: new Date() },
+  });
+  await invalidateUserStateCache(realUser.id);
+
+  const afterRoleChange = await request(ROLE_ONLY_PATH, {
+    token: realToken,
+    method: 'POST',
+    body: {},
+  });
+  check(
+    'đổi role trong DB -> token cũ lập tức nhận quyền mới (role trong token bị bỏ qua)',
+    // 400 = đã qua bước authorize, rơi xuống validateBody và báo thiếu trường.
+    // Nếu role trong token vẫn được tin thì kết quả sẽ là 403 "không có quyền".
+    // Vì vậy phải khẳng định là 400 VÀ message KHÔNG phải lỗi phân quyền.
+    afterRoleChange.status === 400 && !/quyền/i.test((afterRoleChange.body || {}).message || ''),
+    `nhận ${afterRoleChange.status} — "${(afterRoleChange.body || {}).message}"`
+  );
+
+  // Dọn dẹp: xoá user test, trả DB về trạng thái ban đầu.
+  await invalidateUserStateCache(realUser.id);
+  await prisma.user.delete({ where: { id: realUser.id } }).catch(() => {});
+  await prisma.$disconnect();
 }
 
 // ---------------------------------------------------------------------------
