@@ -5,6 +5,7 @@ import { useOrderStore } from '../stores/order';
 import type { Order, OrderStatus } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { formatPrice, formatDateTime } from '../utils/format';
+import DataState from '../components/DataState.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -97,86 +98,73 @@ const groupTickets = (order: Order): TicketLine[] => {
         <p class="mt-1 text-sm text-gray-500">Danh sách đơn đặt vé của bạn</p>
       </div>
 
-      <!-- Đang tải (gộp !loaded để lần render đầu cũng hiện skeleton) -->
-      <div v-if="orderStore.loading || !loaded" class="space-y-4">
-        <div v-for="n in 3" :key="n" class="bg-white rounded-xl h-40 animate-pulse border border-gray-100"></div>
-      </div>
-
-      <!-- Lỗi tải -->
-      <div v-else-if="errorMessage" class="text-center py-16 bg-white rounded-2xl border border-gray-100">
-        <h3 class="text-lg font-bold text-gray-900">Không tải được đơn vé</h3>
-        <p class="mt-1 text-sm text-gray-500">{{ errorMessage }}</p>
-        <button
-          class="mt-6 px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-          @click="loadOrders"
-        >
-          Thử lại
-        </button>
-      </div>
-
-      <!-- Chưa có đơn nào -->
-      <div
-        v-else-if="orderStore.orders.length === 0"
-        class="text-center py-16 bg-white rounded-2xl border border-gray-100"
+      <!-- Đang tải / lỗi / rỗng / có dữ liệu — dùng chung component DataState -->
+      <DataState
+        :loading="orderStore.loading"
+        :loaded="loaded"
+        :error="errorMessage"
+        :empty="orderStore.orders.length === 0"
+        empty-title="Bạn chưa có đơn vé nào"
+        empty-description="Hãy khám phá các sự kiện đang mở bán nhé."
+        empty-action-label="Xem sự kiện"
+        @retry="loadOrders"
+        @empty-action="router.push({ name: 'Home' })"
       >
-        <h3 class="text-lg font-bold text-gray-900">Bạn chưa có đơn vé nào</h3>
-        <p class="mt-1 text-sm text-gray-500">Hãy khám phá các sự kiện đang mở bán nhé.</p>
-        <button
-          class="mt-6 px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-          @click="router.push({ name: 'Home' })"
-        >
-          Xem sự kiện
-        </button>
-      </div>
-
-      <!-- Danh sách đơn -->
-      <div v-else class="space-y-4">
-        <article
-          v-for="order in orderStore.orders"
-          :key="order.id"
-          class="bg-white border border-gray-100 rounded-xl overflow-hidden"
-        >
-          <header class="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p class="text-xs text-gray-500">Mã đơn</p>
-              <p class="font-mono text-sm font-semibold text-gray-900">
-                #{{ order.id.slice(0, 8).toUpperCase() }}
-              </p>
-              <p class="mt-1 text-xs text-gray-500">Đặt lúc {{ formatDateTime(order.createdAt) }}</p>
-            </div>
-
-            <span
-              class="px-3 py-1 text-xs font-semibold rounded-full border"
-              :class="statusClass[order.status]"
-            >
-              {{ statusLabel[order.status] }}
-            </span>
-          </header>
-
-          <div class="px-5 py-4 space-y-3">
-            <div
-              v-for="line in groupTickets(order)"
-              :key="line.id"
-              class="flex items-center justify-between text-sm"
-            >
-              <div>
-                <p class="font-medium text-gray-900">{{ line.name }} × {{ line.quantity }}</p>
-                <p v-if="line.event" class="text-xs text-gray-500">
-                  {{ line.event.title }} — {{ line.event.location }}
-                </p>
-              </div>
-              <p class="text-gray-600">{{ formatPrice(line.price) }}</p>
-            </div>
+        <template #skeleton>
+          <div class="space-y-4">
+            <div v-for="n in 3" :key="n" class="bg-white rounded-xl h-40 animate-pulse border border-gray-100"></div>
           </div>
+        </template>
 
-          <footer class="px-5 py-4 bg-gray-50 flex items-center justify-between">
-            <span class="text-sm text-gray-600">Tổng tiền</span>
-            <span class="text-lg font-extrabold text-indigo-600">
-              {{ formatPrice(order.totalAmount) }}
-            </span>
-          </footer>
-        </article>
-      </div>
+        <!-- Danh sách đơn -->
+        <div class="space-y-4">
+          <article
+            v-for="order in orderStore.orders"
+            :key="order.id"
+            class="bg-white border border-gray-100 rounded-xl overflow-hidden"
+          >
+            <header class="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-xs text-gray-500">Mã đơn</p>
+                <p class="font-mono text-sm font-semibold text-gray-900">
+                  #{{ order.id.slice(0, 8).toUpperCase() }}
+                </p>
+                <p class="mt-1 text-xs text-gray-500">Đặt lúc {{ formatDateTime(order.createdAt) }}</p>
+              </div>
+
+              <span
+                class="px-3 py-1 text-xs font-semibold rounded-full border"
+                :class="statusClass[order.status]"
+              >
+                {{ statusLabel[order.status] }}
+              </span>
+            </header>
+
+            <div class="px-5 py-4 space-y-3">
+              <div
+                v-for="line in groupTickets(order)"
+                :key="line.id"
+                class="flex items-center justify-between text-sm"
+              >
+                <div>
+                  <p class="font-medium text-gray-900">{{ line.name }} × {{ line.quantity }}</p>
+                  <p v-if="line.event" class="text-xs text-gray-500">
+                    {{ line.event.title }} — {{ line.event.location }}
+                  </p>
+                </div>
+                <p class="text-gray-600">{{ formatPrice(line.price) }}</p>
+              </div>
+            </div>
+
+            <footer class="px-5 py-4 bg-gray-50 flex items-center justify-between">
+              <span class="text-sm text-gray-600">Tổng tiền</span>
+              <span class="text-lg font-extrabold text-indigo-600">
+                {{ formatPrice(order.totalAmount) }}
+              </span>
+            </footer>
+          </article>
+        </div>
+      </DataState>
     </div>
   </div>
 </template>

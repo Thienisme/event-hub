@@ -34,6 +34,34 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Quản lý sự kiện của bản thân (ORGANIZER / ADMIN)
+      path: '/my-events',
+      name: 'MyEvents',
+      component: () => import('@/views/ManageEventsView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
+      // Tổng quan hệ thống (chỉ ADMIN)
+      path: '/admin',
+      name: 'AdminDashboard',
+      component: () => import('@/views/AdminDashboardView.vue'),
+      meta: { requiresAuth: true, adminOnly: true },
+    },
+    {
+      // Quản trị người dùng (chỉ ADMIN)
+      path: '/admin/users',
+      name: 'AdminUsers',
+      component: () => import('@/views/AdminUsersView.vue'),
+      meta: { requiresAuth: true, adminOnly: true },
+    },
+    {
+      // Nhật ký thao tác quản trị (chỉ ADMIN)
+      path: '/admin/audit-logs',
+      name: 'AdminAuditLogs',
+      component: () => import('@/views/AdminAuditView.vue'),
+      meta: { requiresAuth: true, adminOnly: true },
+    },
+    {
       path: '/login',
       name: 'Login',
       component: () => import('@/views/LoginView.vue'),
@@ -72,6 +100,13 @@ router.beforeEach((to) => {
 
   // Route yêu cầu quyền organizer/admin
   if (to.meta.organizerOnly && authStore.isAuthenticated && !authStore.isOrganizer) {
+    return { name: 'Home' };
+  }
+
+  // Route yêu cầu quyền ADMIN.
+  // Kiểm tra sau `organizerOnly` vì ADMIN cũng là organizer: cần chặn đúng
+  // người không đủ quyền mà không đụng vào người đã đăng nhập hợp lệ.
+  if (to.meta.adminOnly && authStore.isAuthenticated && !authStore.isAdmin) {
     return { name: 'Home' };
   }
 
