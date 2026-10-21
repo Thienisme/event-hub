@@ -1,53 +1,68 @@
-# Phong Van - EventHub
+# Phỏng Vấn — EventHub
 
-Ban dich san: "Day la he thong ban ve su kien. Bai toan kho khong nam o CRUD, ma nam o tranh chap ton kho khi hang nghin nguoi cung mua chiec ve cuoi."
-
-## 1. Bai toan dat ra
-
-Mot he thong ban ve co:
-- ORGANIZER/ADMIN tao su kien, nhieu loai ve, moi loai co so luong gioi han
-- CUSTOMER dat ve, don o trang thai PENDING giu cho 10 phut
-- Job nen chuyen PENDING -> EXPIRED va tra ve ve kho
-
-Diem kho: **tranh chap ton kho**. Mot chiec ve cuoi, hang nghin request den cung luc.
-
-## 2. Thu tu hoc (khong nen hoc het mot luc)
-
-| # | Chu de | File | De | Uu tien |
-|---|--------|------|----|--------|
-| 1 | Race condition + 3 lop bao ve | `server/src/controllers/order.controller.ts` | 2 ngay | **Cao nhat** |
-| 2 | Cache Redis: stampede, versioned key, fail-open | `server/src/utils/cache.ts` | 3 ngay | **Cao nhat** |
-| 3 | JWT + RBAC + rate limit | `server/src/middlewares/auth.middleware.ts`, `config/auth.ts` | 2 ngay | Cao |
-| 4 | Job nen tra ve (CAS khong can lock) | `server/src/jobs/expireOrders.job.ts` | 1 ngay | Cao |
-| 5 | Race hanh tri (FOR UPDATE) | `server/src/controllers/admin.controller.ts` | 1 ngay | Trung binh |
-| 6 | Loai loi 400/409/429/500 | `server/src/utils/errors.ts` | 1 ngay | Trung binh |
-| 7 | Double booking phia client | `client/src/views/EventDetailView.vue` | 0.5 ngay | Trung binh |
-| 8 | Tu doi su kien + quy doi ton kho | `server/src/controllers/event.controller.ts` | 1 ngay | Trung binh |
-
-> **Muc tieu cua buoi PV: 80% thoi gian nam o chu de 1-4.** Cau hoi ve Vue/Tailwind/Prisma la cau hoi "biết dùng", tra loi nhanh roi quay ve bai toan chinh.
+Bản dịch sẵn: *"Đây là hệ thống bán vé sự kiện. Bài toán khó không nằm ở CRUD, mà nằm ở tranh chấp tồn kho khi hàng nghìn người cùng mua chiếc vé cuối."*
 
 ---
 
-## 3. Chu de 1 - Chong oversell (PHONG VAN HAY HOI NHAT)
+## 1. Bài toán đặt ra
 
-### 3.1 Van de
+Một hệ thống bán vé sự kiện có:
 
-`server/src/controllers/order.controller.ts:42-49` - code **SAI** truoc day:
+- **ORGANIZER/ADMIN** tạo sự kiện, kèm nhiều loại vé (VIP, Standard…), mỗi loại có số lượng giới hạn.
+- **CUSTOMER** xem sự kiện, chọn loại vé, đặt vé.
+- Đơn đặt vé ở trạng thái `PENDING` được **giữ chỗ 10 phút**. Không thanh toán kịp thì job nền chuyển sang `EXPIRED` và trả vé về kho.
+
+Điểm khó của bài toán không nằm ở CRUD, mà nằm ở **tranh chấp tồn kho khi hàng nghìn người cùng mua chiếc vé cuối**. Đây là lý do tồn tại của phần lớn code trong repo.
+
+### Năm mục tiêu kỹ thuật của dự án
+
+| # | Mục tiêu | Bài toán con | Giải pháp chính |
+|---|----------|--------------|-----------------|
+| 1 | Không bán quá số lượng | Race condition khi trừ kho | Redlock + CAS ở DB + CHECK constraint |
+| 2 | Giảm tải database | Cache stampede / invalidate | Versioned key + Single-flight + Fail-open |
+| 3 | Bảo mật production-ready | Giả mạo JWT, leo quyền, brute-force | Fail-fast secret, pin algorithm, RBAC, rate limit |
+| 4 | Chịu tải cao | Nhiều request đồng thời | Xử lý lock ở Redis, CAS ở MySQL |
+| 5 | Dữ liệu nhất quán | Đơn hết hạn, tồn kho ảo | Transaction + job nền + cache invalidation |
+
+---
+
+## 2. Thứ tự học (đừng học hết một lúc)
+
+| # | Chủ đề | File | Thời lượng | Ưu tiên |
+|---|--------|------|-----------|---------|
+| 1 | Race condition + 3 lớp bảo vệ | `server/src/controllers/order.controller.ts` | 2 ngày | **Cao nhất** |
+| 2 | Cache Redis: stampede, versioned key, fail-open | `server/src/utils/cache.ts` | 3 ngày | **Cao nhất** |
+| 3 | JWT + RBAC + rate limit | `server/src/middlewares/auth.middleware.ts`, `config/auth.ts` | 2 ngày | Cao |
+| 4 | Job nền trả vé (CAS không cần lock) | `server/src/jobs/expireOrders.job.ts` | 1 ngày | Cao |
+| 5 | Race hành trị (FOR UPDATE) | `server/src/controllers/admin.controller.ts` | 1 ngày | Trung bình |
+| 6 | Phân loại lỗi 400/409/429/500 | `server/src/utils/errors.ts` | 1 ngày | Trung bình |
+| 7 | Double booking phía client | `client/src/views/EventDetailView.vue` | 0,5 ngày | Trung bình |
+| 8 | Sửa sự kiện + quy đổi tồn kho | `server/src/controllers/event.controller.ts` | 1 ngày | Trung bình |
+
+> **Mục tiêu của buổi phỏng vấn: 80% thời gian nằm ở chủ đề 1–4.** Câu hỏi về Vue/Tailwind/Prisma là câu hỏi "biết dùng" — trả lời nhanh rồi quay về bài toán chính.
+
+---
+
+## 3. Chủ đề 1 — Chống oversell (phỏng vấn hay hỏi nhất)
+
+### 3.1. Vấn đề
+
+`server/src/controllers/order.controller.ts:42-49` — code **sai** trước đây:
 
 ```ts
-// READ-THEN-WRITE - co lo hong
+// READ-THEN-WRITE — có lỗ hổng
 const t = await tx.ticketType.findUnique({ where: { id } });
-if (t.availableQuantity < quantity) throw new Error('Het ve');
+if (t.availableQuantity < quantity) throw new Error('Hết vé');
 await tx.ticketType.update({ data: { availableQuantity: t.availableQuantity - quantity } });
 ```
 
-Hai request A va B cung `findUnique` -> cung thay `availableQuantity = 1` -> cung vuot qua `if` -> cung ghi `1 - 1 = 0`. Ket qua: **ban 2 ve khi chi co 1**.
+Hai request A và B cùng `findUnique` → cùng thấy `availableQuantity = 1` → cùng vượt qua `if` → cùng ghi `1 - 1 = 0`. Kết quả: **bán 2 vé trong khi chỉ có 1**.
 
-Dien giai hay: khoang thoi gian giua **doc** va **ghi** la noi ke khac chen vao. `if` kiem tra mot gia tri da cu, khong phai dieu kien cua hanh dong.
+**Diễn giải hay:** khoảng thời gian giữa **đọc** và **ghi** là nơi kẻ khác chen vào. Câu `if` kiểm tra một giá trị *đã cũ*, chứ không phải điều kiện của hành động.
 
-### 3.2 Giai phap - 3 lop bao ve
+### 3.2. Giải pháp — 3 lớp bảo vệ
 
-**Lop 1 - Distributed Lock (Redlock)** - `order.controller.ts:21-27`
+**Lớp 1 — Distributed Lock (Redlock)** — `order.controller.ts:21-27`
 
 ```ts
 const lockKey = `locks:ticketType:${ticketTypeId}`;
@@ -55,23 +70,23 @@ const ttl = 5000;
 lock = await redlock.acquire([lockKey], ttl);
 ```
 
-Khoa theo `ticketTypeId` de ve VIP va ve Standard khong chan nhau.
+Khóa theo `ticketTypeId` để vé VIP và vé Standard không chặn nhau.
 
-**Lop 2 - Compare-And-Swap o tang DB (CHOT CHAN THAT)** - `order.controller.ts:42-53`
+**Lớp 2 — Compare-And-Swap ở tầng DB (CHỐT CHẶN THẬT)** — `order.controller.ts:42-53`
 
 ```ts
 const reserved = await tx.ticketType.updateMany({
   where: { id: ticketTypeId, availableQuantity: { gte: quantity } },
   data: { availableQuantity: { decrement: quantity } },
 });
-if (reserved.count === 0) { /* het ve -> nem loi */ }
+if (reserved.count === 0) { /* hết vé → ném lỗi */ }
 ```
 
-Dieu kien "con du ve" duoc dua **thang xuong cau UPDATE**, khong tach thanh buoc doc rieng. MySQL khoa row khi UPDATE: request B bi block cho toi khi A commit, va **dieu kien WHERE duoc danh gia lai** tren du lieu A vua ghi.
+Điều kiện "còn đủ vé" được đưa **thẳng xuống câu UPDATE**, không tách thành bước đọc riêng. MySQL khóa row khi UPDATE: request B bị block cho tới khi A commit, và **điều kiện WHERE được đánh giá lại** trên dữ liệu A vừa ghi.
 
-`count === 0` nghia la "khong du ve **tai thoi diem ghi**", chu khong phai tai thoi diem doc. **Day la toan bo khac biet giua read-then-write va CAS.**
+`count === 0` nghĩa là "không đủ vé **tại thời điểm ghi**", chứ không phải tại thời điểm đọc. **Đây là toàn bộ khác biệt giữa read-then-write và CAS.**
 
-**Lop 3 - CHECK constraint o MySQL** - `server/prisma/migrations/20260918100000_add_check_available_quantity_non_negative/migration.sql`
+**Lớp 3 — CHECK constraint ở MySQL** — `server/prisma/migrations/20260918100000_add_check_available_quantity_non_negative/migration.sql`
 
 ```sql
 ALTER TABLE `ticket_types`
@@ -79,62 +94,67 @@ ALTER TABLE `ticket_types`
   CHECK (`availableQuantity` >= 0);
 ```
 
-Prisma **khong dien dat duoc** CHECK constraint, nen no nam trong migration viet tay.
+Prisma **không diễn đạt được** CHECK constraint, nên nó nằm trong migration viết tay.
 
-### 3.3 Cau hoi PV + cach tra loi
+### 3.3. Câu hỏi PV + cách trả lời
 
-**"Vi sao co lock roi ma van can CAS?"**
-> Lock la **toi uu**, CAS la **tinh dung dan**. Lock co the mat: key bi eviction do `maxmemory`, Redis failover lam mat write, TTL het giua transaction. Khi do CAS van cuu duoc. Nguoc lai, CAS khong the bi "het han giua chung" nhu lock, vi no la mot cau lenh gan lien voi transaction cua DB.
+**"Vì sao có lock rồi mà vẫn cần CAS?"**
 
-**"Tai sao khong dung `SELECT ... FOR UPDATE`?"**
-> No giu row lock suot transaction; hang tram request cung mot `ticket_type` se xep hang dai va timeout. Redis xu ly lock o bo nho (micro giay) va giam tai cho MySQL. Tuy vay tang DB van co CAS + CHECK constraint lam luoi an toan.
+> Lock là **tối ưu**, CAS là **tính đúng đắn**. Lock có thể mất: key bị eviction do `maxmemory`, Redis failover làm mất write, TTL hết giữa transaction. Khi đó CAS vẫn cứu được. Ngược lại, CAS không thể bị "hết hạn giữa chừng" như lock, vì nó là một câu lệnh gắn liền với transaction của DB.
 
-**"Neu lock mat giua transaction thi sao?"**
-> CAS van bao ve: request thu hai khi duoc chay se danh gia lai `WHERE availableQuantity >= quantity` tren du lieu da commit, thay khong du thi `count = 0`. Ke ca CAS bi vuot, CHECK constraint chan so am.
+**"Tại sao không dùng `SELECT ... FOR UPDATE`?"**
 
-**"Tai sao job het han khong can Redlock?"** - `server/src/jobs/expireOrders.job.ts:40-43`
-> No khong "doc roi ghi" - no dung `updateMany` co dieu kien `status='PENDING'` nhu mot phep CAS; MySQL khoa row, chi MOT worker thang. CAS manh hon lock vi khong the "het han giua chung".
+> Nó giữ row lock suốt transaction; hàng trăm request cùng một `ticket_type` sẽ xếp hàng dài và timeout. Redis xử lý lock ở bộ nhớ (micro giây) và giảm tải cho MySQL. Tuy vậy tầng DB vẫn có CAS + CHECK constraint làm lưới an toàn.
 
-### 3.4 So lieu phai nho
+**"Nếu lock mất giữa transaction thì sao?"**
 
-| So lieu | Nghia la |
-|--------|---------|
-| TTL lock = **5000ms** | `order.controller.ts:22` |
-| `count === 0` | khong du ve tai thoi diem ghi |
-| 200 VU, 10 ve | 10 don thanh cong, `availableQuantity = 0`, **zero oversell**, zero 5xx |
+> CAS vẫn bảo vệ: request thứ hai khi được chạy sẽ đánh giá lại `WHERE availableQuantity >= quantity` trên dữ liệu đã commit, thấy không đủ thì `count = 0`. Kể cả CAS bị vượt, CHECK constraint chặn số âm.
 
-### 3.5 Câu hoi BAM - dung tra loi sai
+**"Tại sao job hết hạn không cần Redlock?"** — `server/src/jobs/expireOrders.job.ts:40-43`
 
-| Bai | Sai | Dung |
-|-----|-----|------|
-| "Lock da duoc dung race roi" | "Dung, lock la du" | Lock co the mat, CAS moi la chot chan that |
-| "Co `if` kiem tra so ve nen an toan" | "Dung" | `if` kiem tragia tri **da cu**, khong phai dieu kien cua hanh dong |
-| "Dung `SELECT ... FOR UPDATE` de an toan hon" | "Dung" | Giu row lock lau, xep hang dai; Redis + CAS tot hon |
-| "Transaction da lo duoc race roi" | "Dung" | Isolation level mac dinh khong chan **write skew** tren read-then-write |
+> Nó không "đọc rồi ghi" — nó dùng `updateMany` có điều kiện `status='PENDING'` như một phép CAS; MySQL khóa row, chỉ MỘT worker thắng. CAS mạnh hơn lock vì không thể "hết hạn giữa chừng".
+
+### 3.4. Số liệu phải nhớ
+
+| Số liệu | Ý nghĩa |
+|-----------|---------|
+| TTL lock = **5000 ms** | `order.controller.ts:22` |
+| `count === 0` | Không đủ vé **tại thời điểm ghi** |
+| 200 VU, 10 vé | 10 đơn thành công, `availableQuantity = 0`, **zero oversell**, zero 5xx |
+
+### 3.5. Câu hỏi BẪM — đừng trả lời sai
+
+| Bẫy | Sai | Đúng |
+|------|-----|------|
+| "Lock đã đủ chống race rồi" | "Đúng, lock là đủ" | Lock có thể mất, CAS mới là chốt chặn thật |
+| "Có `if` kiểm tra số vé nên an toàn" | "Đúng" | `if` kiểm tra giá trị **đã cũ**, không phải điều kiện của hành động |
+| "Dùng `SELECT ... FOR UPDATE` an toàn hơn" | "Đúng" | Giữ row lock lâu, xếp hàng dài; Redis + CAS tốt hơn |
+| "Transaction đã lo được race rồi" | "Đúng" | Isolation level mặc định không chặn **write skew** trên read-then-write |
 
 ---
 
-## 4. Chu de 2 - Cache Redis
+## 4. Chủ đề 2 — Cache Redis
 
-### 4.1 Ba van de thuong gap
+### 4.1. Ba vấn đề thường gặp
 
-| Van de | Mo ta |
+| Vấn đề | Mô tả |
 |--------|-------|
-| **Cache stampede** (thundering herd) | Cache vua het han, hang nghin request cung MISS va cung lao vao DB |
-| **Stale data** | Data doi nhung cache chua cap nhat |
-| **Redis downtime** | Redis chet keo sap ca API du cache chi la toi uu |
+| **Cache stampede** (thundering herd) | Cache vừa hết hạn, hàng nghìn request cùng MISS và cùng lao vào DB |
+| **Stale data** | Dữ liệu đổi nhưng cache chưa cập nhật |
+| **Redis downtime** | Redis chết kéo sập cả API dù cache chỉ là tối ưu |
 
-Tat ca deu xu ly trong `server/src/utils/cache.ts`.
+Tất cả đều được xử lý trong `server/src/utils/cache.ts`.
 
-### 4.2 Versioned key - thay `KEYS` bang `INCR` (O(1))
+### 4.2. Versioned key — thay `KEYS` bằng `INCR` (O(1))
 
-Vohieu cache danh sach thuong duoc lam bang `KEYS events:list:*` roi `DEL`. `KEYS` phai quet **toan bo keyspace** va **chan Redis** (don luong) suot thoi gian do.
+Vô hiệu cache danh sách thường được làm bằng `KEYS events:list:*` rồi `DEL`. `KEYS` phải quét **toàn bộ keyspace** và **chặn Redis** (đơn luồng) suốt thời gian đó.
 
-**Do duoc tren may nay voi 50.000 key:**
-- `KEYS`: **111 ms** (mot lenh binh thuong ~0,1 ms)
+**Đo được trên máy này với 50.000 key:**
+
+- `KEYS`: **111 ms** (một lệnh bình thường ~0,1 ms)
 - `INCR`: **0,206 ms**
 
-Vi invalidation chay **sau moi don dat ve**, cach cu bien moi don hang thanh mot cu chan 111 ms len toan bo Redis.
+Vì invalidation chạy **sau mỗi đơn đặt vé**, cách cũ biến mỗi đơn hàng thành một cú chặn 111 ms lên toàn bộ Redis.
 
 `server/src/utils/cache.ts:40, 71-78, 220-224`:
 
@@ -147,62 +167,66 @@ export function listCacheKey(version, page, limit, search) {
 
 export async function invalidateEventList() {
   try { await cacheClient.incr(LIST_VERSION_KEY); }  // O(1)
-  catch { /* entry cu tu het han theo TTL */ }
+  catch { /* entry cũ tự hết hạn theo TTL */ }
 }
 ```
 
-Khi can vohieu chi **tang mot con so**. Moi key cu mang version cu tro nen **vo hinh ngay lap tuc**, va tu het han theo TTL 60s - khong can di xoa cai nao.
+Khi cần vô hiệu, chỉ **tăng một con số**. Mọi key cũ mang version cũ trở nên **vô hình ngay lập tức**, và tự hết hạn theo TTL 60s — không cần đi xóa cái nào.
 
-- Danh doi: moi request doc phai doc them version (~0,1 ms) - van re hon nhieu so voi doc DB (~40 ms).
-- Loi Redis khi doc version -> dung `VERSION_FALLBACK = '0'` (se MISS, an toan).
+- **Đánh đổi:** mỗi request đọc phải đọc thêm version (~0,1 ms) — vẫn rẻ hơn nhiều so với đọc DB (~40 ms).
+- **Lỗi Redis khi đọc version** → dùng `VERSION_FALLBACK = '0'` (sẽ MISS, an toàn).
 
-### 4.3 Single-flight - chong stampede
+### 4.3. Single-flight — chống stampede
 
-Khi cache MISS, de moi request cung doc DB thi stampede. `cacheGetOrLoad` (`cache.ts:151-208`) chi cho **mot** request di tinh lai:
+Khi cache MISS, nếu để mọi request cùng đọc DB thì stampede. Hàm `cacheGetOrLoad` (`cache.ts:151-208`) chỉ cho **một** request đi tính lại:
 
 ```ts
-// 1. Thu gianh lock bang SET NX (chi nguoi dau tien thanh cong)
+// 1. Thử giành lock bằng SET NX (chỉ người đầu tiên thành công)
 const acquired = await cacheClient.set(lockKey, token, 'PX', LOCK_TTL_MS, 'NX');
 
 if (holdsLock) {
-  // 2. Kiem tra lai: co the nguoi khac da dien cache trong luc ta gianh lock
+  // 2. Kiểm tra lại: có thể người khác đã điền cache lúc ta giành lock
   const second = await readCache(key);
   if (second.state === 'hit') return { value: second.value, source: 'cache' };
 
   const value = await loader();
-  if (value !== null && value !== undefined) await writeCache(key, value); // khong cache null
+  if (value !== null && value !== undefined) await writeCache(key, value); // không cache null
   return { value, source: 'database' };
 }
 
-// 3. Nguoi thua cho (polling) cho toi khi cache duoc dien
+// 3. Người thua chờ (polling) cho tới khi cache được điền
 for (let round = 0; round < WAIT_ROUNDS; round++) {
   await sleep(WAIT_STEP_MS);
   const retry = await readCache(key);
   if (retry.state === 'hit') return { value: retry.value, source: 'cache' };
 }
-// 4. Cho vo hieu -> thay doc DB con hon treo request
+// 4. Chờ vô ích → thà đọc DB còn hơn treo request
 return { value: await loader(), source: 'database' };
 ```
 
-**So lieu tai sao can** (cache lanh):
-- 100 request dong thoi -> **6/18/38 luot doc DB**
-- 500 request -> **38/98/130 luot**
+**Số liệu tại sao cần** (cache lạnh):
 
-Dung ra chi can 1. Va stampede tu khuech dai: DB cang cham, cua so MISS cang rong, cang nhieu request lot vao - **dung luc DB yeu nhat**.
+- 100 request đồng thời → **6/18/38 lượt đọc DB**
+- 500 request → **38/98/130 lượt**
 
-> **Vi du doi thuong:** chi **mot** thuc khach duoc vao bep goi mon, 99 nguoi con lai ngoi cho. Mon ra, ai cung nhan duoc.
+Đúng ra chỉ cần 1. Và stampede tự khuếch đại: DB càng chậm, cửa sổ MISS càng rộng, càng nhiều request lọt vào — **đúng lúc DB yếu nhất**.
 
-**Hai chi tiet tinh te:**
-- **Phan biet MISS voi ERROR** (`cache.ts:101-116`). Neu gop chung, khi Redis chet moi request se thu gianh lock roi cho nhau vo ich. Redis loi -> di thang DB, **khong gianh lock, khong cho ai**.
-- **Nha lock an toan bang Lua script** (`cache.ts:57-65, 128`). Chi `DEL` neu gia tri lock van dung token cua minh. Neu dung `DEL` tran ma lenh cua ta cham hon TTL, lock da thuoc nguoi khac -> ta xoa oan lock cua ho, mo duong cho stampede.
+> **Ví dụ đời thường:** chỉ **một** thực khách được vào bếp gọi món, 99 người còn lại ngồi chờ. Món ra, ai cũng nhận được.
+
+**Hai chi tiết tinh tế:**
+
+- **Phân biệt MISS với ERROR** (`cache.ts:101-116`). Nếu gộp chung, khi Redis chết mọi request sẽ thử giành lock rồi chờ nhau vô ích. Code xử lý: Redis lỗi → đi thẳng DB, **không giành lock, không chờ ai** (`cache.ts:163-165`).
+- **Nhả lock an toàn bằng Lua script** (`cache.ts:57-65, 128`). Chỉ `DEL` nếu giá trị lock vẫn đúng token của mình. Nếu dùng `DEL` trần mà lệnh của ta chậm hơn TTL, lock đã thuộc về người khác → ta xóa oan lock của họ, mở đường cho stampede quay lại.
 
 ```lua
 if redis.call("get", KEYS[1]) == ARGV[1] then
   return redis.call("del", KEYS[1])
+else
+  return 0
 end
 ```
 
-### 4.4 Fail-open - Redis chet thi van song
+### 4.4. Fail-open — Redis chết thì vẫn sống
 
 `server/src/config/redis.ts:36-49`:
 
@@ -210,69 +234,88 @@ end
 export const cacheClient = new Redis({
   host: REDIS_HOST,
   port: REDIS_PORT,
-  enableOfflineQueue: false,  // Redis chet -> bao loi ngay, khong xep hang cho
-  maxRetriesPerRequest: 1,    // khong thu lai, thanh doc DB
-  commandTimeout: 200,        // chan tren moi lenh (do tre thuc ~0,1ms)
+  enableOfflineQueue: false,  // Redis chết → báo lỗi ngay, không xếp hàng chờ
+  maxRetriesPerRequest: 1,    // không thử lại, thà đọc DB
+  commandTimeout: 200,        // chặn trên mỗi lệnh (độ trễ thực ~0,1 ms)
 });
 ```
 
-**Voi cau hinh mac dinh** (offline queue bat, retry 20 lan), khi Redis chet thi `GET /api/events` **treo 63,09 giay** roi moi tra 500 - cache tro thanh diem chet duy nhat cua he thong, dung thu no sinh ra de tranh.
+**Với cấu hình mặc định** (offline queue bật, retry 20 lần), khi Redis chết thì `GET /api/events` **treo 63,09 giây** rồi mới trả 500 — cache trở thành điểm chết duy nhất của hệ thống, đúng thứ nó sinh ra để tránh.
 
-### 4.5 Vi sao co HAI Redis client?
+### 4.5. Vì sao có HAI Redis client?
 
-`server/src/config/redis.ts:11` va `:36`
+`server/src/config/redis.ts:11` và `:36`
 
 | | `redisClient` | `cacheClient` |
 |---|---|---|
-| Dung cho | Redlock (lock) | Cache doc |
-| Tinh cach | **Kien nhan**: cho & thu lai khi tai cao | **Fail-fast**: that bai nhanh, khong giu request |
-| Cau hinh | Mac dinh ioredis | `enableOfflineQueue:false`, `maxRetriesPerRequest:1` |
+| Dùng cho | Redlock (lock) | Cache đọc |
+| Tính cách | **Kiên nhẫn**: chờ & thử lại khi tải cao | **Fail-fast**: thất bại nhanh, không giữ request |
+| Cấu hình | Mặc định ioredis | `enableOfflineQueue:false`, `maxRetriesPerRequest:1` |
 
-Hai ben co yeu cau **trai nhau**. Neu dung chung mot client cau hinh fail-fast, Redlock se khong cho noi khi tai cao -> khong dat duoc ve. Neu dung chung cau hinh kien nhan, cache lam treo request khi Redis chet. Tach ra thi Redis chet **chi anh huong lock**, doc du lieu van chay qua DB.
+Hai bên có yêu cầu **trái ngược nhau**:
 
-### 4.6 Khong cache gia tri null
+- Nếu dùng chung một client cấu hình fail-fast → Redlock sẽ không chờ nổi khi tải cao → không đặt được vé.
+- Nếu dùng chung cấu hình kiên nhẫn → cache làm treo request khi Redis chết.
 
-`cache.ts:186-189`: chi ghi cache khi `value !== null && value !== undefined`.
+Tách ra thì Redis chết **chỉ ảnh hưởng lock**, còn đọc dữ liệu vẫn chạy qua DB.
 
-Neu cache null, moi request sau nhan "not found" **ngay ca khi data da duoc tao ra** - nhung phai cho het TTL moi thay. Muon cache "khong tim thay" thi can sentinel rieng de phan biet voi MISS.
+### 4.6. Không cache giá trị null
 
-### 4.7 Cau hoi PV
+`cache.ts:186-189`: chỉ ghi cache khi `value !== null && value !== undefined`.
 
-**"Lam sao tranh cache stampede?"**
-> Single-flight: khi MISS chi mot request gianh duoc lock Redis (SET NX) va di tinh lai; cac request khac polling cho cache duoc dien thay vi cung dap DB. Co kiem tra lai cache sau khi gianh lock, va fallback doc DB neu cho qua lau.
+Nếu cache null, mọi request sau nhận "not found" **ngay cả khi data đã được tạo ra** — nhưng phải chờ hết TTL mới thấy. Muốn cache "không tìm thấy" thì cần một sentinel riêng để phân biệt với MISS.
 
-**"Tai sao khong cache null/missing?"**
-> Vi se "cache poisoned": data thuc su chua ton tai bi ghi nho la khong ton tai, moi request sau nhan "not found" ngay ca khi data da duoc tao, cho toi het TTL. Muon cache missing phai dung sentinel rieng de phan biet voi MISS.
+### 4.7. Invalidate list vs detail
 
-**"Khac giua cache hit va cache miss, lam sao do?"**
-> Chi so `cache_hit_rate`, `db_reads`. **Phai lam cache LANH truoc** khi do - neu cache dang am thi moi request deu hit va test khong noi len gi. Cach xoa: `redis-cli --scan --pattern 'events:list:*' | xargs -r redis-cli del`.
+`cache.ts:220-252`:
 
-**"Co bao gio cache bi xoa toan bo khong?"**
-> Khong, dung versioned key. Version tang len -> moi key cu "vo hinh" ngay lap tuc va tu het han theo TTL 60s. Khong ton tai thao tac xoa hang loat key.
+- `invalidateEventList()` — chỉ `INCR` version.
+- `invalidateEventDetails(ids)` — `DEL` key chi tiết (số lượng nhỏ, xóa trực tiếp rẻ).
+- `invalidateEventCache(ids)` — làm **cả hai**, vì response danh sách **cũng chứa `ticketTypes`** (tức là có luôn số vé còn lại), giống response chi tiết.
+
+TTL cache = 60 giây (`cache.ts:17`).
+
+### 4.8. Câu hỏi PV
+
+**"Làm sao tránh cache stampede?"**
+
+> Single-flight: khi MISS chỉ một request giành được lock Redis (SET NX) và đi tính lại; các request khác polling chờ cache được điền thay vì cùng đập DB. Có kiểm tra lại cache sau khi giành lock, và fallback đọc DB nếu chờ quá lâu.
+
+**"Tại sao không cache null/missing?"**
+
+> Vì sẽ "cache poisoned": data thực sự chưa tồn tại bị ghi nhớ là không tồn tại, mọi request sau nhận "not found" ngay cả khi data đã được tạo, cho tới khi hết TTL. Muốn cache missing phải dùng sentinel riêng để phân biệt với MISS.
+
+**"Đo cache hit/miss thế nào cho đúng?"**
+
+> Chỉ số `cache_hit_rate`, `db_reads`. **Phải làm cache lạnh trước** khi đo — nếu cache đang ấm thì mọi request đều hit và test không nói lên gì. Cách xóa: `redis-cli --scan --pattern 'events:list:*' | xargs -r redis-cli del`.
+
+**"Có bao giờ cache bị xóa toàn bộ không?"**
+
+> Không, dùng versioned key. Version tăng lên → mọi key cũ "vô hình" ngay lập tức và tự hết hạn theo TTL 60s. Không tồn tại thao tác xóa hàng loạt key.
 
 ---
 
-## 5. Chu de 3 - Bao mat
+## 5. Chủ đề 3 — Bảo mật
 
-### 5.1 JWT - fail fast, khong bao gio co secret mac dinh
+### 5.1. JWT — không bao giờ có secret mặc định
 
 `server/src/config/auth.ts:34-60`:
 
 ```ts
 export function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('Thieu bien moi truong JWT_SECRET...');
-  if (secret === OLD_LEAKED_DEFAULT) throw new Error('JWT_SECRET dang dung gia tri mac dinh cu da bi lo...');
-  if (secret.length < MIN_SECRET_LENGTH) throw new Error(`JWT_SECRET qua ngan (${secret.length}, can it nhat ${MIN_SECRET_LENGTH})...`);
+  if (!secret) throw new Error('Thiếu biến môi trường JWT_SECRET...');
+  if (secret === OLD_LEAKED_DEFAULT) throw new Error('JWT_SECRET đang dùng giá trị mặc định cũ đã bị lộ...');
+  if (secret.length < MIN_SECRET_LENGTH) throw new Error(`JWT_SECRET quá ngắn (${secret.length}, cần ít nhất ${MIN_SECRET_LENGTH})...`);
   return secret;
 }
 ```
 
 `MIN_SECRET_LENGTH = 32` (`auth.ts:13`).
 
-**Diem hay:** fail fast tai **khoi dong** (`assertAuthConfig()` goi o `app.ts:80`), thay vi chay voi secret mac dinh ma ca the gioi biet. Test 4 case trong `test-jwt-security.cjs` chay `getJwtSecret()` trong **process con** de kiem tra tung truong hop.
+**Điểm hay:** fail fast ngay lúc **khởi động** (`assertAuthConfig()` gọi ở `app.ts:80`), thay vì chạy với secret mặc định mà cả thế giới biết. Bộ test có 4 case chạy `getJwtSecret()` trong **process con** để kiểm tra từng trường hợp.
 
-### 5.2 Algorithm pinning - chong algorithm confusion
+### 5.2. Algorithm pinning — chống algorithm confusion
 
 `server/src/middlewares/auth.middleware.ts:46`:
 
@@ -280,59 +323,62 @@ export function getJwtSecret(): string {
 decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JwtPayload;
 ```
 
-Neu de trong, thu vien tu chon thuat toan theo header cua token -> kẻ tan cong ky token bang `alg: none` hoac doi HS256 sang RS256. **Ghim `algorithms` la chong thuoc**.
+Nếu để trống, thư viện tự chọn thuật toán theo header của token → kẻ tấn công ký token bằng `alg: none` hoặc đổi HS256 sang RS256. **Ghim `algorithms` là chống thuốc.**
 
-### 5.3 Khong tin role trong JWT - doc tu DB
+### 5.3. Không tin role trong JWT — đọc từ DB
 
-JWT song **1 ngay**. Neu tin token, sau khi admin ha quyen, nguoi do van giu quyen cu toi het han - dung thu ma tinh nang "ha quyen" sinh ra de chan.
+JWT sống **1 ngày**. Nếu tin token, sau khi admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn — đúng thứ mà tính năng "hạ quyền" sinh ra để chặn.
 
 `auth.middleware.ts:24-70`:
 
 ```ts
-// verify token -> doc trang thai tai khoan (co cache Redis) -> gan currentRole
+// verify token → đọc trạng thái tài khoản (có cache Redis) → gán currentRole
 req.user.currentRole = state.role;
 ```
 
-`server/src/utils/userState.ts`: cache trang thai trong Redis, **TTL 30 giay**, doc DB theo PK mat **0,32 ms**, doc cache **~0,1 ms**. Khi doi quyen thi `invalidateUserState` chay ngay trong request -> hieu luc **tuc thoi**, khong can cho TTL.
+`server/src/utils/userState.ts`: cache trạng thái trong Redis, **TTL 30 giây** (`userState.ts:49`), đọc DB theo PK mất **0,32 ms**, đọc cache **~0,1 ms**. Khi đổi quyền thì `invalidateUserState` chạy ngay trong request → hiệu lực **tức thời**, không cần chờ TTL.
 
-**Controller chi doc `currentRole`, khong doc `req.user.role`.**
+**Controller chỉ đọc `currentRole`, không đọc `req.user.role`.**
 
-### 5.4 Rate limit - 3 bo, 3 muc dich
+### 5.4. Rate limit — 4 bộ, 4 mục đích
 
 `server/src/middlewares/rateLimit.middleware.ts`
 
-| Limiter | Han muc | Khoa theo | Muc dich |
-|---------|---------|-----------|---------|
-| `apiRateLimiter` | 100/phut | IP | Chong abuse/DDoS nhe, bao ve ca khi chua biet client la ai |
-| `authRateLimiter` | 5 **that bai**/phut | IP | Chong brute-force mat khau |
-| `registerRateLimiter` | 10/phut (ke ca thanh cong) | IP | Chong spam account |
-| `orderRateLimiter` | 15/5 phut | **`userId`** | Chong dat ve lien tuc |
+| Limiter | Hạn mức | Khoá theo | Mục đích |
+|---------|----------|-----------|----------|
+| `apiRateLimiter` | 100/phút | IP | Chống abuse/DDoS nhẹ, bảo vệ cả khi chưa biết client là ai |
+| `authRateLimiter` | 5 **thất bại**/phút | IP | Chống brute-force mật khẩu |
+| `registerRateLimiter` | 10/phút (kể cả thành công) | IP | Chống spam account |
+| `orderRateLimiter` | 15/5 phút | **`userId`** | Chống đặt vé liên tục |
 
-**Diem dac biet - `orderRateLimiter` khoa theo TAI KHOAN khong phai IP** (`rateLimit.middleware.ts:48-55`):
+**Điểm đặc biệt — `orderRateLimiter` khoá theo TÀI KHOẢN chứ không phải IP** (`rateLimit.middleware.ts:48-55`):
 
 ```ts
 keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
 ```
 
-Ly do: trong thuc te rat nhieu nguoi dung chung mot IP (van phong, truong dai hoc, WiFi nha, mang di dong). Khoa theo IP nghia la ho bi chan oan chi vi nguoi khac trong cung mang da dat nhieu ve. Dieu kien de lam duoc la limiter phai chay **SAU `authenticate`** - do la ly do thu tu middleware trong `order.routes.ts` quan trong:
+Lý do: trong thực tế rất nhiều người dùng chung một IP (văn phòng, trường đại học, WiFi nhà, mạng di động). Khoá theo IP nghĩa là họ bị chặn oan chỉ vì người khác trong cùng mạng đã đặt nhiều vé. Ngược lại, khoá theo tài khoản không bị bot đánh lách bằng cách đổi IP.
+
+Điều kiện để làm được là limiter phải chạy **SAU `authenticate`** — đó là lý do thứ tự middleware trong `order.routes.ts` quan trọng, không phải ngẫu nhiên:
 
 ```ts
 router.post('/', authenticate, orderRateLimiter, validateBody(createOrderSchema), createOrder);
 ```
 
-`authRateLimiter` dung `skipSuccessfulRequests: true` -> chi request **that bai** moi bi dem, nguoi go sai 4 lan roi nhap dung van dung binh thuong.
+`authRateLimiter` dùng `skipSuccessfulRequests: true` → chỉ request **thất bại** mới bị đếm, người gõ sai 4 lần rồi nhập đúng vẫn dùng bình thường.
 
-### 5.5 RBAC - 2 tang, va tai sao role trong token bi bo qua
+### 5.5. RBAC — 2 tầng, và vì sao role trong token bị bỏ qua
 
-`auth.middleware.ts:96-130` (`authorize`): so sanh `currentRole` (tu DB) voi danh sach cho phep. `authenticate` da doc trang thai roi nen `authorize` khong can hoi DB lai (neu cache con hieu luc).
+`auth.middleware.ts:96-130` (`authorize`): so sánh `currentRole` (từ DB) với danh sách cho phép. `authenticate` đã đọc trạng thái rồi nên `authorize` không cần hỏi DB lần nữa (nếu cache còn hiệu lực).
 
-**Khong tach bang `roles`/`permissions`/`role_user`/`permission_role`:**
-- Hien su chi co 3 vai tro co dinh va quyen gan voi tung route
-- Policy nam canh endpoint, doc role la 1 luot doc theo PK (~0,32 ms, cache ~0,1 ms)
-- `Role` la enum Prisma nen **sai chinh ta la loi compile**, khong phai loi runtime
-- Doi sang RBAC dong chi khi can role tuy bien, multi-tenant, hay mot nguoi mang nhieu vai tro
+**Vì sao không tách bảng `roles`/`permissions`/`role_user`/`permission_role`:**
 
-### 5.6 Leaking loi - chi AppError duoc ra client nguyen van
+- Hệ thống chỉ có 3 vai trò cố định và quyền gắn với từng route.
+- Policy nằm cạnh endpoint, đọc role là 1 lượt đọc theo PK (~0,32 ms, cache ~0,1 ms).
+- `Role` là enum Prisma nên sai chính tả là **lỗi compile**, chứ không phải lỗi runtime.
+- Đổi sang RBAC động chỉ khi cần role tuỳ biến, multi-tenant, hay một người mang nhiều vai trò.
+
+### 5.6. Không rò rỉ lỗi ra client
 
 `server/src/utils/errors.ts:11`:
 
@@ -340,53 +386,56 @@ router.post('/', authenticate, orderRateLimiter, validateBody(createOrderSchema)
 export class AppError extends Error {}
 ```
 
-Chi `AppError` moi duoc ra client nguyen van. Moi loi khac -> `logUnexpectedError` ghi log server, client nhan thong bao chung. Server khong duoc lo loi chi tiet (host, port, ten database...).
+Chỉ `AppError` mới được ra client nguyên văn. Mọi lỗi khác → `logUnexpectedError` ghi log ở server, client nhận thông báo chung. Server không được lộ chi tiết lỗi (host, port, tên database…).
 
-### 5.7 Cau hoi PV
+### 5.7. Câu hỏi PV
 
-**"Tai sao khong tin role trong JWT?"**
-> JWT song toi 1 ngay. Tin token -> sau khi admin ha quyen, nguoi do van giu quyen cu toi het han. `authenticate` luon hoi DB va gan `currentRole`; controller chi doc `currentRole`. Cache Redis 30s giu duong dat ve khong phai doc DB moi request, nhung khi doi quyen thi `invalidateUserState` chay ngay trong request nen hieu luc tuc thoi.
+**"Tại sao không tin role trong JWT?"**
 
-**"Vi sao rate limit dat ve theo tai khoan khong theo IP?"**
-> Vi thuc te nhieu nguoi dung chung mot IP. Khoa theo IP nghia la bi chan oan. Nguoc lai khoa theo tai khoan khong bi bot danh lach doi IP. Dieu kien de lam duoc la limiter phai chay **sau `authenticate`**.
+> JWT sống tới 1 ngày. Tin token → sau khi admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn. `authenticate` luôn hỏi DB và gán `currentRole`; controller chỉ đọc `currentRole`. Cache Redis 30 giây giữ đường đặt vé không phải đọc DB mỗi request, nhưng khi đổi quyền thì `invalidateUserState` chạy ngay trong request nên hiệu lực tức thời.
 
-**"Algorithm confusion la gi?"**
-> Neu de trong `algorithms`, thu vien tu chon thuat toan theo header cua token. Ke tan cong ky token bang `alg: none` -> token duoc coi la hop le ma khong can biet secret. Ghim `algorithms: ['HS256']` la chong thuoc.
+**"Vì sao rate limit đặt vé theo tài khoản chứ không theo IP?"**
 
-**"Tai sao token het han roi phai dang nhap lai? Refresh token co can khong?"**
-> **Day la gap cua project** (xem muc 9). Tra loi thang: "Chua lam refresh token. Hien tai JWT song 1 ngay, het han phai dang nhap lai. Voi production, toi se them refresh token luu trong httpOnly cookie + access token ngan han (15-30 phut) - day la thay doi kha nho, khong dung lai phan tranh chap ton kho."
+> Vì thực tế nhiều người dùng chung một IP. Khoá theo IP nghĩa là bị chặn oan. Ngược lại khoá theo tài khoản không bị bot đánh lách bằng cách đổi IP. Điều kiện để làm được là limiter phải chạy **sau `authenticate`**.
+
+**"Algorithm confusion là gì?"**
+
+> Nếu để trống `algorithms`, thư viện tự chọn thuật toán theo header của token. Kẻ tấn công ký token bằng `alg: none` → token được coi là hợp lệ mà không cần biết secret. Ghim `algorithms: ['HS256']` là chống thuốc.
+
+**"Token hết hạn rồi phải đăng nhập lại? Refresh token có cần không?"**
+
+> **Đây là gap của project** (xem mục 12). Trả lời thẳng: *"Chưa làm refresh token. Hiện tại JWT sống 1 ngày, hết hạn phải đăng nhập lại. Với production, tôi sẽ thêm refresh token lưu trong httpOnly cookie + access token ngắn hạn (15–30 phút) — đây là thay đổi khá nhỏ, không đụng lại phần tranh chấp tồn kho."*
 
 ---
 
-## 6. Chu de 4 - Job nen tra ve (CAC PHAM ON KHAC)
+## 6. Chủ đề 4 — Job nền trả vé (bài toán con: đơn hết hạn)
 
 `server/src/jobs/expireOrders.job.ts:22-90`
 
 ```ts
 const result = await prisma.$transaction(async (tx) => {
-  // CAS: chi mot worker doi duoc PENDING -> EXPIRED
+  // CAS: chỉ một worker đổi được PENDING → EXPIRED
   const claimed = await tx.order.updateMany({
     where: { id: order.id, status: 'PENDING' },
     data: { status: 'EXPIRED' },
   });
-  if (claimed.count === 0) return null; // worker khac da xu ly
-  // ... cong tra ve theo tung loai (dem tu order.tickets)
+  if (claimed.count === 0) return null; // worker khác đã xử lý
+  // ... cộng trả vé theo từng loại (đếm từ order.tickets)
 });
 ```
 
-**Ba bai hoc:**
-1. **CAS o day thay cho lock**: job khong doc gia tri cu de quyet dinh (khac `createOrder`), no chi doi trang thai co dieu kien. MySQL khoa row, worker thua nhan `count = 0` va bo qua.
-2. **Doi trang thai va tra ve phai cung MOT transaction**: neu tach roi ma buoc cong ve loi, ta co don `EXPIRED` nhung ve bien mat vinh vien (khong con `PENDING` de job bat lan sau).
-3. **Mot don loi khong lam chet ca luot quet**: moi don boc trong `try/catch` rieng.
-4. Tra ve xong **phai xoa cache** (`job:86`), neu khong UI con hien thi so ve cu toi 60 giay.
+**Bốn bài học:**
 
-`startExpireOrdersJob` (`job:96-115`) quet ngay 1 luot luc khoi dong (bat cac don het han trong luc server tat) roi lap moi `ORDER_SWEEP_INTERVAL_MS` (mac dinh 60s). `.unref()` de job khong giu process song.
+1. **CAS ở đây thay cho lock**: job không đọc giá trị cũ để quyết định (khác `createOrder`), nó chỉ đổi trạng thái có điều kiện. MySQL khóa row, worker thua nhận `count = 0` và bỏ qua.
+2. **Đổi trạng thái và trả vé phải cùng MỘT transaction**: nếu tách rời mà bước cộng vé lỗi, ta có đơn `EXPIRED` nhưng vé biến mất vĩnh viễn (không còn `PENDING` để job bắt lần sau).
+3. **Một đơn lỗi không làm chết cả lượt quét**: mỗi đơn bọc trong `try/catch` riêng.
+4. **Trả vé xong phải xoá cache** (`job:86`), nếu không UI còn hiển thị số vé cũ tới 60 giây.
 
-**Cau hoi PV:** "Tai sao job het han khong can Redlock?" -> xem muc 3.3.
+`startExpireOrdersJob` (`job:96-115`) quét ngay 1 lượt lúc khởi động (bắt các đơn hết hạn trong lúc server tắt) rồi lặp mỗi `ORDER_SWEEP_INTERVAL_MS` (mặc định 60s). `.unref()` để job không giữ process sống.
 
 ---
 
-## 7. Chu de 5 - Race hanh tri (BA CAU HOI HAY)
+## 7. Chủ đề 5 — Race hành trị (ba câu hỏi hay)
 
 `server/src/controllers/admin.controller.ts:50`:
 
@@ -394,54 +443,54 @@ const result = await prisma.$transaction(async (tx) => {
 SELECT id FROM `users` WHERE `role` = 'ADMIN' AND `isActive` = 1 FOR UPDATE
 ```
 
-Tinh huong: he thong chi con 2 admin (A va B). A go "ha quyen B" va B go "ha quyen A" **cung luc**. Neu ca hai cung thay "con admin khac" -> ca hai deu duoc phep -> he thong khong con admin nao quan tri duoc.
+Tình huống: hệ thống chỉ còn đúng 2 admin (A và B). A gọi "hạ quyền B" và B gọi "hạ quyền A" **cùng lúc**. Nếu cả hai cùng thấy "còn admin khác" thì cả hai đều được phép → hệ thống không còn admin nào quản trị được.
 
-**Diem hay - KHONG dung `count()`:** trong MySQL, `count()` la **consistent read theo snapshot** cua transaction, nen no co the doc trang thai **CU HON** trang thai ma mot locking read vua khoa, mo lai dung lo hong dang co gang chan. Cach dung: locking read de chan, roi **dem ket qua tra ve trong JS** (`rows.length`) chu khong `count()` lai trong cung transaction.
+**Điểm hay — KHÔNG dùng `count()`:** trong MySQL, `count()` là **consistent read theo snapshot** của transaction, nên nó có thể đọc trạng thái **CŨ HƠN** trạng thái mà một locking read vừa khoá, mở lại đúng lỗ hổng đang cố chặn. Cách đúng: locking read để chặn, rồi **đếm kết quả trả về trong JS** (`rows.length`) chứ không `count()` lần nữa trong cùng transaction.
 
-Test: `npm run test:race` - 2 admin cung ha quyen nhau -> chi 1 thang, "Khong the ha quyen admin cuoi cung cua he thong!" (400).
+Test: `npm run test:race` — 2 admin cùng hạ quyền nhau → chỉ 1 thắng, "Không thể hạ quyền admin cuối cùng của hệ thống!" (400).
 
 ---
 
-## 8. Chu de 6 - Phan loai loi (DE BI HOI, DE BI TRUONG)
+## 8. Chủ đề 6 — Phân loại lỗi (dễ bị hỏi, dễ bị trượt)
 
-`server/src/utils/errors.ts:51-100` - `mapPrismaError`:
+`server/src/utils/errors.ts:51-100` — hàm `mapPrismaError`:
 
-| Ma loi Prisma | Y nghia | HTTP |
+| Mã lỗi Prisma | Ý nghĩa | HTTP |
 |---------------|---------|------|
-| `P2000` | Gia tri qua dai cho cot ("too long for the column's type") | 400 |
-| `P2002` | Vi pham rang buoc UNIQUE | 409 |
-| `P2003` | Vi pham rang buoc FOREIGN KEY | 400 |
-| `P2020` | Gia tri ngoai khoang cua kieu (vuot DECIMAL/INTEGER) | 400 |
-| Loi MySQL tho | Khong co ma Prisma | 400 |
-| Loi la | Khong xac dinh duoc | `null` -> 500 |
+| `P2000` | Giá trị quá dài cho cột ("too long for the column's type") | 400 |
+| `P2002` | Vi phạm ràng buộc UNIQUE | 409 |
+| `P2003` | Vi phạm ràng buộc FOREIGN KEY | 400 |
+| `P2020` | Giá trị nằm ngoài khoảng của kiểu (vượt DECIMAL/INTEGER) | 400 |
+| Lỗi MySQL thô | Không có mã Prisma | 400 |
+| Lỗi lạ | Không xác định được | `null` → 500 |
 
-**Voi `createOrder`** (`order.controller.ts:127-148`):
+**Với `createOrder`** (`order.controller.ts:127-148`):
 
-| Tinh huong | Status | Vi sao |
+| Tình huống | Status | Vì sao |
 |-----------|--------|--------|
-| Redlock khong lay duoc lock (`ExecutionError`) | **429** | Qua tai, client thu lai duoc |
-| Het ve / loai ve khong ton tai (`AppError`) | **400** | Loi thuoc ve request, thu lai y nguyen vo ich |
-| Moi loi con lai (Prisma timeout, mat DB) | **500** | Loi server |
+| Redlock không lấy được lock (`ExecutionError`) | **429** | Quá tải, client thử lại được |
+| Hết vé / loại vé không tồn tại (`AppError`) | **400** | Lỗi thuộc về request, thử lại y nguyên là vô ích |
+| Mọi lỗi còn lại (Prisma timeout, mất DB…) | **500** | Lỗi server |
 
-**Neu gop 500 vao 400** nhu code cu, khi DB qua tai client se duoc bao "request cua ban sai" -> khong thu lai, va monitoring dem hut loi server. **Phan loai sai lam chan doan sai.**
+**Nếu gộp 500 vào 400** như code cũ, khi DB quá tải client sẽ được báo "request của bạn sai" → không thử lại, và monitoring đếm hụt lỗi server. **Phân loại sai làm chẩn đoán sai.**
 
 ---
 
-## 9. Chu de 7 - Cac bug thu te da gap (KHOI NGHIEP NHIU HON LY THUYET)
+## 9. Chủ đề 7 — Các bug thực tế đã gặp (đáng giá nhất khi phỏng vấn)
 
-Day la phan **dat gia tri nhat** khi PV, vi chung minh ban doc code that, khong phai doc Wikipedia. Moi muc deu la bug **da xay ra trong chinh project nay** va **da duoc sua + co test**.
+Đây là phần **đáng giá nhất** khi PV, vì nó chứng minh bạn đọc code thật chứ không đọc Wikipedia. Mỗi mục đều là bug **đã xảy ra trong chính project này** và **đã được sửa + có test**.
 
-### 9.1 Oversell: read-then-write (muc 3.1)
+### 9.1. Oversell: read-then-write (mục 3.1)
 
-### 9.2 `VARCHAR(191)` lam moi thao tac tao su kien chet voi 500
+### 9.2. `VARCHAR(191)` làm mọi thao tác tạo sự kiện chết với 500
 
-**Trieu chung:** tao su kien voi mo ta dai hon 191 ky tu -> API tra **500 `{"message":"Lo may chu"}`**. Nguoi dung khong biet sai o dau.
+**Triệu chứng:** tạo sự kiện với mô tả dài hơn 191 ký tự → API trả **500 `{"message":"Lỗi máy chủ"}`**. Người dùng không biết mình sai ở đâu.
 
-**Nguyen nhan:** Prisma mac dinh moi cot `String` thanh `VARCHAR(191)`. Con so 191 **den tu gioi han index utf8mb4** (191 x 4 byte = 764 < 767 byte), **khong phai quyet dinh thiet ke**. Zod khong gioi han do dai, form khong co `maxlength` -> mo ta di thang toi MySQL -> MySQL tu choi -> Prisma nem `P2000`.
+**Nguyên nhân:** Prisma mặc định mọi cột `String` thành `VARCHAR(191)`. Con số 191 đến từ **giới hạn index utf8mb4** (191 × 4 byte = 764 < 767 byte), **không phải quyết định thiết kế**. Zod không giới hạn độ dài, form không có `maxlength` → mô tả đi thẳng tới MySQL → MySQL từ chối → Prisma ném `P2000` → controller trả 500.
 
-**Sua 3 tang** (migration `20261020120000_widen_content_columns`):
+**Sửa 3 tầng** (migration `20261020120000_widen_content_columns`):
 
-| Cot | Truoc | Sau |
+| Cột | Trước | Sau |
 |-----|-------|-----|
 | `events.title` | VARCHAR(191) | VARCHAR(255) |
 | `events.description` | VARCHAR(191) | **TEXT** |
@@ -451,26 +500,26 @@ Day la phan **dat gia tri nhat** khi PV, vi chung minh ban doc code that, khong 
 | `ticket_types.price` | DECIMAL(10,2) | DECIMAL(12,2) |
 | `orders.totalAmount` | DECIMAL(10,2) | DECIMAL(12,2) |
 
-+ `.max()` trong Zod + `maxlength` tren form -> **3 tang cung mot con so**.
++ `.max()` trong Zod + `maxlength` trên form → **3 tầng cùng một con số**.
 
-**Bai hoc:** gioi han do dai phai **khop** voi bang DB. Neu khong, du lieu qua dai di thang toi MySQL roi moi chet, va loi quay ve la 500 chung chung thay vi 400 noi ro "truong nao vuot, vuot bao nhieu".
+**Bài học:** giới hạn độ dài phải **khớp** với bảng DB. Nếu không, dữ liệu quá dài đi thẳng tới MySQL rồi mới chết, và lỗi quay về là 500 chung chung thay vì 400 nói rõ "trường nào vượt, vượt bao nhiêu".
 
-### 9.3 Su kien tao duoc nhung khong ai dat ve duoc
+### 9.3. Sự kiện tạo được nhưng không ai đặt vé được
 
-`price` va `totalQuantity` deu hop le rieng le, nhung `orders.totalAmount` luu `price x quantity` -> **tich** cua chung phai vua bien `DECIMAL(12,2)`.
+`price` và `totalQuantity` đều hợp lệ riêng lẻ, nhưng `orders.totalAmount` lưu `price × quantity` → **tích** của chúng phải vừa biên `DECIMAL(12,2)`.
 
 ```
-tao su kien: gia 9.999.999.999,99 x 2 ve  ->  201 (thanh cong, len ke)
-dat ve:      tong = 19.999.999.999,98      ->  400 (vuot bien cot)
+tạo sự kiện: giá 9.999.999.999,99 × 2 vé  ->  201 (thành công, lên kệ)
+đặt vé:      tổng = 19.999.999.999,98      ->  400 (vượt biên cột)
 ```
 
-Su kien len ke thanh cong nhung **khong ai mua duoc** - loi chi lo ra o buoc thanh toan, xa hon nhieu so voi luc tao su kien.
+Sự kiện lên kệ thành công nhưng **không ai mua được** — lỗi chỉ lộ ra ở bước thanh toán, xa hơn nhiều so với lúc tạo sự kiện.
 
-**Sua:** `superRefine` kiem tra tich luc tao/sua su kien + **kiem tra lai trong `order.controller.ts`** (vi gia ve co the duoc sua sau khi su kien da tao - `order.controller.ts:85-87`).
+**Sửa:** `superRefine` kiểm tra tích lúc tạo/sửa sự kiện + **kiểm tra lại trong `order.controller.ts`** (vì giá vé có thể được sửa sau khi sự kiện đã tạo — `order.controller.ts:85-87`).
 
-**Chi tiet kien thuc:** khi so sanh o bien phai **lam tron ve 2 chu so thap phan truoc**: `3333333333.33 x 3` trong JS ra `9999999999.9899997711181640625`, so thang voi `9999999999.99` se **chan oan** mot don hop le.
+**Chi tiết kỹ thuật:** khi so sánh ở biên phải **làm tròn về 2 chữ số thập phân trước**: `3333333333.33 × 3` trong JS ra `9999999999.9899997711181640625`, so thẳng với `9999999999.99` sẽ **chặn oan** một đơn hợp lệ.
 
-### 9.4 Mot request co the lam sap server (DoS)
+### 9.4. Một request có thể làm sập server (DoS)
 
 `order.controller.ts:98`:
 
@@ -478,67 +527,69 @@ Su kien len ke thanh cong nhung **khong ai mua duoc** - loi chi lo ra o buoc tha
 tickets: { create: Array.from({ length: quantity }).map(() => ({ ticketTypeId })) }
 ```
 
-Tao N ban ghi `Ticket` trong RAM bang `Array.from` - do thuc te **~46 byte/phan tu**:
+Tạo N bản ghi `Ticket` trong RAM bằng `Array.from` — đo thực tế **~46 byte/phần tử**:
 
-| quantity | RAM can |
+| quantity | RAM cần |
 |----------|---------|
 | 1.000.000 | ~46 MB |
 | 5.000.000 | ~233 MB |
-| 2.147.483.647 | **~100 GB -> sap tien trinh Node** |
+| 2.147.483.647 | **~100 GB → sập tiến trình Node** |
 
-Mot request co `quantity` khong tran (chi can `availableQuantity` du lon) la du de lam sap ca server. **Loai loi nay chi lo ra khi doc code, khong lo ra khi chay test binh thuong** (ai cung dat 1-2 ve).
+Một request có `quantity` không trần (chỉ cần `availableQuantity` đủ lớn) là đủ để làm sập cả server. **Loại lỗi này chỉ lộ ra khi đọc code, không lộ ra khi chạy test bình thường** (ai cũng đặt 1–2 vé).
 
-**Sua:** `LIMITS.MAX_ORDER_QUANTITY = 100`.
+**Sửa:** `LIMITS.MAX_ORDER_QUANTITY = 100`.
 
-### 9.5 CORS: toan tu comma lam mat `CORS_ORIGINS`
+### 9.5. CORS: toán tử comma làm mất `CORS_ORIGINS`
 
-**Trieu chung:** client chay o cang **5174** bao loi CORS, du da khai bai cang. Thuc te **chi 5175** hoat dong.
+**Triệu chứng:** client chạy ở cổng **5174** báo lỗi CORS, dù đã khai báo cổng. Thực tế **chỉ 5175** hoạt động.
 
-**Nguyen nhan** (`server/src/app.ts`, code cu):
+**Nguyên nhân** (`server/src/app.ts`, code cũ):
 
 ```ts
 const allowedOrigins = (
   process.env.CORS_ORIGINS ?? 'http://localhost:5173,...',
   'http://localhost:5174,...',
   'http://localhost:5176,...',
-  'http://localhost:5175,...'      // <- chi phan tu CUOI duoc giu lai
+  'http://localhost:5175,...'      // <- chỉ phần tử CUỐI được giữ lại
 ).split(',')
 ```
 
-**Dau phay trong JavaScript la TOAN TU COMMA** (uu tien thap nhat), khong phai phan tu mang. Bieu thuc duoc parse thanh `(a ?? 'b'), 'c', 'd'` -> **chi tra ve phan tu cuoi cung**. `CORS_ORIGINS` trong `.env` bi bo qua hoan toan.
+**Dấu phẩy trong JavaScript là TOÁN TỬ COMMA** (ưu tiên thấp nhất), không phải phần tử mảng. Biểu thức được parse thành `(a ?? 'b'), 'c', 'd'` → **chỉ trả về phần tử cuối cùng**. `CORS_ORIGINS` trong `.env` bị bỏ qua hoàn toàn.
 
-**Bai hoc (rat de gap, rat de noi trong PV):**
-- `??` rang hon `||` nhung **khong cuu duoc toan tu comma** - toan tu comma co uu tien thap hon moi toan tu khac, nen no nuot toan bo bieu thuc ben trai.
-- Muon nhieu gia tri mac dinh thi dung `.join(',')` trong MOT chuoi, hoac mang that.
-- **Tai sao loi nay loc qua toan bo test?** Vi cac script test goi API bang `fetch` cua Node - Node **khong** tu gui header `Origin`, nen nhanh "khong co Origin -> cho qua" luon dung va whitelist chua bao gio duoc kiem tra. Fix: tach `parseAllowedOrigins` ra `server/src/utils/cors.ts` de unit-test duoc, va them `test-cors.cjs` sinh header `Origin` that.
+**Bài học (rất dễ gặp, rất dễ nói trong PV):**
 
-### 9.6 Script test loi giua chung -> de lai tai khoan rac co mat khau da biet
+- `??` ràng hơn `||` nhưng **không cứu được toán tử comma** — toán tử comma có ưu tiên thấp hơn mọi toán tử khác, nên nó nuốt toàn bộ biểu thức bên trái.
+- Muốn nhiều giá trị mặc định thì dùng `.join(',')` trong MỘT chuỗi, hoặc mảng thật.
+- **Tại sao lỗi này lọt qua toàn bộ test?** Vì các script test gọi API bằng `fetch` của Node — Node **không** tự gửi header `Origin`, nên nhánh "không có Origin → cho qua" luôn đúng và whitelist chưa bao giờ được kiểm tra. Cách sửa: tách `parseAllowedOrigins` ra `server/src/utils/cors.ts` để unit-test được, và thêm `test-cors.cjs` sinh header `Origin` thật.
 
-Rà DB phat hien **10 tai khoan ADMIN rac**, tat ca deu co mat khau `MatKhauDaiHon8KyTu`.
+### 9.6. Script test lỗi giữa chừng → để lại tài khoản rác có mật khẩu đã biết
 
-Ba nguyen nhan (deu la loi trong chinh bo test):
-1. Script tao tai khoan roi xoa o cuoi happy path, con `main().catch()` chi in loi roi thoat -> loi giua chung la de lai tai khoan.
-2. `Order.userId` la FK **Restrict** -> phai xoa **order truoc** roi moi xoa user. `prisma.user.delete(...).catch(() => {})` **nuot mat loi FK**, nen nhin tuong da xoa.
-3. `test-admin-race.cjs`: `updateMany` ha quyen **toan bo admin** nam **ngoai** khoi `try` -> loi ngay sau do se de lai he thong **khong con admin nao**.
+Rà DB phát hiện **10 tài khoản ADMIN rác**, tất cả đều có mật khẩu `MatKhauDaiHon8KyTu`.
 
-**Sua:** `cleanup()` goi o **ca** duong thanh cong lan duong loi, va thu tu xoa dung: `order -> event -> audit log -> user`.
+Ba nguyên nhân (đều là lỗi trong chính bộ test):
 
-### 9.7 Chay ca bo test lien tiep vuot rate limit, bao loi sai
+1. Script tạo tài khoản rồi xoá ở cuối happy path, còn `main().catch()` chỉ in lỗi rồi thoát → lỗi giữa chừng là để lại tài khoản.
+2. `Order.userId` là FK **Restrict** → phải xoá **order trước** rồi mới xoá user. `prisma.user.delete(...).catch(() => {})` **nuốt mất lỗi FK**, nên nhìn tưởng đã xoá.
+3. `test-admin-race.cjs`: `updateMany` hạ quyền **toàn bộ admin** nằm **ngoài** khối `try` → lỗi ngay sau đó sẽ để lại hệ thống **không còn admin nào**.
 
-`apiRateLimiter` gioi han **100 request/phut**. Moi bo test rieng le dung chua toi 40 request, nhung ca 7 bo cong lai vuot 100.
+**Sửa:** `cleanup()` gọi ở **cả** đường thành công lẫn đường lỗi, và thứ tự xoá đúng: `order → event → audit log → user`.
 
-Trieu chung **rat de hieu nham**:
+### 9.7. Chạy cả bộ test liên tiếp vượt rate limit, báo lỗi sai
 
-| Bo test | Thong bao loi | Thuc te |
+`apiRateLimiter` giới hạn **100 request/phút**. Mỗi bộ test riêng lẻ dùng chưa tới 40 request, nhưng cả 7 bộ cộng lại vượt 100.
+
+Triệu chứng **rất dễ hiểu nhầm**:
+
+| Bộ test | Thông báo lỗi | Thực tế |
 |---------|---------------|---------|
-| `test-cors` | "khong ket noi duoc server" | Server van chay, chi la 429 |
-| `test-validation` | `SyntaxError: Unexpected token 'Q'` | Body 429 cua express-rate-limit la **plain text**, khong phai JSON |
+| `test-cors` | "không kết nối được server" | Server vẫn chạy, chỉ là 429 |
+| `test-validation` | `SyntaxError: Unexpected token 'Q'` | Body 429 của express-rate-limit là **plain text**, không phải JSON |
 
-**Sua:** `server/run-all-tests.cjs` doc header `RateLimit-Remaining` / `RateLimit-Reset` (server bat `standardHeaders: true`) de cho dung so giay con thieu, thay vi ngu cung 60s. Cac script bao ro nguyen nhan khi gap 429.
+**Sửa:** `server/run-all-tests.cjs` đọc header `RateLimit-Remaining` / `RateLimit-Reset` (server bật `standardHeaders: true`) để chờ đúng số giây còn thiếu, thay vì ngủ cứng 60s. Các script báo rõ nguyên nhân khi gặp 429.
 
-### 9.8 Chay nhanh hon: cach doc `RateLimit-Reset`
+### 9.8. Kỹ năng nhỏ nhưng ấn tượng: đọc `RateLimit-Reset`
 
-Ky nang nho cho PV: **`standardHeaders: true`** cua `express-rate-limit` giup server tu gui header:
+`standardHeaders: true` của `express-rate-limit` giúp server tự gửi header:
 
 ```
 RateLimit-Limit: 100
@@ -546,11 +597,11 @@ RateLimit-Remaining: 0
 RateLimit-Reset: 42
 ```
 
-Dung header nay de **tu dieu chinh** (vi du: client tu cham lai khi con it quota) thay vi hardcode.
+Dùng header này để **tự điều chỉnh** (ví dụ: client tự chậm lại khi còn ít quota) thay vì hardcode.
 
 ---
 
-## 10. Chu de 8 - Client: chong double-booking (chi la UX!)
+## 10. Chủ đề 8 — Client: chống double-booking (chỉ là UX!)
 
 `client/src/views/EventDetailView.vue`
 
@@ -558,119 +609,122 @@ Dung header nay de **tu dieu chinh** (vi du: client tu cham lai khi con it quota
 :disabled="ticket.availableQuantity <= 0 || submittingId === ticket.id"
 ```
 
-- `submittingId` (dong 21) - chi mot loai ve duoc gui mot luc, con lai disable
-- `normalizeQuantity` (dong 109) - chuan hoa khi blur: xoa trang -> ve 1; vuot ton kho -> kep ve `availableQuantity`
-- Comment o dong 81-82: "Chi tat loading neu day van la request moi nhat" - request bi huy van chay toi `finally` va khong duoc tat loading cua request dang bay
+- `submittingId` (dòng 21) — chỉ một loại vé được gửi một lúc, các loại khác bị disable.
+- `normalizeQuantity` (dòng 109) — chuẩn hoá khi blur: xoá trắng → về 1; vượt tồn kho → kẹp về `availableQuantity`.
+- Comment ở dòng 81–82: *"Chỉ tắt loading nếu đây vẫn là request mới nhất"* — request bị huỷ vẫn chạy tới `finally` và không được tắt loading của request đang bay.
 
-**Diem quan trong nhat:** frontend disable nut chi la **UX**. Ke tan cong bo qua UI va goi API truc tiep. **Day la ly do phai co du ca redlock + CAS + rate limit.** Neu interviewer hoi "ua co khoa nut roi co can khoa o backend khong?" - day la cau hoi de vang: tra loi "Co, va day la vi sao toi co 3 lop bao ve".
+**Điểm quan trọng nhất:** frontend disable nút chỉ là **UX**. Kẻ tấn công bỏ qua UI và gọi API trực tiếp. **Đây là lý do phải có đủ cả redlock + CAS + rate limit.**
+
+Nếu interviewer hỏi *"Ứng dụng đã khoá nút rồi thì cần khoá ở backend nữa không?"* — đây là câu hỏi dễ vang: trả lời *"Có, và đây là lý do tôi có 3 lớp bảo vệ."*
 
 ---
 
-## 11. Bang so lieu PHAI NHO (PV hay hoi "con so gi?")
+## 11. Bảng số liệu PHẢI NHỚ (PV hay hỏi "con số nào?")
 
-| So lieu | Nghia la | O dau |
+| Số liệu | Ý nghĩa | Ở đâu |
 |---------|---------|-------|
-| 111 ms vs 0,206 ms | `KEYS` vs `INCR` voi 50.000 key | muc 4.2 |
-| 63,09 giay | `GET /api/events` treo khi Redis chet voi cau hinh mac dinh | muc 4.4 |
-| 6/18/38 luot | 100 request dong thoi, cache lanh | muc 4.3 |
-| 38/98/130 luot | 500 request dong thoi, cache lanh | muc 4.3 |
-| ~46 byte/phan tu | RAM mot `Ticket` trong `Array.from` | muc 9.4 |
-| ~100 GB | RAM khi `quantity` = 2.147.483.647 | muc 9.4 |
-| 0,32 ms vs ~0,1 ms | doc DB theo PK vs doc cache Redis | muc 5.3 |
-| 191 x 4 = 764 < 767 byte | gioi han index utf8mb4 | muc 9.2 |
-| TTL lock 5000ms | do giu lock toi da | muc 3.2 |
-| 10 ve / 200 VU | load test: 10 don, zero oversell, zero 5xx | muc 3.4 |
-| 100 req/phut | `apiRateLimiter` | muc 5.4 |
-| 15 lan / 5 phut | `orderRateLimiter` (theo tai khoan) | muc 5.4 |
-| 5 lan that bai / phut | `authRateLimiter` | muc 5.4 |
-| TTL cache 60s | `READ_TTL_SECONDS` (`cache.ts:17`) | muc 4.2 |
-| TTL user state 30s | `USER_STATE_TTL_SECONDS` | muc 5.3 |
-| JWT 1 ngay | han token | muc 5.3 |
+| 111 ms vs 0,206 ms | `KEYS` vs `INCR` với 50.000 key | mục 4.2 |
+| 63,09 giây | `GET /api/events` treo khi Redis chết với cấu hình mặc định | mục 4.4 |
+| 6/18/38 lượt | 100 request đồng thời, cache lạnh | mục 4.3 |
+| 38/98/130 lượt | 500 request đồng thời, cache lạnh | mục 4.3 |
+| ~46 byte/phần tử | RAM cho một `Ticket` trong `Array.from` | mục 9.4 |
+| ~100 GB | RAM khi `quantity` = 2.147.483.647 | mục 9.4 |
+| 0,32 ms vs ~0,1 ms | đọc DB theo PK vs đọc cache Redis | mục 5.3 |
+| 191 × 4 = 764 < 767 byte | giới hạn index utf8mb4 | mục 9.2 |
+| TTL lock 5000 ms | độ giữ lock tối đa | mục 3.2 |
+| 10 vé / 200 VU | load test: 10 đơn, zero oversell, zero 5xx | mục 3.4 |
+| 100 req/phút | `apiRateLimiter` | mục 5.4 |
+| 15 lần / 5 phút | `orderRateLimiter` (theo tài khoản) | mục 5.4 |
+| 5 lần thất bại / phút | `authRateLimiter` | mục 5.4 |
+| TTL cache 60 s | `READ_TTL_SECONDS` (`cache.ts:17`) | mục 4.2 |
+| TTL user state 30 s | `USER_STATE_TTL_SECONDS` (`userState.ts:49`) | mục 5.3 |
+| JWT 1 ngày | hạn token | mục 5.3 |
 
 ---
 
-## 12. GAP cua project - BIET TRUOC, tra loi trung thuc
+## 12. Gap của project — BIẾT TRƯỚC, trả lời trung thực
 
-Interviewer **se** hoi ve cai con thieu. Neu biet, ban duoc cong diem; neu giu, ho se hoi tiep va ban hong tra loi duoc.
+Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được cộng điểm; nếu giấu, họ sẽ hỏi tiếp và bạn không trả lời được.
 
-| Gap | Muc do | Tra loi nhu the nao |
+| Gap | Mức độ | Trả lời như thế nào |
 |-----|--------|-------------------|
-| **Chua co thanh toan** | Trung binh | "Chua lam VNPay/MoMo. Do la ranh gioi cua project. Anh/chi se lam duoc o buoc nao?" - buoc: them bang trang thanh toan, webhook xac nhan, `updateMany` doi trang thai `PENDING -> CONFIRMED` co dieu kien (CAS, dung pattern job het han). **Ghi chu:** vi vay `CONFIRMED`/`CANCELLED` chua bao gio duoc set, nen **doanh thu trong admin/organizer stats luon = 0**. Noi thang dieu nay. |
-| **Chua co refresh token** | Thap | xem muc 5.7 |
-| **Chua co CI** | Trung binh | "Chay 7 bo test bang script (npm run test:all) va k6, chua co CI. Neu co thoi gian, toi se dua vao GitHub Actions: service MySQL + Redis, chay test, k6 smoke test." |
-| **Chua co Docker / HTTPS / helmet / structured logging** | Thap | "Chua lam. Day la danh sach vi du production-ready, toi nam trong roadmap." |
-| **Chua co email xac nhan / quen mat khau** | Thap | "Chua lam, se them luong OTP va bang tiep." |
-| **RBAC tinh, chua co bang `permissions`** | Thap | xem muc 5.5 - co ly do ro rang |
+| **Chưa có thanh toán** | Trung bình | *"Chưa làm VNPay/MoMo. Đó là ranh giới của project. Anh/chị sẽ làm được ở bước nào?"* — bước: thêm bảng trạng thái thanh toán, webhook xác nhận, `updateMany` đổi trạng thái `PENDING → CONFIRMED` có điều kiện (CAS, đúng pattern job hết hạn). **Ghi chú quan trọng:** vì vậy `CONFIRMED`/`CANCELLED` chưa bao giờ được set, nên **doanh thu trong admin/organizer stats luôn = 0**. Nói thẳng điều này. |
+| **Chưa có refresh token** | Thấp | xem mục 5.7 |
+| **Chưa có CI** | Trung bình | *"Chạy 7 bộ test bằng script (`npm run test:all`) và k6, chưa có CI. Nếu có thời gian, tôi sẽ đưa vào GitHub Actions: service MySQL + Redis, chạy test, k6 smoke test."* |
+| **Chưa có Docker / HTTPS / helmet / structured logging** | Thấp | *"Chưa làm. Đây là danh sách việc production-ready, nằm trong roadmap."* |
+| **Chưa có email xác nhận / quên mật khẩu** | Thấp | *"Chưa làm, sẽ thêm luồng OTP và bảng token tạm."* |
+| **RBAC tĩnh, chưa có bảng `permissions`** | Thấp | xem mục 5.5 — có lý do rõ ràng |
 
-**Cau hoi kiem tra ban co that khong:**
-> "Anh/chi noi project nay chay production chua?"
-> Tra loi: "Chua. Hien tai la project hoc tap va moi chay o moi truong dev voi MySQL/Redis local. Phan con thieu de len production da duoc nam trong roadmap: Docker, secret management, structured logging, refresh token, va tich hop thanh toan."
+**Câu hỏi kiểm tra bạn có thật không:**
 
----
-
-## 13. CAU HOI DAO NGUOC - HOI DUOC, NEN HOI
-
-- "Duy an nay cua anh/chi hay lam nhom?" -> **Hoi**: quy mo, phan nao ban lam, bao gio deadline
-- "May test chay theo kieu nao?" -> **Hoi**: co CI khong, deploy theo nao, co canh bao gi khong
-- "Co bao gio can rollback khong?" -> **Hoi**: quy trinh release
-- "Team bao nhiu nguoi, ai lam phan nao?" -> **Hoi** de biet moi truong hop xu ly
-- "He thong chay tren may so bao nguoi dong thoi?" -> **Hoi** de biet target scale
+> *"Anh/chị nói project này chạy production chưa?"*
+>
+> Trả lời: *"Chưa. Hiện tại là project học tập và mới chạy ở môi trường dev với MySQL/Redis local. Phần còn thiếu để lên production đã được nằm trong roadmap: Docker, secret management, structured logging, refresh token, và tích hợp thanh toán."*
 
 ---
 
-## 14. CHECKLIST TU KIEM TRA TRUOC PV
+## 13. Câu hỏi đảo ngược — hỏi được thì nên hỏi
 
-### 14.1 Code phai doc thuoc (khong tim trong file khi PV)
-
-- [ ] `server/src/controllers/order.controller.ts` - 183 dong, doc het
-- [ ] `server/src/utils/cache.ts` - doc `cacheGetOrLoad` va `parseAllowedOrigins`... (doc het file)
-- [ ] `server/src/middlewares/auth.middleware.ts` - doc het
-- [ ] `server/src/jobs/expireOrders.job.ts` - doc het
-- [ ] `server/src/config/redis.ts` + `config/auth.ts`
-- [ ] `server/src/utils/errors.ts` + `utils/validation.ts`
-- [ ] `server/prisma/schema.prisma` - 139 dong
-- [ ] `server/src/controllers/admin.controller.ts` - phan `FOR UPDATE`
-- [ ] `client/src/views/EventDetailView.vue` - phan double-booking
-
-### 14.2 Phai chay duoc khong can tim
-
-- [ ] `npm run seed` - tao admin
-- [ ] `npm run test:all` - 7 bo test
-- [ ] `npm run test:security` - 17 case bao mat
-- [ ] `npx k6 run load-test-concurrent.js` - 200 VU
-- [ ] `node oversell-repro.cjs` - mo phong mat lock
-
-### 14.3 Cau hoi bat buoc tu tra loi duoc (khong do)
-
-1. Bai toan chinh la gi? -> **Tranh chap ton kho**
-2. Vì sao khong dung read-then-write? -> **Khoang thoi gian giua doc va ghi**
-3. Lock va CAS khac nhau the nao? -> **Lock = toi uu, CAS = tinh dung dan**
-4. Vì sao job khong can lock? -> **No la CAS, khong phai read-then-write**
-5. Stampede la gi, sua the nao? -> **Single-flight voi SET NX**
-6. Vì sao 2 Redis client? -> **2 yeu cau trai nhau**
-7. Vì sao khong tin role trong JWT? -> **JWT song 1 ngay**
-8. Rate limit theo IP hay tai khoan? -> **Tuy use case** (dat ve: tai khoan)
-9. Vi sao 3 lop bao ve? -> **Defense in depth**
-10. Lam gi khi Redis chet? -> **Fail-open, doc DB**
-
-### 14.4 Loi khi bi hoi "anh/chi lam gi them duoc"
-
-Neu cau hoi nam ngoai kien thuc cua project (vi du "implement bang Kafka"), **noi ro la ban chua lam** roi **noi ban se lam theo huong nao**. Do la cau tra loi chuan nghiep hon la "em chua nghi toi".
+- *"Dự án này của anh/chị hay làm nhóm?"* → **Hỏi**: quy mô, phần nào bạn làm, deadline
+- *"Máy test chạy theo kiểu nào?"* → **Hỏi**: có CI không, deploy thế nào, có cảnh báo gì không
+- *"Có bao giờ cần rollback không?"* → **Hỏi**: quy trình release
+- *"Team bao nhiêu người, ai làm phần nào?"* → **Hỏi** để biết môi trường xử lý
+- *"Hệ thống chạy trên máy số bao nhiêu người đồng thời?"* → **Hỏi** để biết target scale
 
 ---
 
-## 15. De xuat luyen tap
+## 14. Checklist tự kiểm tra trước PV
 
-| Cach | Thoi gian | Dung de |
+### 14.1. Code phải đọc thuộc (không tìm trong file lúc PV)
+
+- [ ] `server/src/controllers/order.controller.ts` — 183 dòng, đọc hết
+- [ ] `server/src/utils/cache.ts` — đọc hết, đặc biệt `cacheGetOrLoad` và `parseAllowedOrigins`
+- [ ] `server/src/middlewares/auth.middleware.ts` — đọc hết
+- [ ] `server/src/jobs/expireOrders.job.ts` — đọc hết
+- [ ] `server/src/config/redis.ts` và `config/auth.ts`
+- [ ] `server/src/utils/errors.ts` và `utils/validation.ts`
+- [ ] `server/prisma/schema.prisma` — 139 dòng
+- [ ] `server/src/controllers/admin.controller.ts` — phần `FOR UPDATE`
+- [ ] `client/src/views/EventDetailView.vue` — phần double-booking
+
+### 14.2. Phải chạy được không cần tìm
+
+- [ ] `npm run seed` — tạo admin
+- [ ] `npm run test:all` — 7 bộ test
+- [ ] `npm run test:security` — 17 case bảo mật
+- [ ] `npx k6 run load-test-concurrent.js` — 200 VU
+- [ ] `node oversell-repro.cjs` — mô phỏng mất lock
+
+### 14.3. Câu hỏi bắt buộc tự trả lời được (không hỏi lại)
+
+1. Bài toán chính là gì? → **Tranh chấp tồn kho**
+2. Vì sao không dùng read-then-write? → **Khoảng thời gian giữa đọc và ghi**
+3. Lock và CAS khác nhau thế nào? → **Lock = tối ưu, CAS = tính đúng đắn**
+4. Vì sao job không cần lock? → **Nó là CAS, không phải read-then-write**
+5. Stampede là gì, sửa thế nào? → **Single-flight với SET NX**
+6. Vì sao có 2 Redis client? → **2 yêu cầu trái ngược**
+7. Vì sao không tin role trong JWT? → **JWT sống 1 ngày**
+8. Rate limit theo IP hay tài khoản? → **Tùy use case** (đặt vé: theo tài khoản)
+9. Vì sao có 3 lớp bảo vệ? → **Defense in depth**
+10. Làm gì khi Redis chết? → **Fail-open, đọc DB**
+
+### 14.4. Lỗi thường gặp khi bị hỏi "anh/chị làm gì thêm được"
+
+Nếu câu hỏi nằm ngoài kiến thức của project (ví dụ "implement bằng Kafka"), **nói rõ là bạn chưa làm** rồi **nói bạn sẽ làm theo hướng nào**. Đó là câu trả lời chuẩn nghiệp hơn là "em chưa nghĩ tới".
+
+---
+
+## 15. Đề xuất luyện tập
+
+| Cách | Thời gian | Dùng để |
 |------|-----------|---------|
-| **Kể lai 3 bug** (muc 9.2, 9.3, 9.5) theo **STAR**: Situation - Task - Action - Result | 10 phut | Thay vi "em dung Zod va Prisma", kể bang 3 cau chuyen co trieu chung, so lieu va ket qua |
-| **Ve lai 3 lop bao ve** tren giay | 5 phut | Neu ve sai, interviewer se biet minh hieu |
-| **Trong luong dien dat `updateMany` co dieu kien** voi `SELECT ... FOR UPDATE` | 5 phut | Phan biet thuong gap nhat |
-| **Mo code, tim bang mat** (VD: "tim cho em noi dang giu lock sau khi commit") | 5 phut | Chung minh thuoc codebase |
-| **Tu viet lai `parseAllowedOrigins` va `cacheGetOrLoad`** khong xem code | 15 phut | Kiem tra hieu bai |
-| **Dien giai `mapPrismaError`** | 5 phut | Phan loai loi - de bi hoi |
+| **Kể lại 3 bug** (mục 9.2, 9.3, 9.5) theo **STAR**: Situation → Task → Action → Result | 10 phút | Thay vì "em dùng Zod và Prisma", kể bằng 3 câu chuyện có triệu chứng, số liệu và kết quả |
+| **Vẽ lại 3 lớp bảo vệ** trên giấy | 5 phút | Nếu vẽ sai, interviewer sẽ biết mình hiểu |
+| **Phân biệt `updateMany` có điều kiện** với `SELECT ... FOR UPDATE` | 5 phút | Phân biệt thường gặp nhất |
+| **Mở code tìm bằng mắt** (VD: "tìm chỗ đang giữ lock sau khi commit") | 5 phút | Chứng minh thuộc codebase |
+| **Tự viết lại `parseAllowedOrigins` và `cacheGetOrLoad`** không xem code | 15 phút | Kiểm tra hiểu bài |
+| **Diễn giải `mapPrismaError`** | 5 phút | Phân loại lỗi — dễ bị hỏi |
 
 ---
 
-*Tai lieu hoc tap - cap nhat 21/10/2026. Doc kem `PROJECT_NOTES.md` (giai thich chi tiet tung co che, kem so dong) va `README.md`.*
-
+*Tài liệu học tập — cập nhật 21/10/2026. Đọc kèm `PROJECT_NOTES.md` (giải thích chi tiết từng cơ chế, kèm số dòng) và `README.md`.*

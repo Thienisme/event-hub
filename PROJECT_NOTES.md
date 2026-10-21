@@ -3,6 +3,9 @@
 > Tài liệu này viết để **học**: không chỉ nói "đã làm gì", mà giải thích
 > **vấn đề là gì → tại sao cách cũ sai → cách đúng hoạt động ra sao → đánh đổi**.
 > Mọi số dòng trích dẫn đều trỏ tới source thật tại thời điểm viết.
+>
+> Đi kèm: **`PHONG-VAN.md`** — bản tóm tắt để ôn tập và luyện trả lời phỏng vấn
+> (thứ tự học, câu hỏi bẫy, số liệu phải nhớ, gap của project, checklist trước PV).
 
 ---
 
