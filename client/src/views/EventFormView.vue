@@ -180,6 +180,13 @@ const handleSubmit = async () => {
     return;
   }
 
+  // Thời gian kết thúc phải SAU thời gian bắt đầu. Server đã chặn (400), nhưng
+  // báo lỗi ngay ở form thì nhanh hơn là gửi đi rồi mới nhận lỗi từ server.
+  if (new Date(endTime.value).getTime() <= new Date(startTime.value).getTime()) {
+    errorMessage.value = 'Thời gian kết thúc phải sau thời gian bắt đầu!';
+    return;
+  }
+
   // Tổng tiền của một đơn = giá × số lượng, phải vừa biên DECIMAL(12,2) của
   // `orders.totalAmount`. Kiểm tra ngay ở form để người dùng biết trước khi
   // gửi, thay vì để tầng DB từ chối lúc đặt vé.
@@ -340,6 +347,7 @@ onUnmounted(() => {
               v-model="endTime"
               type="datetime-local"
               required
+              :min="startTime || undefined"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             />
           </div>

@@ -2,17 +2,22 @@ import { z } from 'zod';
 
 /**
  * Schema validation cho đăng ký người dùng.
- * 
+ *
  * Bảo vệ chống:
  * - Input injection (SQL, NoSQL, command injection)
  * - Đăng ký role ADMIN bất hợp pháp
  * - Mật khẩu yếu
+ *
+ * KHÔNG có field `role`: server luôn gán `CUSTOMER` cho tài khoản mới. Trước đây
+ * schema có `role: z.enum(['CUSTOMER','ORGANIZER']).optional()` và controller bỏ
+ * qua nó — không phải lỗ hổng (role do server quyết định), nhưng nó khiến người
+ * đọc code tưởng rằng client có thể tự chọn vai trò, và API docs ghi sai. Bỏ hẳn
+ * field khỏi schema để điều đó không còn khả năng.
  */
 export const registerSchema = z.object({
   email: z.string().email('Email không hợp lệ!'),
   password: z.string().min(8, 'Mật khẩu phải có ít nhất 8 ký tự!'),
   fullName: z.string().min(2, 'Họ và tên phải có ít nhất 2 ký tự!'),
-  role: z.enum(['CUSTOMER', 'ORGANIZER']).optional(),
 });
 
 /**
@@ -116,8 +121,7 @@ export const createEventSchema = z.object({
     .optional()
     .nullable(),
   startTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian bắt đầu không hợp lệ!'),
-  endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),
-  ticketTypes: z
+  endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),  ticketTypes: z
     .array(
       z.object({
         id: z.string().uuid('ID loại vé không hợp lệ!').optional(),
@@ -155,7 +159,26 @@ export const createEventSchema = z.object({
         }
       });
     }),
-});
+})
+  // Sự kiện phải KẾT THÚC sau khi bắt đầu. Trước đây schema chỉ kiểm tra ngày có
+  // parse được, nên tạo được sự kiện "kết thúc trước khi bắt đầu" — dữ liệu vô
+  // nghĩa, và mọi màn hình hiển thị thời gian đều lộn xộn.
+  //
+  // Đây là ràng buộc QUAN HỆ giữa hai field, nên phải dùng `superRefine` ở cấp
+  // object chứ không phải `refine` riêng cho từng field (mỗi field không biết
+  // giá trị của field kia).
+  .superRefine((data, ctx) => {
+    const start = Date.parse(data.startTime);
+    const end = Date.parse(data.endTime);
+
+    if (!isNaN(start) && !isNaN(end) && end <= start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endTime'],
+        message: 'Thời gian kết thúc phải sau thời gian bắt đầu!',
+      });
+    }
+  });
 
 /**
  * Schema validation cho đặt hàng.

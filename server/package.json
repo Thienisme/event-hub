@@ -29,7 +29,8 @@
     "test:race": "node test-admin-race.cjs",
     "test:limits": "node test-event-limits.cjs",
     "test:errors": "node test-error-mapping.cjs",
-    "test:order": "node test-order-amount.cjs"
+    "test:order": "node test-order-amount.cjs",
+    "test:validation": "node test-validation.cjs"
   },
   "compilerOptions": {
     "target": "ES2022",

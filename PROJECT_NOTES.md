@@ -483,7 +483,9 @@ const finalRole = SELF_REGISTER_ROLE; // bỏ qua role client gửi lên
 
 Nếu tin tưởng `req.body.role`, kẻ tấn công chỉ cần gửi `{ role: 'ADMIN' }` là thành admin. Role ORGANIZER/ADMIN chỉ thay đổi qua kênh nội bộ.
 
-Lưu ý: `registerSchema` (`validation.ts:15`) có khai báo `role: z.enum(['CUSTOMER','ORGANIZER']).optional()` nhưng controller **cố tình bỏ qua** giá trị đó — đây là lớp bảo vệ thứ hai. (Bản thân schema cũng đã chặn `ADMIN`.)
+`registerSchema` (`validation.ts`) **không còn khai báo field `role`**. Trước đây schema có `role: z.enum(['CUSTOMER','ORGANIZER']).optional()` và controller cố tình bỏ qua giá trị đó — không phải lỗ hổng (role luôn do server quyết định), nhưng nó khiến người đọc tưởng client có thể tự chọn vai trò. Bỏ hẳn field khỏi schema: `role` trở thành thông tin không tồn tại trên API, và Zod strip field lạ nên payload có `role` vẫn được chấp nhận nhưng bị bỏ qua.
+
+Kiểm chứng: `npm run test:validation` — đăng ký kèm `role: "ORGANIZER"` hoặc `role: "ADMIN"` đều cho tài khoản `CUSTOMER` trong DB.
 
 ### 6.4 Mật khẩu
 
@@ -532,6 +534,29 @@ ba tầng (UI → validation → DB) cùng một con số.
 Một request có `quantity` không trần (chỉ cần `availableQuantity` đủ lớn) là đủ để
 làm sập cả server. Đây là lỗi **DoS từ người dùng đã đăng nhập**, và nó chỉ lộ ra
 khi đọc code, không lộ ra khi chạy test bình thường.
+
+**Ràng buộc QUAN HỆ giữa hai field dùng `superRefine` ở cấp object.**
+`createEventSchema` trước đây chỉ kiểm tra `startTime`/`endTime` là ngày parse
+được, nên tạo được sự kiện "kết thúc trước khi bắt đầu" — dữ liệu vô nghĩa, và
+mọi màn hình hiển thị thời gian đều lộn xộn. Không thể dùng `refine` riêng cho
+từng field vì mỗi field không biết giá trị của field kia:
+
+```ts
+export const createEventSchema = z.object({
+  // ...
+  startTime: z.string().refine((v) => !isNaN(Date.parse(v)), 'Thời gian bắt đầu không hợp lệ!'),
+  endTime: z.string().refine((v) => !isNaN(Date.parse(v)), 'Thời gian kết thúc không hợp lệ!'),
+}).superRefine((data, ctx) => {
+  if (Date.parse(data.endTime) <= Date.parse(data.startTime)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endTime'],
+      message: 'Thời gian kết thúc phải sau thời gian bắt đầu!' });
+  }
+});
+```
+
+Đường `PUT /events/:id` dùng chung schema nên được lợi cùng ràng buộc này. Form
+client (`EventFormView.vue`) cũng kiểm tra lại để báo lỗi ngay tại chỗ thay vì
+gửi đi rồi mới nhận 400 từ server. Kiểm chứng: `npm run test:validation`.
 
 ### 6.6 Rate limiting
 
@@ -812,6 +837,7 @@ Chạy `npm run test:limits`, `npm run test:errors`, `npm run test:order`.
 | `test-event-limits.cjs` | mô tả 3000 ký tự → **201** (trước là 500); tiêu đề/banner/tên vé/giá/số lượng vượt giới hạn → **400 kèm message tiếng Việt**; **giá × số lượng vượt biên `totalAmount` → 400 ngay lúc tạo sự kiện**; tổng tiền vừa chạm biên → 201 **và đặt vé được**; đặt 101 vé/đơn → 400 |
 | `test-error-mapping.cjs` | `mapPrismaError`: P2000→400, P2002→409, P2003→400, P2020→400, lỗi MySQL thô→400, lỗi lạ→`null` (rơi về 500) |
 | `test-order-amount.cjs` | 50 vé x 2.000.000,50 = 100.000.025 lưu và đọc lại chính xác sau khi đổi `totalAmount` sang `DECIMAL(12,2)` |
+| `test-validation.cjs` | `endTime` trước / bằng `startTime` → **400** (cả POST và PUT); sự kiện hợp lệ → 201/200; đăng ký kèm `role: "ORGANIZER"` hoặc `role: "ADMIN"` → tài khoản vẫn là `CUSTOMER` trong DB |
 
 Hai test này dùng **tài khoản riêng** (tạo rồi xoá) thay vì `admin@test.com` — xem
 mục 6.6: rate limiter đặt vé khoá theo tài khoản, dùng chung tài khoản với k6 sẽ
@@ -946,6 +972,7 @@ npm run test:race                         # race hạ quyền admin
 npm run test:limits                       # giới hạn dữ liệu (201/400 thay vì 500)
 npm run test:errors                       # mapPrismaError
 npm run test:order                        # totalAmount DECIMAL(12,2)
+npm run test:validation                   # endTime > startTime, role khi đăng ký
 npx k6 run load-test.js                    # 100 VUs đường ghi
 npx k6 run load-test-concurrent.js         # 200 VUs, 10 vé
 npx k6 run load-test-read.js               # cache hit/miss (nhớ xoá cache trước)
@@ -1135,8 +1162,8 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 5 | Frontend bypass axios ở 3 chỗ | ✅ Đã sửa | Gom về `apiClient`; mục 15.4 |
 | 6 | Prisma log query mọi môi trường | ✅ Đã sửa | Chỉ log `query/info` ngoài production; mục 15.4 |
 | 7 | Không có refresh token (JWT 1 ngày, hết là đăng nhập lại) | Thấp | Chấp nhận được cho demo |
-| 8 | `registerSchema` cho phép gửi `role: ORGANIZER` rồi controller bỏ qua | Thấp | Không phải lỗ hổng, nhưng gây hiểu nhầm; nên bỏ field khỏi schema |
-| 9 | Không validate `endTime > startTime` | Thấp | `createEventSchema` chỉ kiểm tra parse được ngày |
+| 8 | `registerSchema` cho phép gửi `role: ORGANIZER` rồi controller bỏ qua | ✅ Đã sửa | Bỏ hẳn field `role` khỏi schema — `role` không còn tồn tại trên API đăng ký; mục 6.3 |
+| 9 | Không validate `endTime > startTime` | ✅ Đã sửa | `superRefine` ở cấp object của `createEventSchema` (áp cho cả POST và PUT) + check ở form client; mục 6.5 |
 | 10 | Không có test tự động (unit/integration), chỉ có script thủ công | Trung bình | `test-jwt-security.cjs` + k6 là script rời, không chạy trong CI |
 | 11 | Tài khoản bị khoá vẫn giữ token cũ | ✅ Đã sửa | `authenticate` hỏi DB mỗi request (cache 30s + invalidate tức thì); token hết hạn 1 ngày nhưng quyền bị thu hồi ngay — mục 6.7 |
 | 12 | Admin tự hạ quyền / khoá chính mình | ✅ Đã sửa | Chặn ở `admin.controller.ts` + audit log |
@@ -1192,4 +1219,4 @@ vẫn khoá theo IP vì nó bảo vệ trước cả khi biết client là ai.
 
 ---
 
-*Tài liệu học tập — cập nhật 20/10/2026. Khi code thay đổi, hãy cập nhật lại số dòng và số liệu tương ứng.*
+*Tài liệu học tập — cập nhật 21/10/2026. Khi code thay đổi, hãy cập nhật lại số dòng và số liệu tương ứng.*
