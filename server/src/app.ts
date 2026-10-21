@@ -16,6 +16,7 @@ import adminRoutes from './routes/admin.routes';
 import organizerRoutes from './routes/organizer.routes';
 import { startExpireOrdersJob } from './jobs/expireOrders.job';
 import { logUnexpectedError } from './utils/errors';
+import { parseAllowedOrigins } from './utils/cors';
 import { assertAuthConfig } from './config/auth';
 import { apiRateLimiter } from './middlewares/rateLimit.middleware';
 
@@ -26,16 +27,11 @@ const PORT = process.env.PORT || 5000;
 // - Không có Origin (curl, k6, server-to-server) -> cho qua.
 // - Có Origin nhưng không nằm trong whitelist -> không gắn header CORS;
 //   trình duyệt sẽ tự chặn. Không ném lỗi để tránh biến thành 500 gây nhiễu log.
-const allowedOrigins = (
-  process.env.CORS_ORIGINS ??
-  'http://localhost:5173,http://127.0.0.1:5173',
-  'http://localhost:5174,http://127.0.0.1:5174',
-  'http://localhost:5176,http://127.0.0.1:5176',
-  'http://localhost:5175,http://127.0.0.1:5175'
-)
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+//
+// Logic whitelist nằm ở `utils/cors.ts` để test được trực tiếp — xem cảnh báo
+// về toán tử comma trong file đó (bug đã xảy ra: mọi origin ngoài 5175 đều bị
+// chặn, kể cả origin hợp lệ khai trong CORS_ORIGINS).
+const allowedOrigins = parseAllowedOrigins(process.env.CORS_ORIGINS);
 
 app.use(
   cors({
@@ -85,6 +81,9 @@ assertAuthConfig();
 
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  // In ra danh sách origin được phép: khi client báo lỗi CORS, đây là thứ đầu
+  // tiên cần đối chiếu (client chạy cổng nào, cổng đó có trong danh sách không).
+  console.log(`🌐 CORS allowed origins: ${allowedOrigins.join(', ')}`);
   // Node không có date_default_timezone_set như PHP -> múi giờ server do biến
   // môi trường TZ quyết định (xem server/.env.example).
   console.log(`🕒 Server timezone: ${process.env.TZ || '(theo múi giờ của OS)'}`);

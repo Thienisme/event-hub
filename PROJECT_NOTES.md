@@ -973,6 +973,7 @@ npm run test:limits                       # giới hạn dữ liệu (201/400 th
 npm run test:errors                       # mapPrismaError
 npm run test:order                        # totalAmount DECIMAL(12,2)
 npm run test:validation                   # endTime > startTime, role khi đăng ký
+npm run test:cors                        # whitelist origin (5173-5176, preflight, env override)
 npx k6 run load-test.js                    # 100 VUs đường ghi
 npx k6 run load-test-concurrent.js         # 200 VUs, 10 vé
 npx k6 run load-test-read.js               # cache hit/miss (nhớ xoá cache trước)
@@ -993,7 +994,7 @@ REDIS_HOST="127.0.0.1"
 REDIS_PORT="6379"
 ORDER_HOLD_MINUTES=10                              # giữ chỗ bao nhiêu phút
 ORDER_SWEEP_INTERVAL_MS=60000                      # job quét mỗi bao lâu
-CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"  # origin frontend được phép
+CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175,http://localhost:5176,http://127.0.0.1:5176"  # origin frontend được phép
 NODE_ENV=development                               # production -> Prisma chỉ log warn/error
 ```
 
@@ -1106,7 +1107,31 @@ Hệ quả: **không có endpoint thanh toán/xác nhận**, nên mọi đơn r�
   - message lỗi lấy từ `error.response.data.message`.
   Client giờ **không còn lời gọi `fetch` trần** nào.
 - **Prisma chỉ log query ngoài production**. `utils/prisma.ts` đọc `NODE_ENV`: production chỉ `['warn','error']`, ngược lại `['query','info','warn','error']`. Tránh ồn và tránh lộ dữ liệu truy vấn vào log.
-- **CORS whitelist**. `app.ts` thay `cors()` (mọi origin) bằng whitelist đọc từ `CORS_ORIGINS` (mặc định `http://localhost:5173,http://127.0.0.1:5173`). Request không có `Origin` (curl, k6, server-to-server) vẫn qua; origin lạ bị bỏ header CORS để trình duyệt chặn (không ném lỗi, tránh 500 gây nhiễu log). Đã bổ sung biến vào `.env.example`.
+- **CORS whitelist**. `app.ts` thay `cors()` (mọi origin) bằng whitelist đọc từ `CORS_ORIGINS` (mặc định: `localhost` và `127.0.0.1` ở các cổng 5173-5176). Request không có `Origin` (curl, k6, server-to-server) vẫn qua; origin lạ bị bỏ header CORS để trình duyệt chặn (không ném lỗi, tránh 500 gây nhiễu log). Đã bổ sung biến vào `.env.example`.
+
+  Logic whitelist nằm ở `utils/cors.ts` (`parseAllowedOrigins`) để **test được trực tiếp**, và server in ra danh sách origin được phép lúc khởi động:
+
+  ```
+  🌐 CORS allowed origins: http://localhost:5173, http://127.0.0.1:5173, ...
+  ```
+
+  ★ **Bug đã xảy ra — toán tử comma.** Bản gốc viết:
+
+  ```ts
+  const allowedOrigins = (
+    process.env.CORS_ORIGINS ?? 'http://localhost:5173,...',
+    'http://localhost:5174,...',
+    'http://localhost:5176,...',
+    'http://localhost:5175,...'
+  ).split(',')
+  ```
+
+  Dấu phẩy trong JavaScript là **TOÁN TỬ COMMA** (ưu tiên thấp nhất), không phải phần tử mảng. Biểu thức trên được parse thành `(a ?? 'b'), 'c', 'd'` nên **chỉ trả về phần tử cuối cùng** — `CORS_ORIGINS` trong `.env` bị bỏ qua hoàn toàn, và thực tế chỉ `http://localhost:5175` + `http://127.0.0.1:5175` được phép. Client chạy ở 5173/5174/5176 báo lỗi CORS dù người dùng đã khai báo cổng.
+
+  Bài học: `??` ràng hơn `||` nhưng **không cứu được toán tử comma** — toán tử comma có ưu tiên thấp hơn mọi toán tử khác, nên nó nuốt toàn bộ biểu thức bên trái. Muốn nhiều giá trị mặc định thì dùng `.join(',')` trong MỘT chuỗi, hoặc mảng thật.
+
+  Bug này lọt qua **toàn bộ** bộ test cũ vì các script test gọi API bằng `fetch` của Node — Node **không** tự gửi header `Origin`, nên nhánh "không có Origin → cho qua" luôn đúng và whitelist chưa bao giờ được kiểm tra. `test-cors.cjs` sinh header `Origin` thật và kiểm tra `Access-Control-Allow-Origin` trả về cho từng cổng, đồng thời dựng thêm một instance với `CORS_ORIGINS` riêng để chứng minh biến môi trường thực sự được dùng.
+
 
 ### 15.5 Quản trị người dùng & RBAC — bảo vệ "hệ thống có người quản trị"
 
@@ -1176,6 +1201,7 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 19 | Sự kiện tạo được nhưng không ai đặt vé được | ✅ Đã sửa | Kiểm tra tích `price × quantity` so với biên `DECIMAL(12,2)` — mục 3, 6.5 |
 | 20 | Một request có thể làm sập server (OOM) | ✅ Đã sửa | `LIMITS.MAX_ORDER_QUANTITY = 100` — mục 6.5 |
 | 21 | Người dùng chung IP bị chặn oan khi đặt vé | ✅ Đã sửa | `orderRateLimiter` khoá theo `userId` — mục 6.6 |
+| 22 | CORS chặn origin hợp lệ (client chạy cổng 5174/5176 bị lỗi CORS) | ✅ Đã sửa | Lỗi toán tử comma làm `CORS_ORIGINS` bị bỏ qua, chỉ còn 5175 được phép — tách `utils/cors.ts`, thêm `test-cors.cjs` — mục 15.4 |
 
 ### Câu hỏi phỏng vấn bổ sung
 
