@@ -157,6 +157,26 @@ Giới hạn ở tầng validation (`utils/validation.ts`, hằng `LIMITS`) và 
 phải cùng thang với `ticket_types.price`, nếu không một đơn mua vé giá lớn sẽ không
 lưu được vào bảng `orders`.
 
+### Ràng buộc của TÍCH, không chỉ của từng yếu tố
+
+`price` và `totalQuantity` được giới hạn riêng, nhưng `orders.totalAmount` lưu
+`price × quantity` — nên **tích** của chúng cũng phải vừa biên `DECIMAL(12,2)`
+(9.999.999.999,99). Thiếu ràng buộc này thì:
+
+```
+tạo sự kiện: giá 9.999.999.999,99 × 2 vé  ->  201 (thành công, lên kệ)
+đặt vé:      tổng = 19.999.999.999,98      ->  400 (vượt biên cột)
+```
+
+Sự kiện lên kệ thành công nhưng **không ai mua được** — lỗi chỉ lộ ra ở bước
+thanh toán, xa hơn nhiều so với lúc tạo sự kiện. Vì vậy `createEventSchema` có
+`superRefine` kiểm tra tích, và `order.controller.ts` kiểm tra lại lúc đặt vé (vì
+giá vé có thể được sửa sau khi sự kiện đã tạo).
+
+Khi so sánh ở biên, phải **làm tròn về 2 chữ số thập phân trước**: `3333333333.33 × 3`
+trong JS ra `9999999999.9899997711181640625`, so thẳng với `9999999999.99` sẽ chặn
+oan một đơn hợp lệ.
+
 > Áp dụng migration này bằng `npx prisma migrate deploy`, **không** dùng
 > `prisma migrate dev`: dự án có CHECK constraint viết tay mà Prisma không
 > introspect, `migrate dev` có thể đòi reset database.
@@ -489,6 +509,8 @@ là nguồn sự thật duy nhất, và nó phải khớp với bảng ở mục
 export const LIMITS = {
   TITLE: 255, DESCRIPTION: 5000, LOCATION: 255, BANNER_URL: 500,
   TICKET_NAME: 100, PRICE: 9_999_999_999.99, QUANTITY: 2_147_483_647,
+  MAX_ORDER_AMOUNT: 9_999_999_999.99,   // biên DECIMAL(12,2) của totalAmount
+  MAX_ORDER_QUANTITY: 100,              // số vé tối đa trong MỘT đơn
 } as const;
 ```
 
@@ -496,6 +518,20 @@ Vì sao phải có: nếu không, dữ liệu quá dài đi thẳng tới MySQL 
 quay về là 500 chung chung thay vì 400 nói rõ "trường nào vượt, vượt bao nhiêu".
 Cùng giới hạn đó được áp lần nữa ở form (`maxlength`) để chặn **ngay lúc gõ** —
 ba tầng (UI → validation → DB) cùng một con số.
+
+**`MAX_ORDER_QUANTITY` không chỉ là giới hạn nghiệp vụ, nó bảo vệ server.**
+`order.controller.ts` tạo N bản ghi `Ticket` trong RAM bằng
+`Array.from({ length: quantity })` — đo thực tế ~46 byte/phần tử:
+
+| quantity | RAM cần |
+|----------|---------|
+| 1.000.000 | ~46 MB |
+| 5.000.000 | ~233 MB |
+| 2.147.483.647 | ~100 GB → sập tiến trình Node |
+
+Một request có `quantity` không trần (chỉ cần `availableQuantity` đủ lớn) là đủ để
+làm sập cả server. Đây là lỗi **DoS từ người dùng đã đăng nhập**, và nó chỉ lộ ra
+khi đọc code, không lộ ra khi chạy test bình thường.
 
 ### 6.6 Rate limiting
 
@@ -509,6 +545,27 @@ ba tầng (UI → validation → DB) cùng một con số.
 15 lần/5 phút vì người thật thường đặt 1–3 lần/sự kiện; đủ cho nhu cầu mua nhiều vé nhưng chặn bot.
 
 > **Đã bổ sung:** `authRateLimiter` (`rateLimit.middleware.ts`) áp dụng cho `/auth/login` và `/auth/register`: **5 lần thất bại thì chặn 1 phút** (`windowMs: 60s`, `max: 5`, `skipSuccessfulRequests: true`). `skipSuccessfulRequests` khiến chỉ request lỗi (4xx/5xx) mới bị đếm — đăng nhập thành công không trừ hạn, nên user gõ sai 4 lần rồi nhập đúng vẫn dùng bình thường. Lưu ý: limiter key mặc định là `req.ip`, nếu đặt sau reverse proxy (nginx/LB) phải bật `app.set('trust proxy', 1)` để không gộp mọi user vào một IP.
+
+#### Rate limiter đặt vé phải khoá theo TÀI KHOẢN, không theo IP
+
+`orderRateLimiter` chạy **sau** `authenticate` nên `req.user` luôn có sẵn — nên
+`keyGenerator` dùng `req.user?.userId ?? req.ip`.
+
+Lý do không khoá theo IP:
+
+1. **Nhiều người dùng thật dùng chung một IP** (văn phòng, trường đại học, WiFi nhà,
+   mạng di động). Họ bị chặn oan chỉ vì người khác trong cùng mạng đã đặt nhiều vé.
+2. **Bot đổi IP vẫn bị chặn** vì hạn mức gắn với tài khoản — khoá theo IP thì bot
+   chỉ cần đổi IP là thoát.
+
+Đây cũng là lý do các test phải dùng **tài khoản riêng**: nếu dùng chung
+`admin@test.com` với k6 thì hạn mức 15 lần/5 phút bị dùng hết và test fail với
+429 — thất bại do hạ tầng chứ không phải do logic cần kiểm. Sau khi khoá theo tài
+khoản, chạy k6 xong test đặt vé vẫn xanh ngay.
+
+Lưu ý: `apiRateLimiter` vẫn phải khoá theo IP vì nó áp dụng cho **mọi** route
+`/api/` trước khi xác thực — đó chính là lớp bảo vệ chống DDoS, phải hoạt động
+trước cả khi biết client là ai.
 
 ### 6.7 RBAC — phân quyền theo role
 
@@ -752,9 +809,18 @@ Chạy `npm run test:limits`, `npm run test:errors`, `npm run test:order`.
 
 | File | Kiểm chứng |
 |------|-----------|
-| `test-event-limits.cjs` | mô tả 3000 ký tự → **201** (trước là 500); tiêu đề/banner/tên vé/giá/số lượng vượt giới hạn → **400 kèm message tiếng Việt**; kiểm cả đường `PUT` (sửa sự kiện) |
+| `test-event-limits.cjs` | mô tả 3000 ký tự → **201** (trước là 500); tiêu đề/banner/tên vé/giá/số lượng vượt giới hạn → **400 kèm message tiếng Việt**; **giá × số lượng vượt biên `totalAmount` → 400 ngay lúc tạo sự kiện**; tổng tiền vừa chạm biên → 201 **và đặt vé được**; đặt 101 vé/đơn → 400 |
 | `test-error-mapping.cjs` | `mapPrismaError`: P2000→400, P2002→409, P2003→400, P2020→400, lỗi MySQL thô→400, lỗi lạ→`null` (rơi về 500) |
-| `test-order-amount.cjs` | tổng tiền đơn 100.000.000 lưu và đọc lại chính xác sau khi đổi `totalAmount` sang `DECIMAL(12,2)` |
+| `test-order-amount.cjs` | 50 vé x 2.000.000,50 = 100.000.025 lưu và đọc lại chính xác sau khi đổi `totalAmount` sang `DECIMAL(12,2)` |
+
+Hai test này dùng **tài khoản riêng** (tạo rồi xoá) thay vì `admin@test.com` — xem
+mục 6.6: rate limiter đặt vé khoá theo tài khoản, dùng chung tài khoản với k6 sẽ
+khiến test fail với 429 một cách khó hiểu.
+
+Case "tổng tiền vừa chạm biên" dùng giá **3.333.333.333,33 x 3** (đúng 2 chữ số
+thập phân) chứ không phải giá có 3 chữ số thập phân: MySQL làm tròn `price` lúc lưu
+nên giá 3 chữ số thập phân sẽ thành 5.000.000.000,00 và tổng vượt biên dù phép
+tính "trên giấy" có vừa.
 
 ### 8.7 Bài học khi chạy load test nhiều lần liên tiếp
 
@@ -766,6 +832,23 @@ tiếp. Kết quả: chỉ ~45/200 lần login thành công, `orders_created` c�
 Đây là **hành vi đúng của rate limiter**, không phải bug. Muốn đo chính xác thì phải
 chờ hết cửa sổ (60s cho API, **5 phút** cho đặt vé) trước khi chạy. Chỉ số cần
 đối chiếu: `orders_created` = số vé có sẵn, `server_errors` = 0.
+
+**Kết quả tham chiếu (200 VU, kho 10 vé, chạy sạch):**
+
+```
+orders_created.......: 10      <- đúng bằng số vé có sẵn
+orders_rejected......: 41      <- hết vé + 429 (rate limit)
+server_errors........: 0.00%   <- KHÔNG có lỗi 5xx nào
+```
+
+Kiểm chứng lại trong DB sau khi chạy: `availableQuantity = 0`, **không có
+`ticketType` nào có `availableQuantity < 0`**, và đúng 10 bản ghi `Ticket` ở trạng
+thái `PENDING` (đơn cũ của các lần chạy trước đã `EXPIRED` nên không tính vào).
+
+> Script `load-test-concurrent.js` nhận `TICKET_TYPE_ID` qua biến môi trường
+> (`k6 run -e TICKET_TYPE_ID=<id> ...`) để chạy lại được sau khi kho đã bán hết.
+> **Phải reset kho về đúng số vé dự kiến trước khi chạy**, nếu không số đơn tạo
+> được sẽ khác số vé có sẵn và kết luận sẽ sai.
 
 ---
 
@@ -788,6 +871,9 @@ chờ hết cửa sổ (60s cho API, **5 phút** cho đặt vé) trước khi ch
 | 13 | FE bỏ `id` khi submit edit | Map ticketTypes chỉ lấy `name/price/totalQuantity` | Giữ `id` trong `TicketTypeForm` và payload (`EventFormView.vue`) |
 | 14 | Tạo sự kiện ra **500 "Lỗi máy chủ"** | Mọi cột chuỗi là `VARCHAR(191)` (hệ quả index utf8mb4), Zod không có `.max()`, form không có `maxlength` → dữ liệu quá dài chết ở MySQL (`P2000`) | Nới cột (`@db.VarChar`/`@db.Text`) + `LIMITS.max()` ở Zod + `maxlength` ở form + `mapPrismaError` dịch P2000/P2020 thành 400 — xem mục 3 và 6.8 |
 | 15 | Đơn hàng lớn không lưu được | `orders.totalAmount` là `DECIMAL(10,2)` (biên 99.999.999,99) trong khi `ticket_types.price` có thể lớn hơn | Nới cả hai cùng thang `DECIMAL(12,2)` — xem mục 3 |
+| 16 | Sự kiện tạo được nhưng **không ai đặt vé được** | `totalAmount = price × quantity` vượt biên `DECIMAL(12,2)`; chỉ kiểm tra giá và số lượng **riêng lẻ** nên tích vượt biên lọt qua | `superRefine` kiểm tra tích lúc tạo/sửa sự kiện + kiểm tra lại trong `order.controller.ts` — mục 3, 6.5 |
+| 17 | Một request có thể **làm sập server** | `Array.from({ length: quantity })` tạo N bản ghi `Ticket` trong RAM (~46 byte/phần tử) mà `quantity` không có trần → 2,1 tỷ vé ≈ 100 GB | `LIMITS.MAX_ORDER_QUANTITY = 100` — mục 6.5 |
+| 18 | Người dùng chung IP bị chặn oan khi đặt vé | `orderRateLimiter` khoá theo `req.ip` | `keyGenerator` dùng `req.user.userId` (limiter chạy sau `authenticate`) — mục 6.6 |
 
 ---
 
@@ -1060,6 +1146,9 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 16 | Dữ liệu quá dài → 500 | ✅ Đã sửa | `.max()` ở Zod + `maxlength` ở form + `mapPrismaError` → 400 — mục 3, 6.5, 6.8 |
 | 17 | Không xoá được admin từng thao tác quản trị | ✅ Đã sửa | FK `AdminAuditLog.actorId` là `RESTRICT`; đổi sang `SET NULL` + cột `actorEmail` chụp lại — mục 3 |
 | 18 | API `/admin/audit-logs` có nhưng UI không dùng | ✅ Đã sửa | Thêm `AdminAuditView.vue` + route `/admin/audit-logs` |
+| 19 | Sự kiện tạo được nhưng không ai đặt vé được | ✅ Đã sửa | Kiểm tra tích `price × quantity` so với biên `DECIMAL(12,2)` — mục 3, 6.5 |
+| 20 | Một request có thể làm sập server (OOM) | ✅ Đã sửa | `LIMITS.MAX_ORDER_QUANTITY = 100` — mục 6.5 |
+| 21 | Người dùng chung IP bị chặn oan khi đặt vé | ✅ Đã sửa | `orderRateLimiter` khoá theo `userId` — mục 6.6 |
 
 ### Câu hỏi phỏng vấn bổ sung
 
@@ -1086,6 +1175,20 @@ Không thừa, chúng bắt 2 lớp lỗi khác nhau. `.max()` chặn ở **biê
 
 **16. Vì sao `count()` trong transaction lại không đủ để chặn hạ quyền admin cuối?**
 Vì `count()` trong MySQL là consistent read theo snapshot của transaction: nó có thể đọc trạng thái **cũ hơn** trạng thái mà một locking read (`SELECT ... FOR UPDATE`) vừa khoá. Hai transaction song song đều thấy "còn 1 admin khác" → cả hai hạ quyền → mất người quản trị. Cách đúng: locking read để chặn, rồi **đếm kết quả trả về trong JS** (`rows.length`) chứ không `count()` lần nữa trong cùng transaction.
+
+**17. Vì sao phải kiểm tra TÍCH của price và quantity, không chỉ từng yếu tố?**
+Vì `orders.totalAmount` lưu `price × quantity`, mà cột đó là `DECIMAL(12,2)` chỉ chứa được tới 9.999.999.999,99. Nếu chỉ kiểm tra "giá ≤ biên" và "số lượng ≤ biên" thì một loại vé giá 9.999.999.999,99 với 2 vé vẫn lọt qua: sự kiện tạo được (201) nhưng mọi đơn đặt vé đều lỗi 400. Lỗi chỉ lộ ra ở bước thanh toán — xa hơn nhiều so với lúc tạo sự kiện, và người bán thấy sự kiện lên kệ trong khi người mua không mua được. Ràng buộc của một ràng buộc suy ra từ cột DB phải được kiểm tra ở nơi sớm nhất có thể.
+
+**18. Vì sao giới hạn số vé trong một đơn là ràng buộc an toàn cho server, không chỉ là nghiệp vụ?**
+Vì controller tạo N bản ghi `Ticket` trong RAM bằng `Array.from({ length: quantity })` — đo được ~46 byte/phần tử, tức 1 triệu vé là 46 MB và 2,1 tỷ vé là ~100 GB. Một request có `quantity` không trần (chỉ cần kho vé đủ lớn) là đủ để làm sập cả tiến trình Node, tức là **DoS từ một tài khoản đã đăng nhập**. Loại lỗi này không lộ ra khi chạy test bình thường (ai cũng đặt 1-2 vé), chỉ lộ ra khi đọc code.
+
+**19. Vì sao rate limiter đặt vé khoá theo tài khoản chứ không theo IP?**
+Vì trong thực tế rất nhiều người dùng chung một IP: văn phòng, trường đại học, WiFi
+nhà, mạng di động. Khoá theo IP nghĩa là họ bị chặn oan chỉ vì người khác trong cùng
+mạng đã đặt nhiều vé. Ngược lại, khoá theo tài khoản không bị bot đánh lách bằng cách
+đổi IP. Điều kiện để làm được là limiter phải chạy **sau** `authenticate` — đó là lý do
+thứ tự middleware trong `order.routes.ts` quan trọng, không phải ngẫu nhiên. `apiRateLimiter`
+vẫn khoá theo IP vì nó bảo vệ trước cả khi biết client là ai.
 
 ---
 
