@@ -24,7 +24,12 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:5000/api';
-const TICKET_TYPE_ID = '8f8dd54e-16bb-49dc-b0fd-29ea7b9866ac'; // VIP1 ticket (only 10 available)
+// Ticket type được bắn vào. Mặc định là VIP1 (10 vé) của sự kiện cũ, nhưng nên
+// truyền qua biến môi trường để chạy lại được sau khi kho đã bán hết:
+//   k6 run -e TICKET_TYPE_ID=<id> load-test-concurrent.js
+// Lưu ý: kho phải được reset về đúng số vé dự kiến trước khi chạy, nếu không
+// số đơn tạo được sẽ khác số vé có sẵn và kết luận sẽ sai.
+const TICKET_TYPE_ID = __ENV.TICKET_TYPE_ID || '8f8dd54e-16bb-49dc-b0fd-29ea7b9866ac';
 
 export default function () {
   // Đăng nhập với admin để có token

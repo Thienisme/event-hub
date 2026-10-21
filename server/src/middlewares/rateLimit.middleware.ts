@@ -34,10 +34,21 @@ export const adminRateLimiter = rateLimit({
  * - Cho phép đặt vé liên tiếp trong một khoảng thời gian ngắn (burst)
  * - Nhưng giới hạn tổng số vé đặt trong một khung thời gian dài
  * - Tránh trải nghiệm xấu cho người dùng thực khi mua nhiều vé cho cùng sự kiện
+ *
+ * KHOÁ THEO TÀI KHOẢN, KHÔNG THEO IP:
+ *
+ * Limiter này chạy SAU `authenticate` nên `req.user` luôn có sẵn. Nếu khoá theo
+ * IP thì nhiều người dùng thật dùng chung một IP (văn phòng, trường đại học,
+ * WiFi nhà, mạng di động) sẽ bị chặn oan chỉ vì người khác đã đặt nhiều vé.
+ * Ngược lại, bot đổi IP vẫn bị chặn vì hạn mức gắn với tài khoản.
+ *
+ * `req.ip` chỉ là fallback cho trường hợp không xác thực (không xảy ra với
+ * route hiện tại, nhưng để limiter không bao giờ ném lỗi).
  */
 export const orderRateLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 phút
   max: 15, // tối đa 15 lần đặt vé trong 5 phút
+  keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
   message: 'Tần suất đặt vé quá nhanh. Vui lòng thử lại sau vài phút.',
   standardHeaders: true,
   legacyHeaders: false,
