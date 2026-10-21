@@ -107,8 +107,19 @@ async function main() {
   console.log(`\n${D}[2] Integration — server đang chạy${X}`);
 
   const health = await fetch(`${API}/health`).catch(() => null);
-  if (!health || !health.ok) {
+  if (!health) {
     check('server đang chạy ở cổng 5000', false, 'không kết nối được — hãy chạy npm run dev');
+  } else if (health.status === 429) {
+    // 429 KHÁC với "server chết": server vẫn chạy, chỉ là đã hết hạn mức
+    // `apiRateLimiter` (100 request/phút). Báo đúng nguyên nhân để không bị
+    // hiểu nhầm là server sập.
+    check(
+      'server đang chạy ở cổng 5000',
+      false,
+      'nhận 429 — đã hết hạn mức apiRateLimiter (100 req/phút). Đợi 60s rồi chạy lại, hoặc dùng `node run-all-tests.cjs`'
+    );
+  } else if (!health.ok) {
+    check('server đang chạy ở cổng 5000', false, `health trả về HTTP ${health.status}`);
   } else {
     check('server đang chạy ở cổng 5000', true);
 

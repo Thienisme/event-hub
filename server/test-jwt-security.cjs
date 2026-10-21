@@ -111,6 +111,22 @@ async function request(pathname, opts) {
 // ---------------------------------------------------------------------------
 
 /**
+ * User test do script này tạo ra. Giữ ở PHẠM VI MODULE để hàm `cleanup()` xoá
+ * được cả khi test lỗi giữa chừng — nếu không, một lần chạy bị lỗi sẽ để lại
+ * user trong DB.
+ */
+let createdTestUserId = null;
+
+async function cleanup() {
+  if (!createdTestUserId) return;
+  const prisma = await getPrisma();
+  // `Order.userId` là FK Restrict: phải xoá order trước rồi mới xoá được user.
+  await prisma.order.deleteMany({ where: { userId: createdTestUserId } }).catch(() => {});
+  await prisma.user.delete({ where: { id: createdTestUserId } }).catch(() => {});
+  await prisma.$disconnect();
+}
+
+/**
  * Tạo một user CUSTOMER CÓ THẬT trong DB (qua API đăng ký).
  *
  * Cần user thật vì `authorize` đọc role từ DB chứ không tin token: user giả sẽ
@@ -128,6 +144,7 @@ async function createRealCustomer() {
     throw new Error(`Không tạo được user test: HTTP ${res.status} ${JSON.stringify(res.body)}`);
   }
 
+  createdTestUserId = res.body.user.id;
   return res.body.user;
 }
 
@@ -430,4 +447,10 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main();
+main().catch(async (error) => {
+  console.error(error);
+  // Dọn user test kể cả khi lỗi — nếu không, lần chạy sau lại tạo user mới và
+  // DB tích luỹ dần các tài khoản rác.
+  await cleanup().catch(() => {});
+  process.exit(1);
+});

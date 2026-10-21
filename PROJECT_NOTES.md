@@ -848,6 +848,61 @@ thập phân) chứ không phải giá có 3 chữ số thập phân: MySQL làm
 nên giá 3 chữ số thập phân sẽ thành 5.000.000.000,00 và tổng vượt biên dù phép
 tính "trên giấy" có vừa.
 
+### 8.6b Chạy cả bộ test — `run-all-tests.cjs` và kỷ luật dọn dẹp
+
+#### Vấn đề 1: chạy 7 bộ test liên tiếp thì vượt `apiRateLimiter`
+
+`apiRateLimiter` giới hạn **100 request/phút** cho mọi API. Mỗi bộ test riêng lẻ
+dùng chưa tới 40 request nên chạy thoải mái — nhưng cả 7 bộ cộng lại vượt 100,
+và các bộ sau nhận 429.
+
+Triệu chứng **rất dễ hiểu nhầm**:
+
+| Bộ test | Thông báo lỗi | Thực tế |
+|---------|---------------|---------|
+| `test-cors` | "server đang chạy ở cổng 5000 — không kết nối được" | Server vẫn chạy, chỉ là 429 |
+| `test-validation` | `SyntaxError: Unexpected token 'Q', "Quá nhiều "... is not valid JSON` | Body 429 của express-rate-limit là **plain text**, không phải JSON |
+
+Cả hai đều là triệu chứng của *một* nguyên nhân: hết hạn mức. Giờ script đã báo
+rõ ("đã hết hạn mức apiRateLimiter... đợi 60s") thay vì nói dối rằng server chết.
+
+Cách xử lý: `run-all-tests.cjs` đọc header `RateLimit-Remaining` / `RateLimit-Reset`
+(server bật `standardHeaders: true`) để biết chính xác còn bao lâu nữa mới hết
+cửa sổ, rồi chờ đúng số giây đó thay vì ngủ cứng 60s.
+
+```bash
+npm run test:all
+```
+
+#### Vấn đề 2: script lỗi giữa chừng thì để lại tài khoản rác trong DB
+
+Các script test tạo tài khoản ADMIN riêng (vì `orderRateLimiter` khoá theo tài
+khoản) rồi xoá ở cuối. Nhưng nếu lỗi xảy ra giữa chừng — ví dụ bị rate limit —
+đoạn xoá không chạy, và DB tích luỹ dần tài khoản rác **với mật khẩu đã biết**.
+
+Không chỉ vậy: `prisma.user.delete(...).catch(() => {})` **nuốt mất lỗi FK**, nên
+tài khoản cứ ở lại mà không có dấu hiệu gì cho biết đã xoá thất bại. Thứ tự xoá
+đúng phải là:
+
+```ts
+// 1. Order trước — `Order.userId` là FK Restrict
+await prisma.order.deleteMany({ where: { userId: testUserId } });
+// 2. Event — cascade xoá TicketType -> Ticket
+for (const id of createdEventIds) await prisma.event.delete({ where: { id } });
+// 3. Audit log (actorId là SetNull nhưng targetId là chuỗi thuần)
+await prisma.adminAuditLog.deleteMany({ where: { OR: [{ actorId: id }, { targetId: id }] } });
+// 4. Cuối cùng mới xoá user
+await prisma.user.delete({ where: { id: testUserId } });
+```
+
+Và phải gọi `cleanup()` ở **cả** đường thành công lẫn đường lỗi (`main().catch()`),
+tốt nhất là bọc trong `try/finally`.
+
+Một lỗi nữa trong `test-admin-race.cjs`: `updateMany` hạ quyền **toàn bộ admin**
+từng nằm NGOÀI khối `try`, nên nếu lệnh ngay sau nó lỗi thì hệ thống bị bỏ lại
+**không còn admin nào** — và test sau cũng không cứu được vì mọi admin đã mất
+quyền. Mọi thao tác thay đổi quyền phải nằm trong `try` để `finally` luôn chạy.
+
 ### 8.7 Bài học khi chạy load test nhiều lần liên tiếp
 
 `k6 run load-test-concurrent.js` dùng 200 VU → ~250 request trong vài giây, vượt
@@ -958,8 +1013,25 @@ npm install
 cp .env.example .env      # sửa DATABASE_URL, JWT_SECRET, Redis nếu khác mặc định
 npx prisma migrate deploy # áp dụng migration (KÈM cả migration CHECK constraint viết tay)
 npx prisma generate
+npm run seed                # tạo tài khoản admin (bắt buộc trước khi đăng nhập)
 npm run dev               # http://localhost:5000
+```
 
+**Tài khoản mặc định (chỉ dùng cho dev):**
+
+| Email | Mật khẩu | Quyền |
+|-------|----------|------|
+| `admin@test.com` | `admin12345` | **ADMIN** — quản trị người dùng, duyệt/khoá, dashboard, audit log |
+
+`npm run seed` là **idempotent**: chạy lại bao nhiêu lần cũng cho cùng kết quả, và
+luôn đặt lại mật khẩu + bật lại tài khoản cho admin đã tồn tại. Dùng lệnh này để
+lấy lại quyền khi mất mật khẩu hoặc bị hạ quyền. Mật khẩu đổi được qua biến
+môi trường `SEED_ADMIN_PASSWORD`.
+
+> Với production, KHÔNG dùng mật khẩu mặc định: đặt `SEED_ADMIN_PASSWORD` thành
+> mật khẩu mạnh riêng biệt, hoặc tạo admin bằng cách khác và bỏ qua seed.
+
+```bash
 # 2. Client (terminal khác)
 cd client
 npm install
@@ -974,6 +1046,8 @@ npm run test:errors                       # mapPrismaError
 npm run test:order                        # totalAmount DECIMAL(12,2)
 npm run test:validation                   # endTime > startTime, role khi đăng ký
 npm run test:cors                        # whitelist origin (5173-5176, preflight, env override)
+npm run test:all                         # chạy cả 7 bộ, TỰ CHỜ hết cửa sổ rate limit
+npm run seed                             # tạo/đặt lại tài khoản admin@test.com
 npx k6 run load-test.js                    # 100 VUs đường ghi
 npx k6 run load-test-concurrent.js         # 200 VUs, 10 vé
 npx k6 run load-test-read.js               # cache hit/miss (nhớ xoá cache trước)
@@ -1046,6 +1120,11 @@ NODE_ENV=development                               # production -> Prisma chỉ 
 | `server/test-jwt-security.cjs` | 17 case bảo mật, cách test token giả |
 | `server/test-admin-race.cjs` | Race khi 2 admin cùng hạ quyền nhau |
 | `server/test-event-limits.cjs` | Giới hạn dữ liệu ở API (201/400 thay vì 500) |
+| `server/test-validation.cjs` | Ràng buộc schema: `endTime > startTime`, role khi đăng ký |
+| `server/test-cors.cjs` | Whitelist origin + preflight + `CORS_ORIGINS` từ env |
+| `server/run-all-tests.cjs` | Chạy cả 7 bộ test, tự chờ hết cửa sổ rate limit |
+| `server/src/utils/cors.ts` | Parse whitelist origin (tách ra để test được) |
+| `server/prisma/seed.ts` | Tạo/đặt lại tài khoản admin (idempotent) |
 
 ---
 
@@ -1202,6 +1281,10 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 20 | Một request có thể làm sập server (OOM) | ✅ Đã sửa | `LIMITS.MAX_ORDER_QUANTITY = 100` — mục 6.5 |
 | 21 | Người dùng chung IP bị chặn oan khi đặt vé | ✅ Đã sửa | `orderRateLimiter` khoá theo `userId` — mục 6.6 |
 | 22 | CORS chặn origin hợp lệ (client chạy cổng 5174/5176 bị lỗi CORS) | ✅ Đã sửa | Lỗi toán tử comma làm `CORS_ORIGINS` bị bỏ qua, chỉ còn 5175 được phép — tách `utils/cors.ts`, thêm `test-cors.cjs` — mục 15.4 |
+| 23 | Script test lỗi giữa chừng để lại tài khoản ADMIN rác (mật khẩu đã biết) trong DB | ✅ Đã sửa | `cleanup()` gọi ở cả đường lỗi, xoá theo đúng thứ tự FK (order → event → audit → user) — mục 8.6b |
+| 24 | `test-admin-race.cjs` hạ quyền toàn bộ admin NGOÀI khối `try` → lỗi là hệ thống mất sạch admin | ✅ Đã sửa | Chuyển `updateMany` vào trong `try` để `finally` luôn trả lại quyền — mục 8.6b |
+| 25 | Chạy cả 7 bộ test liên tiếp vượt `apiRateLimiter` → 429, báo lỗi sai (tưởng server chết) | ✅ Đã sửa | `run-all-tests.cjs` đọc header `RateLimit-*` để chờ đúng cửa sổ; script báo rõ nguyên nhân — mục 8.6b |
+| 26 | Không có seed script → mỗi máy mới phải tự tạo admin, dễ quên mật khẩu | ✅ Đã sửa | `npm run seed` — idempotent, tạo/đặt lại `admin@test.com` — mục 12 |
 
 ### Câu hỏi phỏng vấn bổ sung
 

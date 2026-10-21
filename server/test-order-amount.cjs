@@ -28,6 +28,35 @@ function check(name, condition, detail) {
   }
 }
 
+// Tài khoản và dữ liệu tạo ra trong test nằm ở PHẠM VI MODULE để hàm
+// `cleanup()` dọn được cả khi test lỗi giữa chừng.
+//
+// Trước đây việc dọn nằm ở cuối happy path, còn `main().catch()` chỉ in lỗi rồi
+// thoát — nên một lần chạy bị lỗi (ví dụ rate limiter chặn login) là để lại
+// tài khoản ADMIN trong DB với mật khẩu đã biết. Tài khoản rác đó tích luỹ dần
+// và làm bảng "Quản trị người dùng" lẫn logic "bảo vệ admin cuối cùng" khó
+// kiểm chứng.
+let testUserId = null;
+const createdEventIds = [];
+
+async function cleanup() {
+  // Xoá ORDER trước: `Order.userId` là FK Restrict, nên chừa lại order là
+  // user không xoá được. Order xoá thì cascade xoá luôn Ticket.
+  await prisma.order.deleteMany({ where: { userId: testUserId } }).catch(() => {});
+  // Xoá event TỪNG CÁI thay vì `deleteMany`: `deleteMany` với điều kiện quan hệ
+  // sinh câu truy vấn mà MySQL không xử lý được (lỗi 1093) và bị nuốt bởi
+  // `.catch()`, khiến user không xoá được vì còn event trỏ tới.
+  for (const id of createdEventIds) {
+    await prisma.event.delete({ where: { id } }).catch(() => {});
+  }
+  if (testUserId) {
+    await prisma.adminAuditLog
+      .deleteMany({ where: { OR: [{ actorId: testUserId }, { targetId: testUserId }] } })
+      .catch(() => {});
+    await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
+  }
+}
+
 async function main() {
   console.log(`\n${D}Kiểm chứng đường đặt vé sau khi đổi kiểu cột totalAmount${X}`);
 
@@ -46,6 +75,7 @@ async function main() {
     },
     select: { id: true },
   });
+  testUserId = testUser.id;
 
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
@@ -101,12 +131,9 @@ async function main() {
     );
   }
 
-  // Dọn dẹp
-  await prisma.event.delete({ where: { id: event.id } }).catch(() => {});
-  await prisma.adminAuditLog
-    .deleteMany({ where: { OR: [{ actorId: testUser.id }, { targetId: testUser.id }] } })
-    .catch(() => {});
-  await prisma.user.delete({ where: { id: testUser.id } }).catch(() => {});
+  // Dọn dẹp (kể cả khi lỗi — xem `cleanup()` ở đầu file)
+  createdEventIds.push(event.id);
+  await cleanup();
   await prisma.$disconnect();
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);
@@ -115,6 +142,7 @@ async function main() {
 
 main().catch(async (error) => {
   console.error(error);
+  await cleanup();
   await prisma.$disconnect();
   process.exit(1);
 });

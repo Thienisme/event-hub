@@ -88,27 +88,32 @@ async function main() {
     select: { id: true, email: true },
   });
 
-  await prisma.user.updateMany({
-    where: { role: 'ADMIN' },
-    data: { role: 'CUSTOMER' },
-  });
-
-  for (const tag of ['A', 'B']) {
-    const email = `race-admin-${tag}-${Date.now()}@test.local`;
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: passwordHash,
-        fullName: `Race Admin ${tag}`,
-        role: 'ADMIN',
-        isActive: true,
-      },
-      select: { id: true, email: true },
-    });
-    created.push(user);
-  }
-
+  // ★ Mọi thao tác làm thay đổi quyền PHẢI nằm trong `try` để `finally` luôn
+  // chạy được. Trước đây `updateMany` (hạ quyền toàn bộ admin) nằm NGOÀI try:
+  // nếu `user.create` hoặc bất kỳ lệnh nào phía sau lỗi, hệ thống bị bỏ lại
+  // KHÔNG CÒN admin nào — và test tiếp theo cũng không cứu được, vì mọi admin
+  // đều đã mất quyền.
   try {
+    await prisma.user.updateMany({
+      where: { role: 'ADMIN' },
+      data: { role: 'CUSTOMER' },
+    });
+
+    for (const tag of ['A', 'B']) {
+      const email = `race-admin-${tag}-${Date.now()}@test.local`;
+      const user = await prisma.user.create({
+        data: {
+          email,
+          password: passwordHash,
+          fullName: `Race Admin ${tag}`,
+          role: 'ADMIN',
+          isActive: true,
+        },
+        select: { id: true, email: true },
+      });
+      created.push(user);
+    }
+
     const [a, b] = created;
     const tokenA = await login(a.email, 'MatKhauDaiHon8KyTu');
     const tokenB = await login(b.email, 'MatKhauDaiHon8KyTu');
@@ -158,6 +163,8 @@ async function main() {
       await prisma.adminAuditLog
         .deleteMany({ where: { OR: [{ actorId: user.id }, { targetId: user.id }] } })
         .catch(() => {});
+      // `Order.userId` là FK Restrict: xoá order trước rồi mới xoá được user.
+      await prisma.order.deleteMany({ where: { userId: user.id } }).catch(() => {});
       await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
     }
   }

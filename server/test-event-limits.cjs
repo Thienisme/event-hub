@@ -29,6 +29,33 @@ function check(name, condition, detail) {
   }
 }
 
+// Tài khoản và dữ liệu tạo ra trong test nằm ở PHẠM VI MODULE để hàm
+// `cleanup()` dọn được cả khi test lỗi giữa chừng.
+//
+// Trước đây việc dọn nằm ở cuối happy path, còn `main().catch()` chỉ in lỗi rồi
+// thoát — nên một lần chạy bị lỗi (ví dụ rate limiter chặn login) là để lại
+// tài khoản ADMIN trong DB với mật khẩu đã biết.
+let testUserId = null;
+const createdEventIds = [];
+
+async function cleanup() {
+  // Xoá ORDER trước: `Order.userId` là FK Restrict, nên chừa lại order là
+  // user không xoá được. Order xoá thì cascade xoá luôn Ticket.
+  await prisma.order.deleteMany({ where: { userId: testUserId } }).catch(() => {});
+  // Xoá event TỪNG CÁI thay vì `deleteMany`: `deleteMany` với điều kiện quan hệ
+  // sinh câu truy vấn mà MySQL không xử lý được (lỗi 1093) và bị nuốt bởi
+  // `.catch()`, khiến user không xoá được vì còn event trỏ tới.
+  for (const id of createdEventIds) {
+    await prisma.event.delete({ where: { id } }).catch(() => {});
+  }
+  if (testUserId) {
+    await prisma.adminAuditLog
+      .deleteMany({ where: { OR: [{ actorId: testUserId }, { targetId: testUserId }] } })
+      .catch(() => {});
+    await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
+  }
+}
+
 async function main() {
   console.log(`\n${D}Test tạo sự kiện — giới hạn dữ liệu${X}`);
 
@@ -50,8 +77,7 @@ async function main() {
     },
     select: { id: true },
   });
-  const testUserId = testUser.id;
-
+  testUserId = testUser.id;
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -60,7 +86,6 @@ async function main() {
   const { token } = await login.json();
   if (!token) throw new Error('Khong dang nhap duoc');
 
-  const created = [];
 
   const post = async (payload) => {
     const res = await fetch(`${API}/events`, {
@@ -69,7 +94,7 @@ async function main() {
       body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => null);
-    if (body && body.event) created.push(body.event.id);
+    if (body && body.event) createdEventIds.push(body.event.id);
     return {
       status: res.status,
       message: (body || {}).message || '',
@@ -106,7 +131,7 @@ async function main() {
   // 2b. Mô tả lưu đủ trong DB, không bị cắt cụt
   if (longDesc.status === 201) {
     const saved = await prisma.event.findUnique({
-      where: { id: created[created.length - 1] },
+      where: { id: createdEventIds[createdEventIds.length - 1] },
       select: { description: true },
     });
     check(
@@ -178,7 +203,7 @@ async function main() {
   );
 
   // 9. Đường SỬA (PUT) dùng chung schema nhưng ghi khác -> phải cùng hành vi.
-  const eventId = created[0];
+  const eventId = createdEventIds[0];
   const put = async (payload) => {
     const res = await fetch(`${API}/events/${eventId}`, {
       method: 'PUT',
@@ -292,15 +317,8 @@ async function main() {
     );
   }
 
-  // Dọn dẹp
-  for (const id of created) {
-    await prisma.event.delete({ where: { id } }).catch(() => {});
-  }
-  // Xoá tài khoản test (đơn hàng đã bị xoá cùng sự kiện).
-  await prisma.adminAuditLog
-    .deleteMany({ where: { OR: [{ actorId: testUserId }, { targetId: testUserId }] } })
-    .catch(() => {});
-  await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
+  // Dọn dẹp (kể cả khi lỗi — xem `cleanup()` ở đầu file)
+  await cleanup();
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);
   await prisma.$disconnect();
@@ -309,6 +327,7 @@ async function main() {
 
 main().catch(async (error) => {
   console.error(error);
+  await cleanup();
   await prisma.$disconnect();
   process.exit(1);
 });

@@ -35,6 +35,38 @@ function check(name, condition, detail) {
   }
 }
 
+// Tài khoản và dữ liệu tạo ra trong test nằm ở PHẠM VI MODULE để hàm
+// `cleanup()` dọn được cả khi test lỗi giữa chừng — nếu không, một lần chạy
+// bị lỗi sẽ để lại tài khoản ADMIN với mật khẩu đã biết trong DB.
+let testUserId = null;
+const createdEventIds = [];
+const createdUserIds = [];
+
+async function cleanup() {
+  // Xoá ORDER trước: `Order.userId` là FK Restrict, nên chừa lại order là
+  // user không xoá được. Order xoá thì cascade xoá luôn Ticket.
+  await prisma.order.deleteMany({ where: { userId: testUserId } }).catch(() => {});
+  // Xoá event TỪNG CÁI thay vì `deleteMany`: `deleteMany` với điều kiện quan hệ
+  // sinh câu truy vấn mà MySQL không xử lý được (lỗi 1093) và bị nuốt bởi
+  // `.catch()`, khiến user không xoá được vì còn event trỏ tới.
+  for (const id of createdEventIds) {
+    await prisma.event.delete({ where: { id } }).catch(() => {});
+  }
+  for (const id of createdUserIds) {
+    await prisma.order.deleteMany({ where: { userId: id } }).catch(() => {});
+    await prisma.adminAuditLog
+      .deleteMany({ where: { OR: [{ actorId: id }, { targetId: id }] } })
+      .catch(() => {});
+    await prisma.user.delete({ where: { id } }).catch(() => {});
+  }
+  if (testUserId) {
+    await prisma.adminAuditLog
+      .deleteMany({ where: { OR: [{ actorId: testUserId }, { targetId: testUserId }] } })
+      .catch(() => {});
+    await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
+  }
+}
+
 async function main() {
   console.log(`\n${D}Test ràng buộc schema — thời gian sự kiện & role khi đăng ký${X}`);
 
@@ -52,17 +84,24 @@ async function main() {
     },
     select: { id: true },
   });
-  const testUserId = testUser.id;
+  testUserId = testUser.id;
 
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
+  // Response 429 của express-rate-limit là PLAIN TEXT, không phải JSON — parse
+  // trực tiếp sẽ ném SyntaxError và che mất nguyên nhân thật.
+  if (login.status === 429) {
+    throw new Error(
+      'Bị rate limit (429) khi đăng nhập: đã hết hạn mức apiRateLimiter. ' +
+        'Đợi 60s rồi chạy lại, hoặc dùng `node run-all-tests.cjs`.'
+    );
+  }
   const { token } = await login.json();
   if (!token) throw new Error('Khong dang nhap duoc');
 
-  const created = [];
 
   const post = async (payload) => {
     const res = await fetch(`${API}/events`, {
@@ -71,7 +110,7 @@ async function main() {
       body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => null);
-    if (body && body.event) created.push(body.event.id);
+    if (body && body.event) createdEventIds.push(body.event.id);
     return { status: res.status, message: (body || {}).message || '' };
   };
 
@@ -119,9 +158,9 @@ async function main() {
   );
 
   // 4. Đường SỬA (PUT) dùng chung schema -> phải cùng hành vi.
-  if (created.length) {
+  if (createdEventIds.length) {
     const put = async (payload) => {
-      const res = await fetch(`${API}/events/${created[0]}`, {
+      const res = await fetch(`${API}/events/${createdEventIds[0]}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
@@ -174,8 +213,9 @@ async function main() {
 
   const regUser = await prisma.user.findUnique({
     where: { email: regEmail },
-    select: { role: true },
+    select: { role: true, id: true },
   });
+  if (regUser) createdUserIds.push(regUser.id);
   check(
     'role trong DB vẫn là CUSTOMER dù client gửi role: "ORGANIZER"',
     regUser && regUser.role === 'CUSTOMER',
@@ -196,30 +236,17 @@ async function main() {
   }).catch(() => {});
   const claimUser = await prisma.user.findUnique({
     where: { email: regAdminEmail },
-    select: { role: true },
+    select: { role: true, id: true },
   });
+  if (claimUser) createdUserIds.push(claimUser.id);
   check(
     'role trong DB không bao giờ là ADMIN khi tự khai trong lúc đăng ký',
     claimUser && claimUser.role === 'CUSTOMER',
     `role thực tế: ${claimUser ? claimUser.role : 'không tìm thấy user'}`
   );
 
-  // Dọn dẹp
-  for (const id of created) {
-    await prisma.event.delete({ where: { id } }).catch(() => {});
-  }
-  for (const mail of [regEmail, regAdminEmail]) {
-    const u = await prisma.user.findUnique({ where: { email: mail }, select: { id: true } });
-    if (!u) continue;
-    await prisma.adminAuditLog
-      .deleteMany({ where: { OR: [{ actorId: u.id }, { targetId: u.id }] } })
-      .catch(() => {});
-    await prisma.user.delete({ where: { id: u.id } }).catch(() => {});
-  }
-  await prisma.adminAuditLog
-    .deleteMany({ where: { OR: [{ actorId: testUserId }, { targetId: testUserId }] } })
-    .catch(() => {});
-  await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
+  // Dọn dẹp (kể cả khi lỗi — xem `cleanup()` ở đầu file)
+  await cleanup();
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);
   await prisma.$disconnect();
@@ -228,6 +255,7 @@ async function main() {
 
 main().catch(async (error) => {
   console.error(error);
+  await cleanup();
   await prisma.$disconnect();
   process.exit(1);
 });
