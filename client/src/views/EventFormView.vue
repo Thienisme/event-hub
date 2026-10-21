@@ -52,6 +52,13 @@ const LIMITS = {
   TICKET_NAME: 100,
   PRICE: 9_999_999_999.99,
   QUANTITY: 2_147_483_647,
+  /**
+   * Biên trên của `orders.totalAmount` (DECIMAL(12,2)).
+   *
+   * Giá và số lượng được kiểm tra riêng, nhưng tích của chúng thì phải vừa
+   * biên này — nếu không thì tạo sự kiện được nhưng mọi đơn đặt vé đều lỗi.
+   */
+  MAX_ORDER_AMOUNT: 9_999_999_999.99,
 } as const;
 
 const title = ref('');
@@ -170,6 +177,20 @@ const removeTicketType = (index: number) => {
 const handleSubmit = async () => {
   if (!title.value || !location.value || !startTime.value || !endTime.value) {
     errorMessage.value = 'Vui lòng nhập đầy đủ các trường bắt buộc!';
+    return;
+  }
+
+  // Tổng tiền của một đơn = giá × số lượng, phải vừa biên DECIMAL(12,2) của
+  // `orders.totalAmount`. Kiểm tra ngay ở form để người dùng biết trước khi
+  // gửi, thay vì để tầng DB từ chối lúc đặt vé.
+  const oversizedTicket = ticketTypes.value.find(
+    t =>
+      Math.round(Number(t.price) * Number(t.totalQuantity) * 100) / 100 >
+      LIMITS.MAX_ORDER_AMOUNT
+  );
+
+  if (oversizedTicket) {
+    errorMessage.value = `Tổng tiền của loại vé "${oversizedTicket.name}" vượt quá giới hạn ${LIMITS.MAX_ORDER_AMOUNT.toLocaleString('vi-VN')} của một đơn hàng!`;
     return;
   }
 

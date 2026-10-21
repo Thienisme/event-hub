@@ -4,6 +4,7 @@ import { redlock } from '../config/redis';
 import { buildExpiresAt } from '../config/order';
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
+import { exceedsOrderAmount } from '../utils/validation';
 
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user?.userId;
@@ -74,6 +75,16 @@ export const createOrder = async (req: Request, res: Response) => {
       }
 
       const totalAmount = ticketType.price.toNumber() * quantity;
+
+      // Ràng buộc invariant của cột `orders.totalAmount` (DECIMAL(12,2)).
+      //
+      // Việc kiểm tra `price * totalQuantity` ở tầng tạo/sửa sự kiện chỉ bảo vệ
+      // lúc đó; giá vé có thể được sửa sau, nên đường đặt vé phải tự kiểm lại.
+      // Thiếu bước này thì lỗi chỉ lộ ra ở tầng Prisma (P2020) với thông báo
+      // khó hiểu, thay vì nói rõ ngay cho người mua biết đơn vượt giới hạn.
+      if (exceedsOrderAmount(ticketType.price.toNumber(), quantity)) {
+        throw new AppError('Tổng tiền của đơn hàng vượt quá giới hạn cho phép!');
+      }
 
       const order = await tx.order.create({
         data: {

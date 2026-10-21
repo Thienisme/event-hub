@@ -31,18 +31,37 @@ function check(name, condition, detail) {
 async function main() {
   console.log(`\n${D}Kiểm chứng đường đặt vé sau khi đổi kiểu cột totalAmount${X}`);
 
+  // Tài khoản RIÊNG cho test này: rate limiter đặt vé khoá theo tài khoản
+  // (15 lần/5 phút), dùng chung với k6 hay test khác sẽ hụt hạn mức.
+  const bcrypt = require('bcryptjs');
+  const email = `order-amount-${Date.now()}@test.local`;
+  const password = 'MatKhauDaiHon8KyTu';
+  const testUser = await prisma.user.create({
+    data: {
+      email,
+      password: await bcrypt.hash(password, 10),
+      fullName: 'Order Amount Test',
+      role: 'ADMIN',
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@test.com', password: 'admin12345' }),
+    body: JSON.stringify({ email, password }),
   });
   const { token } = await login.json();
   if (!token) throw new Error('Khong dang nhap duoc');
 
   const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
 
-  // Tạo sự kiện có vé giá 1.000.000 x 50 vé = 50.000.000 (vượt biên DECIMAL(10,2)? không,
-  // nhưng đặt vé giá lớn sẽ vượt). Dùng giá 1.000.000 x 100 = 100.000.000 > biên cũ.
+  // Tạo sự kiện có vé giá 2.000.000,50 x 200 vé.
+  //
+  // Dùng giá có phần thập phân để kiểm chứng luôn việc làm tròn 2 chữ số thập
+  // phân của DECIMAL(12,2) — giá trị "đẹp" (1.000.000) sẽ không bắt được lỗi
+  // làm tròn.
   const event = await prisma.event.create({
     data: {
       title: 'DIAG don hang',
@@ -52,21 +71,23 @@ async function main() {
       endTime: new Date(Date.now() + 90000000),
       organizerId: admin.id,
       ticketTypes: {
-        create: [{ name: 'STANDARD', price: 1000000, totalQuantity: 200, availableQuantity: 200 }],
+        create: [{ name: 'STANDARD', price: 2000000.5, totalQuantity: 200, availableQuantity: 200 }],
       },
     },
     include: { ticketTypes: true },
   });
   const ticketType = event.ticketTypes[0];
 
-  // Đặt 100 vé x 1.000.000 = 100.000.000 (vượt biên DECIMAL(10,2) cũ là 99.999.999,99)
+  // Đặt 50 vé x 2.000.000,50 = 100.000.025 (vượt biên DECIMAL(10,2) cũ là
+  // 99.999.999,99). Số vé đặt trong một đơn có trần 100, nên 50 nằm thoải mái
+  // trong giới hạn.
   const res = await fetch(`${API}/orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ ticketTypeId: ticketType.id, quantity: 100 }),
+    body: JSON.stringify({ ticketTypeId: ticketType.id, quantity: 50 }),
   });
   const body = await res.json().catch(() => null);
-  check('đặt 100 vé x 1.000.000 -> 201', res.status === 201, `nhận ${res.status} — "${(body || {}).message}"`);
+  check('đặt 50 vé x 2.000.000,50 -> 201', res.status === 201, `nhận ${res.status} — "${(body || {}).message}"`);
 
   if (res.status === 201) {
     const order = await prisma.order.findUnique({
@@ -74,14 +95,18 @@ async function main() {
       select: { totalAmount: true, status: true },
     });
     check(
-      'tổng tiền 100.000.000 lưu và đọc lại chính xác',
-      order && Number(order.totalAmount) === 100000000,
+      'tổng tiền 100.000.025 lưu và đọc lại chính xác',
+      order && Number(order.totalAmount) === 100000025,
       `totalAmount = ${order ? order.totalAmount : 'null'}`
     );
   }
 
   // Dọn dẹp
   await prisma.event.delete({ where: { id: event.id } }).catch(() => {});
+  await prisma.adminAuditLog
+    .deleteMany({ where: { OR: [{ actorId: testUser.id }, { targetId: testUser.id }] } })
+    .catch(() => {});
+  await prisma.user.delete({ where: { id: testUser.id } }).catch(() => {});
   await prisma.$disconnect();
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);

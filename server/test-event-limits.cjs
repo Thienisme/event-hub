@@ -32,10 +32,30 @@ function check(name, condition, detail) {
 async function main() {
   console.log(`\n${D}Test tạo sự kiện — giới hạn dữ liệu${X}`);
 
+  // Dùng tài khoản RIÊNG cho test này, không dùng admin@test.com.
+  //
+  // Lý do: rate limiter đặt vé khoá theo tài khoản (15 lần/5 phút). Nếu dùng
+  // chung tài khoản với k6 hay với test khác thì test sẽ hụt hạn mức và fail
+  // một cách khó hiểu — thất bại do hạ tầng, không phải do logic cần kiểm.
+  const email = `limits-admin-${Date.now()}@test.local`;
+  const password = 'MatKhauDaiHon8KyTu';
+  const bcrypt = require('bcryptjs');
+  const testUser = await prisma.user.create({
+    data: {
+      email,
+      password: await bcrypt.hash(password, 10),
+      fullName: 'Limits Test Admin',
+      role: 'ADMIN',
+      isActive: true,
+    },
+    select: { id: true },
+  });
+  const testUserId = testUser.id;
+
   const login = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@test.com', password: 'admin12345' }),
+    body: JSON.stringify({ email, password }),
   });
   const { token } = await login.json();
   if (!token) throw new Error('Khong dang nhap duoc');
@@ -50,7 +70,16 @@ async function main() {
     });
     const body = await res.json().catch(() => null);
     if (body && body.event) created.push(body.event.id);
-    return { status: res.status, message: (body || {}).message || '' };
+    return {
+      status: res.status,
+      message: (body || {}).message || '',
+      // Vị trí trả về: { message, event: { id, ticketTypes: [...] } }
+      eventId: body && body.event ? body.event.id : null,
+      ticketTypeId:
+        body && body.event && body.event.ticketTypes && body.event.ticketTypes[0]
+          ? body.event.ticketTypes[0].id
+          : null,
+    };
   };
 
   const base = {
@@ -184,10 +213,94 @@ async function main() {
     `nhận ${updateBadPrice.status} — "${updateBadPrice.message}"`
   );
 
+  // 10. ★ Giá × số lượng vượt biên DECIMAL(12,2) của `orders.totalAmount`.
+  //
+  // Mỗi yếu tố đều hợp lệ (giá <= 9.999.999.999,99, số lượng <= 2.147.483.647)
+  // nhưng TÍCH của chúng thì không lưu được vào `orders.totalAmount`. Nếu
+  // không chặn ở lúc tạo sự kiện thì sự kiện lên kệ thành công, còn mọi đơn
+  // đặt vé đều lỗi 400 -> người bán thấy sự kiện, người mua không mua được.
+  const oversizedTotal = await post({
+    ...base,
+    title: 'Tong tien vuot bien DECIMAL(12,2)',
+    ticketTypes: [{ name: 'Vip dat', price: 9999999999.99, totalQuantity: 2 }],
+  });
+  check(
+    'giá × số lượng vượt biên totalAmount -> 400 ngay lúc tạo sự kiện',
+    oversizedTotal.status === 400 && /tổng tiền/i.test(oversizedTotal.message),
+    `nhận ${oversizedTotal.status} — "${oversizedTotal.message}"`
+  );
+
+  // 11. ★ Biên đúng: tích VỪA chạm biên thì vẫn tạo được VÀ đặt vé được.
+  //
+  // Dùng giá có đúng 2 chữ số thập phân (3.333.333.333,33 × 3 = 9.999.999.999,99
+  // vừa khít DECIMAL(12,2)). Nếu dùng giá có 3 chữ số thập phân thì MySQL sẽ
+  // làm tròn lúc lưu price, và tổng thành 10.000.000.000,00 — vượt biên, dù
+  // phép tính "trên giấy" có vừa.
+  const atLimit = await post({
+    ...base,
+    title: 'Tong tien vua cham bien',
+    ticketTypes: [{ name: 'Vip dat', price: 3333333333.33, totalQuantity: 3 }],
+  });
+  check(
+    'tổng tiền vừa chạm biên -> 201 (không chặn oan)',
+    atLimit.status === 201,
+    `nhận ${atLimit.status} — "${atLimit.message}"`
+  );
+
+  if (atLimit.status === 201) {
+    const orderRes = await fetch(`${API}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ticketTypeId: atLimit.ticketTypeId, quantity: 3 }),
+    });
+    const orderBody = await orderRes.json().catch(() => null);
+    check(
+      'đặt vé tổng tiền vừa chạm biên -> 201 (đơn lưu được vào DECIMAL(12,2))',
+      orderRes.status === 201,
+      `nhận ${orderRes.status} — "${(orderBody || {}).message}"`
+    );
+  }
+
+  // 12. ★ Số vé trong MỘT đơn có trần: controller tạo N bản ghi Ticket trong
+  // RAM (Array.from({ length: quantity })), không có trần thì một request có
+  // thể làm sập tiến trình Node.
+  const tooManyInOneOrder = await post({
+    ...base,
+    title: 'Don qua nhieu ve',
+    ticketTypes: [{ name: 'STANDARD', price: 50000, totalQuantity: 100000 }],
+  });
+  check(
+    'tạo sự kiện có kho vé lớn -> 201 (giới hạn số vé áp cho TỪNG ĐƠN, không cấm kho)',
+    tooManyInOneOrder.status === 201,
+    `nhận ${tooManyInOneOrder.status} — "${tooManyInOneOrder.message}"`
+  );
+
+  if (tooManyInOneOrder.status === 201) {
+    const orderRes = await fetch(`${API}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        ticketTypeId: tooManyInOneOrder.ticketTypeId,
+        quantity: 101,
+      }),
+    });
+    const orderBody = await orderRes.json().catch(() => null);
+    check(
+      'đặt 101 vé trong một đơn -> 400 (bảo vệ server khỏi OOM)',
+      orderRes.status === 400 && /100/.test((orderBody || {}).message || ''),
+      `nhận ${orderRes.status} — "${(orderBody || {}).message}"`
+    );
+  }
+
   // Dọn dẹp
   for (const id of created) {
     await prisma.event.delete({ where: { id } }).catch(() => {});
   }
+  // Xoá tài khoản test (đơn hàng đã bị xoá cùng sự kiện).
+  await prisma.adminAuditLog
+    .deleteMany({ where: { OR: [{ actorId: testUserId }, { targetId: testUserId }] } })
+    .catch(() => {});
+  await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
 
   console.log(`\nKết quả: ${passed} passed, ${failed} failed`);
   await prisma.$disconnect();
