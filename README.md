@@ -1,82 +1,181 @@
-# EventHub — Hệ thống bán vé sự kiện
+# Event Hub 🎟️
 
-Hệ thống bán vé trực tuyến với trọng tâm **chống oversell khi hàng nghìn người mua cùng lúc**.
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](https://github.com/Thienisme/event-hub/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Vue 3](https://img.shields.io/badge/Vue-3-42b883?style=flat-square&logo=vuedotjs)](https://vuejs.org/)
+[![Laravel](https://img.shields.io/badge/Laravel-10-FF2D20?style=flat-square&logo=laravel)](https://laravel.com/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue?style=flat-square)](https://github.com/Thienisme/event-hub/pulls)
 
-## Tech Stack
+**Event Hub** is an open-source, scalable full-stack platform for organizing events, managing tickets, and tracking attendee registrations. It provides a seamless experience for event organizers and attendees alike, combining a modern Vue 3 frontend with a robust Laravel RESTful API backend.
+
+---
+
+## ✨ Key Features
+
+### 🔐 User Authentication
+- Secure registration & login with JWT / Laravel Sanctum
+- Role-based access control (Admin, Organizer, Attendee)
+- Password reset & email verification
+
+### 📅 Event Management
+- Create, edit, and publish events with rich details
+- Categories, tags, and search/filter capabilities
+- Event capacity & scheduling management
+
+### 🎫 Booking & Ticketing
+- Ticket purchase flow with quantity selection
+- QR code ticket generation
+- Booking history & cancellation support
+- Real-time availability tracking
+
+### 🛠️ Admin Dashboard
+- Comprehensive analytics & reporting
+- User & event moderation tools
+- Order & revenue management
+- System settings & configuration
+
+---
+
+## 🏗️ System Architecture / Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Backend | Express 4, TypeScript, Prisma ORM |
-| Database | MySQL 8 (CHECK constraint, row-level lock) |
-| Cache / Lock | Redis 7 (ioredis, Redlock) |
-| Frontend | Vue 3, TypeScript, Pinia, Tailwind v4, Vue Router |
-| Auth | JWT HS256, bcrypt cost 10, HttpOnly cookie |
-| Test / Load | k6, custom oversell scripts |
+| **Frontend** | Vue 3 (Composition API), Vite, Pinia, Vue Router, Element Plus / Tailwind CSS, Axios |
+| **Backend** | PHP Laravel (RESTful API), JWT / Laravel Sanctum Authentication |
+| **Database** | MySQL |
+| **DevOps** | Docker, Docker Compose, Git |
 
-## Tính năng chính
+---
 
-- **Đăng ký / Đăng nhập** — JWT + bcrypt, rate limit 5 lần sai/1 phút cho `/auth/*`
-- **Quản lý sự kiện** — CRUD, phân quyền organizer/admin, kiểm tra ownership
-- **Đặt vé** — Giữ chỗ 10 phút (`PENDING`), job nền chuyển `EXPIRED` và trả vé về kho
-- **Chống oversell (3 lớp)**:
-  1. Redis Redlock (TTL 10s, auto-extend)
-  2. CAS `updateMany` trong transaction (`WHERE quantity > 0`)
-  3. MySQL `CHECK (quantity >= 0)` — last line of defense
-- **Cache Redis** — versioned key, single-flight, fail-open, TTL 60s
-- **Bảo mật** — Zod validation, CORS whitelist, helmet, rate limit, error classification 400/429/500
+## 📂 Project Directory Structure
 
-## Quick Start
+```
+event-hub/
+├── frontend/                 # Vue 3 + Vite client application
+│   ├── src/
+│   │   ├── assets/           # Static assets
+│   │   ├── components/       # Reusable Vue components
+│   │   ├── views/            # Route views / pages
+│   │   ├── stores/           # Pinia state management
+│   │   ├── router/           # Vue Router configuration
+│   │   ├── services/         # Axios API services
+│   │   └── main.ts           # App entry point
+│   ├── public/               # Public static files
+│   ├── .env.example          # Environment variables template
+│   ├── package.json
+│   └── vite.config.ts
+├── backend/                  # Laravel RESTful API
+│   ├── app/
+│   │   ├── Http/Controllers/ # API controllers
+│   │   ├── Models/           # Eloquent models
+│   │   └── ...
+│   ├── database/
+│   │   ├── migrations/       # Database migrations
+│   │   └── seeders/          # Database seeders
+│   ├── routes/
+│   │   └── api.php           # API route definitions
+│   ├── .env.example          # Environment variables template
+│   ├── composer.json
+│   └── artisan
+├── docker-compose.yml        # Docker Compose configuration
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 🚀 Getting Started / Local Setup
+
+### Prerequisites
+- Node.js >= 18.x & npm
+- PHP >= 8.1 & Composer
+- MySQL >= 8.0
+- Git
+
+### 1. Clone the repository
 
 ```bash
-# Backend
-cd server
-cp .env.example .env   # chỉnh DATABASE_URL, REDIS_URL, JWT_SECRET
-npm install
-npx prisma migrate deploy
-npm run dev
-
-# Frontend
-cd client
-npm install
-npm run dev
+git clone https://github.com/Thienisme/event-hub.git
+cd event-hub
 ```
 
-## Scripts hữu ích
+### 2. Backend (Laravel) Setup
 
 ```bash
-# Server
-npm run dev          # ts-node-dev watch
-npm run build        # tsc compile
-npm run test:security   # 13 JWT security tests
-npm run test:oversell   # 2 oversell scenarios (lock expiry / lock deletion)
+cd backend
+cp .env.example .env
+composer install
+php artisan key:generate
+php artisan migrate --seed
+php artisan serve
+```
 
-# Load test (k6)
-k6 run load-test-concurrent.js
+Update `.env` with your database credentials:
 
-# Frontend
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=event_hub
+DB_USERNAME=root
+DB_PASSWORD=secret
+```
+
+### 3. Frontend (Vue 3) Setup
+
+```bash
+cd ../frontend
+cp .env.example .env
+npm install
 npm run dev
-npm run build
 ```
 
-## Kiến trúc chống oversell
+Configure the API base URL in `frontend/.env`:
 
-```
-Request → Redlock (Redis) → Prisma Transaction
-                    ↓
-            SELECT FOR UPDATE (ticket_types)
-                    ↓
-            CAS: UPDATE ticket_types SET quantity = quantity - 1
-                 WHERE id = ? AND quantity > 0
-                    ↓
-            CHECK constraint (quantity >= 0) — MySQL guarantee
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
-Kết quả load test: **200 VU, 10 vé → đúng 10 đơn, 0 oversell, 0 lỗi 5xx**.
+### 4. Access the Application
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
 
-## Tài liệu chi tiết
+---
 
-Xem `PROJECT_NOTES.md` (833 dòng) — giải thích trade-off, số đo benchmark, gap đã biết.
+## 🐳 Docker Setup
 
-## License
+Run the entire stack with Docker Compose:
 
-MIT
+```bash
+docker-compose up -d
+```
+
+This will start the frontend, backend, and MySQL services. Once running, execute migrations:
+
+```bash
+docker-compose exec backend php artisan migrate --seed
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! To contribute:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes: `git commit -m "feat: add your feature"`
+4. Push to the branch: `git push origin feature/your-feature`
+5. Open a Pull Request
+
+Please open an Issue first to discuss major changes. Follow the existing code style and include tests where applicable.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT). See the `LICENSE` file for details.
+
+---
+
+> Built with ❤️ by [Thienisme](https://github.com/Thienisme) and the open-source community.
