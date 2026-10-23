@@ -5,24 +5,21 @@ import prisma from '../utils/prisma';
 import { handleControllerError } from '../utils/errors';
 import { getJwtSecret } from '../config/auth';
 
-// Chỉ cho phép tự đăng ký 2 role này qua API công khai.
-// ADMIN cố tình KHÔNG nằm trong danh sách để tránh leo thang đặc quyền
-// (client gửi role gì lên cũng không thể tự phong mình làm ADMIN).
-const SELF_REGISTER_ROLES = ['CUSTOMER', 'ORGANIZER'] as const;
-type SelfRegisterRole = (typeof SELF_REGISTER_ROLES)[number];
+// Người dùng tự đăng ký luôn được gán role CUSTOMER.
+// Role ORGANIZER/ADMIN chỉ có thể thay đổi thông qua cơ chế nội bộ (ví dụ: admin panel).
+const SELF_REGISTER_ROLE = 'CUSTOMER';
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, fullName, role } = req.body;
+    const { email, password, fullName } = req.body;
 
     if (!email || !password || !fullName) {
       return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin!' });
     }
 
-    // Không bao giờ tin dữ liệu client gửi lên: role lạ (hoặc ADMIN) -> hạ xuống CUSTOMER
-    const finalRole: SelfRegisterRole = SELF_REGISTER_ROLES.includes(role)
-      ? (role as SelfRegisterRole)
-      : 'CUSTOMER';
+    // Luôn gán role = CUSTOMER, bỏ qua giá trị role từ client
+    // để ngăn chặn leo thang đặc quyền
+    const finalRole = SELF_REGISTER_ROLE;
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -72,6 +69,14 @@ export const login = async (req: Request, res: Response) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác!' });
+    }
+
+    // Tài khoản bị khoá: vẫn kiểm tra mật khẩu trước để không lộ ra việc
+    // "email này tồn tại nhưng đã bị khoá" cho người lạ.
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: 'Tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên!',
+      });
     }
 
     const token = jwt.sign(

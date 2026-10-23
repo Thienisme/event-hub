@@ -21,6 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value);
   const isOrganizer = computed(() => user.value?.role === 'ORGANIZER' || user.value?.role === 'ADMIN');
+  const isAdmin = computed(() => user.value?.role === 'ADMIN');
 
   // Đăng nhập
   async function login(credentials: { email: string; password: string }) {
@@ -56,6 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     isOrganizer,
+    isAdmin,
     login,
     fetchProfile,
     logout,

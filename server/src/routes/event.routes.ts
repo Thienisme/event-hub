@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEvent, getEvents, getEventById } from '../controllers/event.controller';
+import { createEvent, getEvents, getEventById, updateEvent, deleteEvent } from '../controllers/event.controller';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { validateBody, createEventSchema } from '../utils/validation';
 
@@ -9,7 +9,9 @@ const router = Router();
 router.get('/', getEvents);
 router.get('/:id', getEventById);
 
-// Protected Route (Chỉ ORGANIZER hoặc ADMIN mới được phép tạo sự kiện)
+// Protected Route (Chỉ ORGANIZER hoặc ADMIN mới được phép quản lý sự kiện)
 router.post('/', authenticate, authorize('ORGANIZER', 'ADMIN'), validateBody(createEventSchema), createEvent);
+router.put('/:id', authenticate, authorize('ORGANIZER', 'ADMIN'), validateBody(createEventSchema), updateEvent);
+router.delete('/:id', authenticate, authorize('ORGANIZER', 'ADMIN'), deleteEvent);
 
 export default router;

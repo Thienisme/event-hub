@@ -1,14 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { register, login } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
-import { authRateLimiter } from '../middlewares/rateLimit.middleware';
 import { validateBody, registerSchema, loginSchema } from '../utils/validation';
+import { authRateLimiter, registerRateLimiter } from '../middlewares/rateLimit.middleware';
 import prisma from '../utils/prisma';
 
 const router = Router();
 
-router.post('/register', authRateLimiter, validateBody(registerSchema), register);
+// Chống brute-force: 5 lần thất bại/phút cho login
 router.post('/login', authRateLimiter, validateBody(loginSchema), login);
+// Chống spam account: 10 lần đăng ký/phút (thành công hay thất bại đều đếm)
+router.post('/register', registerRateLimiter, validateBody(registerSchema), register);
 
 // Private Route: Yêu cầu đính kèm Bearer Token
 router.get('/me', authenticate, async (req: Request, res: Response) => {

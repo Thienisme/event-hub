@@ -9,8 +9,6 @@ const router = useRouter();
 const fullName = ref('');
 const email = ref('');
 const password = ref('');
-// BE chỉ cho phép tự đăng ký CUSTOMER hoặc ORGANIZER (ADMIN bị chặn ở server)
-const role = ref<'CUSTOMER' | 'ORGANIZER'>('CUSTOMER');
 
 const isLoading = ref(false);
 const errorMessage = ref('');
@@ -29,7 +27,6 @@ const handleRegister = async () => {
       fullName: fullName.value,
       email: email.value,
       password: password.value,
-      role: role.value,
     });
 
     // Đăng ký thành công -> Chuyển qua trang Login
@@ -57,7 +54,7 @@ const handleRegister = async () => {
         </p>
       </div>
 
-      <AppAlert :message="errorMessage" type="error" />
+      <AppAlert :message="errorMessage" type="error" class="mb-4" />
 
       <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
         <div class="space-y-4">
@@ -89,20 +86,10 @@ const handleRegister = async () => {
               v-model="password"
               type="password"
               required
+              minlength="8"
               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              placeholder="••••••••"
+              placeholder="•••••••• (tối thiểu 8 ký tự)"
             />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Loại tài khoản</label>
-            <select
-              v-model="role"
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            >
-              <option value="CUSTOMER">Khách hàng (Mua vé)</option>
-              <option value="ORGANIZER">Ban tổ chức (Tạo sự kiện)</option>
-            </select>
           </div>
         </div>
 

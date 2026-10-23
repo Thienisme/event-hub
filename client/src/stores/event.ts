@@ -56,27 +56,48 @@ export const useEventStore = defineStore('event', () => {
   const currentEvent = ref<EventItem | null>(null);
   const loading = ref(false);
 
-  // Lấy danh sách sự kiện
-  async function fetchEvents(params = { page: 1, limit: 10, search: '' }): Promise<EventListResponse> {
+  // Đếm số request đang bay. Nếu chỉ bật/tắt loading theo từng request,
+  // khi request cũ bị huỷ (abort) nó sẽ tắt loading trong khi request mới
+  // vẫn đang chạy -> skeleton biến mất sớm, UI nháy "không có dữ liệu".
+  let activeRequests = 0;
+  const beginRequest = () => {
+    activeRequests += 1;
     loading.value = true;
+  };
+  const endRequest = () => {
+    activeRequests = Math.max(0, activeRequests - 1);
+    if (activeRequests === 0) loading.value = false;
+  };
+
+  // Lấy danh sách sự kiện.
+  // `signal` (tuỳ chọn) cho phép view huỷ request cũ khi user gõ tiếp / đổi trang,
+  // tránh response về muộn ghi đè kết quả mới (race condition).
+  async function fetchEvents(
+    params = { page: 1, limit: 10, search: '' },
+    signal?: AbortSignal
+  ): Promise<EventListResponse> {
+    beginRequest();
     try {
-      const response = await apiClient.get<EventListResponse>('/events', { params });
+      const response = await apiClient.get<EventListResponse>('/events', { params, signal });
       events.value = response.data.data;
       return response.data;
     } finally {
-      loading.value = false;
+      endRequest();
     }
   }
 
-  // Lấy chi tiết 1 sự kiện
-  async function fetchEventById(id: string): Promise<EventItem | null> {
-    loading.value = true;
+  // Lấy chi tiết 1 sự kiện (kèm `signal` để huỷ khi đổi route nhanh)
+  async function fetchEventById(id: string, signal?: AbortSignal): Promise<EventItem | null> {
+    beginRequest();
+    // Xoá sự kiện cũ ngay khi bắt đầu fetch: nếu giữ lại, người dùng sẽ thấy
+    // nội dung của sự kiện trước đó trong lúc sự kiện mới đang tải.
+    currentEvent.value = null;
     try {
-      const response = await apiClient.get<EventDetailResponse>(`/events/${id}`);
+      const response = await apiClient.get<EventDetailResponse>(`/events/${id}`, { signal });
       currentEvent.value = response.data.data;
       return currentEvent.value;
     } finally {
-      loading.value = false;
+      endRequest();
     }
   }
 

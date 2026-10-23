@@ -15,8 +15,6 @@ const Redis = require('ioredis');
 const prisma = new PrismaClient();
 const redis = new Redis({ host: '127.0.0.1', port: 6379 });
 const BASE = 'http://localhost:5000/api';
-const TICKET_TYPE = 'f8978946-4c77-4911-8422-4c36624554ac';
-const LOCK_KEY = `locks:ticketType:${TICKET_TYPE}`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('  ', ...a);
@@ -26,22 +24,33 @@ async function api(path, opts) {
   const body = await res.json().catch(() => null);
   return { status: res.status, body };
 }
-async function qty() {
+
+async function qty(ticketTypeId) {
   const rows = await prisma.$queryRawUnsafe(
-    `SELECT availableQuantity AS q FROM ticket_types WHERE id = '${TICKET_TYPE}'`
+    `SELECT availableQuantity AS q FROM ticket_types WHERE id = '${ticketTypeId}'`
   );
   return rows[0].q;
 }
 
 (async () => {
+  let TICKET_TYPE, LOCK_KEY, token, email;
   try {
-    await prisma.ticketType.update({
-      where: { id: TICKET_TYPE },
-      data: { availableQuantity: 1 },
+    // ---------- 0. Tao ticket type moi cho test nay ----------
+    const event = await prisma.event.findFirst();
+    const created = await prisma.ticketType.create({
+      data: {
+        eventId: event.id,
+        name: `Natural Test ${Date.now()}`,
+        price: 100000,
+        totalQuantity: 1,
+        availableQuantity: 1,
+      },
     });
-    console.log('\n[0] Dat so ve kha dung = 1\n');
+    TICKET_TYPE = created.id;
+    LOCK_KEY = `locks:ticketType:${TICKET_TYPE}`;
+    console.log('\n[0] Tao ticket type:', TICKET_TYPE, '(availableQuantity = 1)\n');
 
-    const email = `natural_${Date.now()}@test.local`;
+    email = `natural_${Date.now()}@test.local`;
     await api('/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -52,7 +61,7 @@ async function qty() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password: 'Test12345' }),
     });
-    const token = login.body?.token || login.body?.accessToken;
+    token = login.body?.token || login.body?.accessToken;
     const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     const buy = () =>
       api('/orders', {
@@ -102,7 +111,7 @@ async function qty() {
       return r;
     });
     await sleep(400);
-    log('[3] B doc duoc so ve nao?', await qty(), '(A chua commit nen van thay 1)');
+    log('[3] B doc duoc so ve nao?', await qty(TICKET_TYPE), '(A chua commit nen van thay 1)');
 
     await sleep(300);
     log('[4] NHA row lock de A va B chay tiep');
@@ -111,7 +120,7 @@ async function qty() {
     const [a, b] = await Promise.all([pA, pB]);
     await Promise.allSettled([holder]);
 
-    const finalQty = await qty();
+    const finalQty = await qty(TICKET_TYPE);
     const orders = await prisma.order.count({ where: { user: { email } } });
     console.log('\n=========== KET QUA (khong can thiep) ===========');
     console.log('  A tra ve          :', a.status, '|', a.body?.message ?? '');

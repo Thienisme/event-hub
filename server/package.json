@@ -25,7 +25,15 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",
-    "test:security": "node test-jwt-security.cjs"
+    "test:security": "node test-jwt-security.cjs",
+    "test:race": "node test-admin-race.cjs",
+    "test:limits": "node test-event-limits.cjs",
+    "test:errors": "node test-error-mapping.cjs",
+    "test:order": "node test-order-amount.cjs",
+    "test:validation": "node test-validation.cjs",
+    "test:cors": "node test-cors.cjs",
+    "test:all": "node run-all-tests.cjs",
+    "seed": "ts-node prisma/seed.ts"
   },
   "compilerOptions": {
     "target": "ES2022",
@@ -39,5 +47,8 @@
   },
   "include": [
     "src/**/*"
-  ]
+  ],
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  }
 }

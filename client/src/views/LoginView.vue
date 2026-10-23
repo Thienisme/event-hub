@@ -9,11 +9,16 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 // Chỉ nhận đường dẫn nội bộ: chặn open-redirect kiểu "//evil.com" hoặc "https://..."
+// Lưu ý: phải chặn cả backslash. Trình duyệt chuẩn hoá "\" thành "/" ở một số ngữ cảnh,
+// nên "/\evil.com" có thể bị hiểu như "//evil.com" (protocol-relative) và redirect ra ngoài.
 const redirectPath = computed(() => {
   const target = route.query.redirect;
-  return typeof target === 'string' && target.startsWith('/') && !target.startsWith('//')
-    ? target
-    : '/';
+  const isSafeInternalPath =
+    typeof target === 'string' &&
+    target.startsWith('/') &&
+    !target.startsWith('//') &&
+    !target.includes('\\');
+  return isSafeInternalPath ? target : '/';
 });
 
 // RegisterView chuyển sang đây kèm ?registered=true
@@ -62,8 +67,8 @@ const handleLogin = async () => {
         </p>
       </div>
 
-      <AppAlert :message="successMessage" type="success" />
-      <AppAlert :message="errorMessage" type="error" />
+      <AppAlert :message="successMessage" type="success" class="mb-4" />
+      <AppAlert :message="errorMessage" type="error" class="mb-4" />
 
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
         <div class="space-y-4">
