@@ -1,4 +1,4 @@
-# Phỏng Vấn — EventHub
+# TRICK_EventHub
 
 Bản dịch sẵn: *"Đây là hệ thống bán vé sự kiện. Bài toán khó không nằm ở CRUD, mà nằm ở tranh chấp tồn kho khi hàng nghìn người cùng mua chiếc vé cuối."*
 
@@ -39,11 +39,11 @@ Một hệ thống bán vé sự kiện có:
 | 7 | Double booking phía client | `client/src/views/EventDetailView.vue` | 0,5 ngày | Trung bình |
 | 8 | Sửa sự kiện + quy đổi tồn kho | `server/src/controllers/event.controller.ts` | 1 ngày | Trung bình |
 
-> **Mục tiêu của buổi phỏng vấn: 80% thời gian nằm ở chủ đề 1–4.** Câu hỏi về Vue/Tailwind/Prisma là câu hỏi "biết dùng" — trả lời nhanh rồi quay về bài toán chính.
+> **Mục tiêu của buổi trick: 80% thời gian nằm ở chủ đề 1–4.** Câu hỏi về Vue/Tailwind/Prisma là câu hỏi "biết dùng" — trả lời nhanh rồi quay về bài toán chính.
 
 ---
 
-## 3. Chủ đề 1 — Chống oversell (phỏng vấn hay hỏi nhất)
+## 3. Chủ đề 1 — Chống oversell (trick hay hỏi nhất)
 
 ### 3.1. Vấn đề
 
@@ -476,7 +476,7 @@ Test: `npm run test:race` — 2 admin cùng hạ quyền nhau → chỉ 1 thắn
 
 ---
 
-## 9. Chủ đề 7 — Các bug thực tế đã gặp (đáng giá nhất khi phỏng vấn)
+## 9. Chủ đề 7 — Các bug thực tế đã gặp (đáng giá nhất khi trick)
 
 Đây là phần **đáng giá nhất** khi PV, vì nó chứng minh bạn đọc code thật chứ không đọc Wikipedia. Mỗi mục đều là bug **đã xảy ra trong chính project này** và **đã được sửa + có test**.
 

@@ -4,7 +4,7 @@
 > **vấn đề là gì → tại sao cách cũ sai → cách đúng hoạt động ra sao → đánh đổi**.
 > Mọi số dòng trích dẫn đều trỏ tới source thật tại thời điểm viết.
 >
-> Đi kèm: **`PHONG-VAN.md`** — bản tóm tắt để ôn tập và luyện trả lời phỏng vấn
+> Đi kèm: **`TRICK.md`** — bản tóm tắt để ôn tập và luyện trả lời trick
 > (thứ tự học, câu hỏi bẫy, số liệu phải nhớ, gap của project, checklist trước PV).
 
 ---
@@ -961,7 +961,7 @@ thái `PENDING` (đơn cũ của các lần chạy trước đã `EXPIRED` nên 
 
 ---
 
-## 10. Câu Hỏi Phỏng Vấn & Trả Lời
+## 10. Câu Hỏi trick & Trả Lời
 
 **1. Tại sao có 2 Redis client?**
 Hai bên yêu cầu trái nhau. `redisClient` cho Redlock cần kiên nhẫn (chờ/thử lại khi tải cao). `cacheClient` cho cache cần fail-fast (không giữ request của user). Tách ra thì Redis chết chỉ ảnh hưởng lock, đọc dữ liệu vẫn chạy qua DB.
@@ -1289,7 +1289,7 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 25 | Chạy cả 7 bộ test liên tiếp vượt `apiRateLimiter` → 429, báo lỗi sai (tưởng server chết) | ✅ Đã sửa | `run-all-tests.cjs` đọc header `RateLimit-*` để chờ đúng cửa sổ; script báo rõ nguyên nhân — mục 8.6b |
 | 26 | Không có seed script → mỗi máy mới phải tự tạo admin, dễ quên mật khẩu | ✅ Đã sửa | `npm run seed` — idempotent, tạo/đặt lại `admin@test.com` — mục 12 |
 
-### Câu hỏi phỏng vấn bổ sung
+### Câu hỏi trick bổ sung
 
 **9. Chuyện gì xảy ra nếu organizer sửa sự kiện đã bán vé?**
 Code cũ `deleteMany` rồi tạo lại `TicketType` nên hoặc lỗi FK (`Ticket` giữ `Restrict`), hoặc reset `availableQuantity = totalQuantity` → oversell. Bản hiện tại reconcile theo `id`: update tại chỗ giữ số đã bán, chỉ xoá loại chưa bán, chặn giảm `totalQuantity` dưới số đã bán, và ghi kho bằng `increment delta` trong transaction (chống race với luồng mua).
