@@ -51,7 +51,7 @@
 
 ```
 event-hub/
-├── frontend/                 # Vue 3 + Vite client application
+├── client/                 # Vue 3 + Vite client application
 │   ├── src/
 │   │   ├── assets/           # Static assets
 │   │   ├── components/       # Reusable Vue components
@@ -64,7 +64,7 @@ event-hub/
 │   ├── .env.example          # Environment variables template
 │   ├── package.json
 │   └── vite.config.ts
-├── backend/                  # Laravel RESTful API
+├── server/                  # Laravel RESTful API
 │   ├── app/
 │   │   ├── Http/Controllers/ # API controllers
 │   │   ├── Models/           # Eloquent models
@@ -102,7 +102,7 @@ cd event-hub
 ### 2. Backend (Laravel) Setup
 
 ```bash
-cd backend
+cd server
 cp .env.example .env
 composer install
 php artisan key:generate
@@ -124,13 +124,13 @@ DB_PASSWORD=secret
 ### 3. Frontend (Vue 3) Setup
 
 ```bash
-cd ../frontend
+cd ../client
 cp .env.example .env
 npm install
 npm run dev
 ```
 
-Configure the API base URL in `frontend/.env`:
+Configure the API base URL in `client/.env`:
 
 ```env
 VITE_API_BASE_URL=http://localhost:8000/api
