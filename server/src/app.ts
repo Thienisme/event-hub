@@ -8,6 +8,7 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import prisma from './utils/prisma';
 import authRoutes from './routes/auth.routes';
 import eventRoutes from './routes/event.routes';
@@ -22,6 +23,18 @@ import { apiRateLimiter } from './middlewares/rateLimit.middleware';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Chỉ bật khi server chạy sau reverse proxy/load balancer (nginx, ALB...).
+// `trust proxy` quyết định `req.ip` lấy từ X-Forwarded-For hay từ socket, nên
+// đặt SAI sẽ cho client tự khai IP của mình và vô hiệu hoá rate limit theo IP.
+// Mặc định tắt: chạy trực tiếp thì không có proxy nào để tin.
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', Number(process.env.TRUST_PROXY));
+}
+
+// Thêm các header bảo mật cơ bản (X-Content-Type-Options, X-Frame-Options,
+// Strict-Transport-Security...). API trả JSON nên không cần cấu hình CSP riêng.
+app.use(helmet());
 
 // CORS: chỉ cho phép origin của frontend (khai báo qua CORS_ORIGINS, phân tách bằng dấu phẩy).
 // - Không có Origin (curl, k6, server-to-server) -> cho qua.
