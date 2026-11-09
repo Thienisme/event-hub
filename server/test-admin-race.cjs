@@ -12,6 +12,44 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+/**
+ * Chặn chạy nhầm trên dữ liệu thật.
+ *
+ * Test này hạ quyền TOÀN BỘ admin đang có để dựng đúng tiền đề 2 admin, nên
+ * chạy trên database thật sẽ làm mất quyền quản trị của hệ thống. Chỉ cho chạy
+ * khi tên database trông giống môi trường phát triển, hoặc khi người chạy đã
+ * xác nhận rõ ràng bằng ALLOW_DESTRUCTIVE_TESTS=true.
+ */
+const SAFE_DB_MARKERS = ['test', 'dev', 'verify', 'eventhub'];
+
+const assertSafeDatabase = () => {
+  if (process.env.ALLOW_DESTRUCTIVE_TESTS === 'true') return;
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error(
+      '❌ Từ chối chạy test-admin-race.cjs vì NODE_ENV=production. ' +
+        'Đặt ALLOW_DESTRUCTIVE_TESTS=true nếu thật sự muốn chạy trên database này.'
+    );
+    process.exit(1);
+  }
+
+  // Bỏ query string, bỏ dấu "/" cuối, rồi lấy đoạn cuối của path làm tên database.
+  const url = process.env.DATABASE_URL || '';
+  const database = url.split('?')[0].replace(/\/+$/, '').split('/').pop() || '';
+  const isSafe = SAFE_DB_MARKERS.some((marker) => database.toLowerCase().includes(marker));
+
+  if (!isSafe) {
+    console.error(
+      `❌ Từ chối chạy test-admin-race.cjs: database "${database}" không chứa ` +
+        `một trong các dấu hiệu an toàn (${SAFE_DB_MARKERS.join(', ')}). ` +
+        'Test này tạm hạ quyền toàn bộ admin. Đặt ALLOW_DESTRUCTIVE_TESTS=true nếu chắc chắn.'
+    );
+    process.exit(1);
+  }
+};
+
+assertSafeDatabase();
+
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 
