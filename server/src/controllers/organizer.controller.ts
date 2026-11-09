@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { handleControllerError } from '../utils/errors';
+import { parsePagination } from '../utils/pagination';
 
 /**
  * Danh sách sự kiện CỦA TÔI (organizer đang đăng nhập).
@@ -12,8 +13,7 @@ import { handleControllerError } from '../utils/errors';
 export const listMyEvents = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+    const { page, limit, skip } = parsePagination(req.query);
     const search = String(req.query.search ?? '').trim();
 
     const where = {
@@ -27,7 +27,7 @@ export const listMyEvents = async (req: Request, res: Response) => {
       prisma.event.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
         select: {
           id: true,

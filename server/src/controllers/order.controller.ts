@@ -12,6 +12,7 @@ import { returnTicketsToStock } from '../utils/orderInventory';
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
 import { exceedsOrderAmount } from '../utils/validation';
+import { parsePagination } from '../utils/pagination';
 
 /** Đơn đang chiếm vé trong kho. Đơn EXPIRED và CANCELLED đã trả vé nên không tính. */
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'CONFIRMED'];
@@ -212,8 +213,7 @@ export const createOrder = async (req: Request, res: Response) => {
 export const MYOrders = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+    const { page, limit, skip } = parsePagination(req.query);
 
     const where = { userId };
 
@@ -234,7 +234,7 @@ export const MYOrders = async (req: Request, res: Response) => {
           },
         },
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
       prisma.order.count({ where }),

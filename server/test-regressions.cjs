@@ -259,6 +259,13 @@ async function testListPaginationIsBounded() {
 
   const longSearch = await fetch(`${API}/events?search=${'a'.repeat(5000)}`);
   check('search rất dài -> 200', longSearch.status === 200, `nhận ${longSearch.status}`);
+
+  const hugePage = 'page=99999999999999999999';
+  const myOrders = await authed(organizer.token, 'GET', `/orders/my-orders?${hugePage}`);
+  check('/orders/my-orders page rất lớn -> 200', myOrders.status === 200, `nhận ${myOrders.status}`);
+
+  const myEvents = await authed(organizer.token, 'GET', `/organizer/events?${hugePage}`);
+  check('/organizer/events page rất lớn -> 200', myEvents.status === 200, `nhận ${myEvents.status}`);
 }
 
 async function testValidatedBodyIsUsed() {

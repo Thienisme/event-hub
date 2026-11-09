@@ -10,10 +10,9 @@ import {
   invalidateEventDetails,
   listCacheKey,
 } from '../utils/cache';
+import { parsePagination } from '../utils/pagination';
 
 /** Giới hạn tham số của API danh sách công khai. */
-const MAX_LIST_LIMIT = 100;
-const MAX_LIST_PAGE = 1_000_000;
 const MAX_SEARCH_LENGTH = 100;
 
 /**
@@ -104,14 +103,7 @@ export const getEvents = async (req: Request, res: Response) => {
   try {
     // Đây là API công khai và các giá trị này còn nằm trong khoá cache, nên phải
     // giới hạn: không để một request tải cả bảng hay làm phình Redis.
-    const page = Math.min(
-      MAX_LIST_PAGE,
-      Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1)
-    );
-    const limit = Math.min(
-      MAX_LIST_LIMIT,
-      Math.max(1, parseInt(String(req.query.limit ?? '10'), 10) || 10)
-    );
+    const { page, limit, skip } = parsePagination(req.query, 10);
     const search = String(req.query.search ?? '').trim().slice(0, MAX_SEARCH_LENGTH);
 
     // Khoá cache có kèm version: khi version tăng, mọi key cũ trở nên vô hình.
@@ -121,8 +113,6 @@ export const getEvents = async (req: Request, res: Response) => {
     // cacheGetOrLoad lo cả ba việc: đọc cache, chống stampede, và cho biết dữ liệu
     // đến từ đâu ('cache' | 'database') — vừa để FE biết, vừa để đo hit rate.
     const { value: result, source } = await cacheGetOrLoad(cacheKey, async () => {
-      const skip = (page - 1) * limit;
-
       const whereCondition = search
         ? {
             OR: [

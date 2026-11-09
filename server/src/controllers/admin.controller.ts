@@ -4,6 +4,7 @@ import prisma from '../utils/prisma';
 import { handleControllerError } from '../utils/errors';
 import { writeAuditLog } from '../utils/audit';
 import { invalidateUserState } from '../utils/userState';
+import { parsePagination } from '../utils/pagination';
 
 const USER_SELECT = {
   id: true,
@@ -88,8 +89,7 @@ const runWithDeadlockRetry = async <T>(
  */
 export const listUsers = async (req: Request, res: Response) => {
   try {
-    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+    const { page, limit, skip } = parsePagination(req.query);
     const search = String(req.query.search ?? '').trim();
     const role = String(req.query.role ?? '').trim();
     const status = String(req.query.status ?? '').trim();
@@ -113,7 +113,7 @@ export const listUsers = async (req: Request, res: Response) => {
         where,
         select: USER_SELECT,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
       prisma.user.count({ where }),
@@ -345,8 +345,7 @@ export const getAdminStats = async (req: Request, res: Response) => {
 /** Danh sách toàn bộ sự kiện (ADMIN) — kèm số vé đã bán để quản lý. */
 export const listAllEvents = async (req: Request, res: Response) => {
   try {
-    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+    const { page, limit, skip } = parsePagination(req.query);
     const search = String(req.query.search ?? '').trim();
 
     const where = search
@@ -357,7 +356,7 @@ export const listAllEvents = async (req: Request, res: Response) => {
       prisma.event.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
         select: {
           id: true,
@@ -394,13 +393,12 @@ export const listAllEvents = async (req: Request, res: Response) => {
 /** Nhật ký thao tác quản trị (ADMIN). */
 export const listAuditLogs = async (req: Request, res: Response) => {
   try {
-    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+    const { page, limit, skip } = parsePagination(req.query);
 
     const [logs, total] = await Promise.all([
       prisma.adminAuditLog.findMany({
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
         select: {
           id: true,
