@@ -17,10 +17,13 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
  *
  * Test này hạ quyền TOÀN BỘ admin đang có để dựng đúng tiền đề 2 admin, nên
  * chạy trên database thật sẽ làm mất quyền quản trị của hệ thống. Chỉ cho chạy
- * khi tên database trông giống môi trường phát triển, hoặc khi người chạy đã
+ * khi DATABASE_URL trỏ tới máy chủ cục bộ (localhost, 127.0.0.1 hoặc ::1) VÀ
+ * tên database trông giống môi trường phát triển, hoặc khi người chạy đã
  * xác nhận rõ ràng bằng ALLOW_DESTRUCTIVE_TESTS=true.
  */
 const SAFE_DB_MARKERS = ['test', 'dev', 'verify', 'eventhub'];
+// new URL() trả host IPv6 kèm ngoặc vuông nên ::1 có dạng [::1].
+const SAFE_DB_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 const assertSafeDatabase = () => {
   if (process.env.ALLOW_DESTRUCTIVE_TESTS === 'true') return;
@@ -33,8 +36,33 @@ const assertSafeDatabase = () => {
     process.exit(1);
   }
 
-  // Bỏ query string, bỏ dấu "/" cuối, rồi lấy đoạn cuối của path làm tên database.
+  // Tách host bằng new URL(); nếu URL sai định dạng thì chặn luôn, in host là "(không phân tích được)".
   const url = process.env.DATABASE_URL || '';
+  let hostname = '';
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    console.error(
+      '❌ Từ chối chạy test-admin-race.cjs: DATABASE_URL không phân tích được ' +
+        `(host hiện tại: "(không phân tích được)"). ` +
+        'Test này tạm hạ quyền toàn bộ admin, chỉ cho chạy với database cục bộ. ' +
+        'Đặt ALLOW_DESTRUCTIVE_TESTS=true nếu chắc chắn.'
+    );
+    process.exit(1);
+  }
+
+  // Host phải là máy cục bộ: dấu hiệu "eventhub" trong tên database không thay thế được bước này,
+  // nên vẫn chặn khi DATABASE_URL trỏ tới máy chủ thật dù tên database chứa "eventhub".
+  if (!SAFE_DB_HOSTS.includes(hostname)) {
+    console.error(
+      `❌ Từ chối chạy test-admin-race.cjs: host của DATABASE_URL là "${hostname}" ` +
+        `không phải máy cục bộ (localhost, 127.0.0.1, ::1). ` +
+        'Test này tạm hạ quyền toàn bộ admin. Đặt ALLOW_DESTRUCTIVE_TESTS=true nếu chắc chắn.'
+    );
+    process.exit(1);
+  }
+
+  // Bỏ query string, bỏ dấu "/" cuối, rồi lấy đoạn cuối của path làm tên database.
   const database = url.split('?')[0].replace(/\/+$/, '').split('/').pop() || '';
   const isSafe = SAFE_DB_MARKERS.some((marker) => database.toLowerCase().includes(marker));
 
