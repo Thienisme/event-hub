@@ -39,8 +39,31 @@ export interface CreateOrderResponse {
   order: Order;
 }
 
+/** POST /orders/:id/confirm và /orders/:id/cancel trả cùng dạng này */
+export type UpdateOrderResponse = CreateOrderResponse;
+
+export interface OrderPagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** GET /orders/my-orders: cùng dạng phân trang với danh sách sự kiện của admin */
+export interface OrderListResponse {
+  message: string;
+  data: Order[];
+  pagination: OrderPagination;
+}
+
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);
+  const pagination = ref<OrderPagination>({
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0,
+  });
   const loading = ref(false);
 
   /**
@@ -60,22 +83,76 @@ export const useOrderStore = defineStore('order', () => {
     return response.data;
   }
 
-  /** BE trả về mảng order trực tiếp (không bọc trong { data }) */
-  async function fetchMyOrders(): Promise<Order[]> {
+  /** BE trả về { message, data, pagination }, mặc định 20 đơn mỗi trang */
+  async function fetchMyOrders(page = 1, limit = 20): Promise<OrderListResponse> {
     loading.value = true;
     try {
-      const response = await apiClient.get<Order[]>('/orders/my-orders');
-      orders.value = response.data;
+      const response = await apiClient.get<OrderListResponse>('/orders/my-orders', {
+        params: { page, limit },
+      });
+      orders.value = response.data.data;
+      pagination.value = response.data.pagination;
       return response.data;
     } finally {
       loading.value = false;
     }
   }
 
+  /**
+   * Thay một đơn trong state bằng dữ liệu mới, giữ lại thông tin loại vé/sự kiện.
+   *
+   * /confirm và /cancel chỉ include `tickets` trần, nên mỗi ticket trả về KHÔNG
+   * có `ticketType.event` (khác /orders/my-orders). Gán đè nguyên object sẽ làm
+   * dòng vé mất tên loại vé và tên sự kiện cho tới khi F5. Ticket id không đổi
+   * khi thanh toán/huỷ, nên ghép lại theo id là đủ.
+   */
+  function replaceOrder(updated: Order): void {
+    const index = orders.value.findIndex((order) => order.id === updated.id);
+
+    if (index === -1) {
+      orders.value = [updated, ...orders.value];
+      return;
+    }
+
+    const previousTickets = new Map(
+      orders.value[index].tickets.map((ticket) => [ticket.id, ticket])
+    );
+
+    const merged: Order = {
+      ...updated,
+      tickets: updated.tickets.map((ticket) => ({
+        ...ticket,
+        ticketType: ticket.ticketType ?? previousTickets.get(ticket.id)?.ticketType,
+      })),
+    };
+
+    orders.value = orders.value.map((order, i) => (i === index ? merged : order));
+  }
+
+  /**
+   * Thanh toán giả lập: BE sinh qrCode cho từng vé và trả đơn đã CONFIRMED.
+   * Gọi lại khi đơn đã CONFIRMED vẫn 200, nên bấm lại không phải lỗi.
+   */
+  async function confirmOrder(id: string): Promise<UpdateOrderResponse> {
+    const response = await apiClient.post<UpdateOrderResponse>(`/orders/${id}/confirm`);
+    replaceOrder(response.data.order);
+    return response.data;
+  }
+
+  /** Huỷ đơn PENDING, BE trả vé về kho và trả đơn đã CANCELLED. */
+  async function cancelOrder(id: string): Promise<UpdateOrderResponse> {
+    const response = await apiClient.post<UpdateOrderResponse>(`/orders/${id}/cancel`);
+    replaceOrder(response.data.order);
+    return response.data;
+  }
+
   return {
     orders,
+    pagination,
     loading,
     createOrder,
     fetchMyOrders,
+    confirmOrder,
+    cancelOrder,
   };
 });

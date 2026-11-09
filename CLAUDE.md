@@ -12,6 +12,7 @@ docker compose up -d                 # chỉ bật MySQL và Redis; server và c
 # server/ (mặc định http://localhost:5000, cần .env với DATABASE_URL và JWT_SECRET >= 32 ký tự)
 npm run dev                          # ts-node-dev, tự reload
 npm run build                        # tsc; dùng `npx tsc --noEmit` để chỉ kiểm tra kiểu
+npm start                            # chạy dist/app.js sau khi build
 npx prisma migrate deploy            # áp dụng migration
 npx prisma migrate dev --name <ten>  # tạo migration mới (kèm DROP DEFAULT của actorEmail do schema đang lệch)
 npm run seed                         # tạo hoặc đặt lại admin@test.com
@@ -21,7 +22,11 @@ npm run dev
 npm run build                        # vue-tsc rồi vite build
 ```
 
-Dự án không có linter, CI, script `start` hay test cho client.
+Dự án không có linter. CI ở `.github/workflows/ci.yml`; client chưa có test tự động.
+
+```bash
+docker compose -f docker-compose.prod.yml up --build   # client :8081; cần MYSQL_ROOT_PASSWORD và JWT_SECRET
+```
 
 ### Test
 
@@ -33,8 +38,8 @@ node test-regressions.cjs            # một bộ; không lọc được từng 
 BASE_URL=http://localhost:5055/api npm run test:all   # server ở cổng khác
 ```
 
-- **Script test ghi vào database mà `DATABASE_URL` trỏ tới và không kiểm tra đó là database nào.** `test-admin-race.cjs` tạm hạ quyền toàn bộ admin. Không chạy trên dữ liệu thật. Biến môi trường đã đặt sẵn sẽ được ưu tiên hơn `.env`, nên có thể trỏ sang database tạm.
-- Rate limit theo IP nằm trong RAM server (100 request/phút, 30 request admin/phút, 5 lần đăng nhập sai/phút) và áp dụng cả cho test. Chạy lặp liên tục sẽ nhận 429, thường biểu hiện thành lỗi đăng nhập hoặc lỗi parse JSON, không phải bug. Hãy chờ khoảng 1 phút hoặc khởi động lại server.
+- **Script test ghi vào database mà `DATABASE_URL` trỏ tới.** `test-admin-race.cjs` tạm hạ quyền toàn bộ admin, nhưng đã từ chối chạy khi `NODE_ENV=production` hoặc tên database không chứa `test`, `dev`, `verify` hay `eventhub`, trừ khi đặt `ALLOW_DESTRUCTIVE_TESTS=true`. Các test khác vẫn ghi thật, nên không chạy trên dữ liệu thật. Biến môi trường đã đặt sẵn sẽ được ưu tiên hơn `.env`, nên có thể trỏ sang database tạm.
+- Rate limit theo IP nằm trong RAM server (100 request/phút, 30 request admin/phút, 5 lần đăng nhập sai/phút) và áp dụng cả cho test. Chạy lặp liên tục sẽ nhận 429 dạng JSON `{ message }`, không phải bug. Hãy chờ khoảng 1 phút hoặc khởi động lại server.
 - Bộ test mới cần thêm vào `SUITES` trong `run-all-tests.cjs` và `scripts` trong `package.json`.
 - `load-test*.js` chạy bằng k6. `oversell-*.cjs` là kịch bản tái hiện tranh chấp vé, không nằm trong `test:all`, và cần có sẵn ít nhất một sự kiện trong database.
 
@@ -47,8 +52,9 @@ Luồng request ở server: `routes/` gắn middleware theo thứ tự `authenti
 `availableQuantity` là số vé còn lại; số đã "bán" được tính bằng `totalQuantity - availableQuantity`, nên đã gồm cả vé đang giữ chỗ.
 
 - **Chốt chặn chống bán quá số vé là `updateMany` có điều kiện `availableQuantity >= quantity`** trong `createOrder`, cùng `CHECK` ở database. Redlock chỉ là lớp bên ngoài. Không đổi thành kiểu đọc rồi mới ghi.
-- Vòng đời đơn: `createOrder` tạo `PENDING`, `jobs/expireOrders.job.ts` chuyển sang `EXPIRED` và trả vé về kho sau `ORDER_HOLD_MINUTES`. Chưa có code nào tạo `CONFIRMED` hoặc `CANCELLED`, và `qrCode` chưa được sinh.
-- Đơn `EXPIRED` vẫn giữ dòng `Ticket` để hiển thị lịch sử, mà `tickets -> ticket_types` là FK `RESTRICT`. Vì vậy xoá sự kiện hoặc loại vé phải xoá đơn `EXPIRED` liên quan trong cùng transaction (`deleteExpiredOrdersOf` trong `event.controller.ts`).
+- Vòng đời đơn: `createOrder` tạo `PENDING`; từ đó chỉ một trong ba đường đổi được trạng thái nhờ `updateMany` có điều kiện: `confirmOrder` (`CONFIRMED`, sinh `qrCode`, thanh toán giả lập), `cancelOrder` (`CANCELLED`) và `jobs/expireOrders.job.ts` (`EXPIRED`). Hai đường sau trả vé qua `returnTicketsToStock` trong cùng transaction.
+- Hạn mức theo tài khoản nằm trong `createOrder`: câu đầu tiên của transaction phải là `SELECT ... FOR UPDATE` trên dòng user. Redlock khoá theo loại vé nên không bảo vệ được hạn mức, và đọc thường trước đó sẽ chụp snapshot cũ.
+- Đơn `EXPIRED` và `CANCELLED` vẫn giữ dòng `Ticket` để hiển thị lịch sử, mà `tickets -> ticket_types` là FK `RESTRICT`. Vì vậy xoá sự kiện hoặc loại vé phải xoá đơn `EXPIRED` và `CANCELLED` liên quan trong cùng transaction (`deleteReleasedOrdersOf` trong `event.controller.ts`).
 - `updateEvent` đối chiếu loại vé theo `id` và dùng `increment` theo chênh lệch. `ticketTypes` là `undefined` nghĩa là không đụng tới, còn `[]` nghĩa là xoá hết các loại chưa bán. POST và PUT dùng chung `createEventSchema`.
 - MySQL từ chối `deleteMany` có điều kiện quan hệ (lỗi 1093): hãy tìm id trước rồi xoá theo id.
 
@@ -79,6 +85,7 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 - `api/session.ts` là kênh callback giữa axios và `main.ts`, dùng để tránh vòng import với router.
 - `token` lưu ở `localStorage`, còn `user` chỉ nằm trong RAM. Router guard của route cần role phải chờ `authStore.ensureProfile()`.
 - Prisma `Decimal` được serialize thành chuỗi trong JSON, nên phải chuyển sang số trước khi tính toán hoặc định dạng.
+- `MyOrdersView` gọi `confirmOrder`/`cancelOrder` của store; response của hai endpoint này chỉ kèm `tickets` trần, nên store ghép lại `ticketType` cũ theo ticket id. Đồng hồ đếm ngược dùng một interval chung và phải clear trong `onUnmounted`.
 
 ## Tài liệu
 

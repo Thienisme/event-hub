@@ -88,6 +88,7 @@ model Event {
   organizer   User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
   ticketTypes TicketType[]
 
+  @@index([createdAt])
   @@map("events")
 }
 
@@ -122,6 +123,7 @@ model Order {
   user         User        @relation(fields: [userId], references: [id])
   tickets      Ticket[]
 
+  @@index([status, expiresAt])
   @@map("orders")
 }
 

@@ -181,8 +181,9 @@ thanh toán, xa hơn nhiều so với lúc tạo sự kiện. Vì vậy `createE
 giá vé có thể được sửa sau khi sự kiện đã tạo).
 
 Khi so sánh ở biên, `exceedsOrderAmount` **làm tròn về 2 chữ số thập phân trước**, vì
-phép nhân số thực có thể lệch (`0.1 * 3` ra `0.30000000000000004`). Lưu ý `totalAmount`
-hiện vẫn tính bằng `price.toNumber() * quantity`; chuyển sang `Decimal` sẽ chính xác hơn.
+phép nhân số thực có thể lệch (`0.1 * 3` ra `0.30000000000000004`). Phép nhân lưu vào
+`orders.totalAmount` dùng `ticketType.price.mul(quantity)` để giữ kiểu `Decimal`;
+`exceedsOrderAmount` vẫn nhận số thực vì nó chỉ để so biên, không ghi vào DB.
 
 > Prisma không so sánh CHECK constraint, nên constraint viết tay **không** gây drift:
 > `prisma migrate diff` giữa thư mục migrations và database cho kết quả "No difference
@@ -1033,13 +1034,13 @@ Vì nó không "đọc rồi ghi" — nó dùng `updateMany` có điều kiện 
 
 ## 11. Hướng Phát Triển Tiếp
 
-**Production ready:** Dockerfile và cấu hình deploy (`docker-compose.yml` hiện chỉ có MySQL + Redis cho dev); secret management thay `.env`; structured logging (Winston/Pino); `/ready` + `/live` endpoints.
+**Production ready:** đã có Dockerfile multi-stage và `docker-compose.prod.yml` (service migrate chạy trước API, client phục vụ bằng nginx); còn thiếu secret management thay `.env`, structured logging (Winston/Pino), `/ready` + `/live` endpoints và TLS.
 
 **Observability:** Prometheus metrics; OpenTelemetry tracing; alerting theo ngưỡng; Grafana dashboard.
 
 **Scale:** queue-based booking thay vì real-time; event-driven (Kafka/RabbitMQ) cho order processing; tách microservices (auth/event/order); CDN cho static asset.
 
-**Bảo mật còn thiếu:** refresh token; HTTPS/HSTS; thêm `helmet` cho secure headers. (rate limit cho `/auth/*` đã có — mục 6.6)
+**Bảo mật còn thiếu:** refresh token; HTTPS/HSTS. `helmet` đã bật trong `app.ts`; `TRUST_PROXY` có sẵn cho reverse proxy (mặc định tắt). (rate limit cho `/auth/*` đã có — mục 6.6)
 
 **Tính năng:** tích hợp VNPay/MoMo; email/SMS xác nhận & nhắc hết hạn; WebSocket cập nhật tồn kho real-time; **RBAC động** (role/permission tùy biến — xem mục 6.7); xuất CSV báo cáo doanh thu; trang quản lý người dùng cho organizer.
 
@@ -1095,7 +1096,8 @@ npm run test:order                        # totalAmount DECIMAL(12,2)
 npm run test:validation                   # endTime > startTime, role khi đăng ký
 npm run test:cors                        # whitelist origin (5173-5176, preflight, env override)
 npm run test:regressions                  # các lỗi đã sửa khi review
-npm run test:all                         # chạy cả 8 bộ, TỰ CHỜ hết cửa sổ rate limit
+npm run test:lifecycle                    # confirm/cancel, QR, hạn mức theo tài khoản
+npm run test:all                         # chạy cả 9 bộ, TỰ CHỜ hết cửa sổ rate limit
 npm run seed                             # tạo/đặt lại tài khoản admin@test.com
 k6 run load-test.js                    # 100 VUs đường ghi
 k6 run load-test-concurrent.js         # 200 VUs, 10 vé
@@ -1172,7 +1174,10 @@ NODE_ENV=development                               # production -> Prisma chỉ 
 | `server/test-validation.cjs` | Ràng buộc schema: `endTime > startTime`, role khi đăng ký |
 | `server/test-cors.cjs` | Whitelist origin + preflight + `CORS_ORIGINS` từ env |
 | `server/test-regressions.cjs` | Test các lỗi đã sửa khi review, gồm dựng instance lỗi DB |
-| `server/run-all-tests.cjs` | Chạy cả 8 bộ test, tự chờ hết cửa sổ rate limit |
+| `server/test-order-lifecycle.cjs` | Confirm/cancel, QR từng vé, hạn mức theo tài khoản, tranh chấp confirm/cancel |
+| `server/run-all-tests.cjs` | Chạy cả 9 bộ test, tự chờ hết cửa sổ rate limit |
+| `server/Dockerfile`, `docker-compose.prod.yml` | Image multi-stage, migrate trước API, client qua nginx |
+| `.github/workflows/ci.yml` | CI trên pull request: MySQL 8, Redis 7, migration, test:all, build client |
 | `server/src/utils/cors.ts` | Parse whitelist origin (tách ra để test được) |
 | `server/prisma/seed.ts` | Tạo/đặt lại tài khoản admin (idempotent) |
 
@@ -1203,17 +1208,19 @@ Phần này gom những case **không nằm trong 4 bài toán chính** nhưng r
 
 > Bài học: frontend **phải gửi kèm `ticketType.id`** lên khi edit (`EventFormView.vue`). Thiếu id thì backend tưởng là loại vé mới → tạo trùng. Zod (`validation.ts`) chỉ kiểm tra `totalQuantity >= 1`, **không đủ** cho ràng buộc nghiệp vụ xuyên bảng — phần cross-check phải nằm ở controller.
 
-### 15.2 Đơn `CONFIRMED` / `CANCELLED` là trạng thái "chết" ⚠️
+### 15.2 Vòng đời đơn hàng — `CONFIRMED`, `CANCELLED` và mã QR (đã có)
 
-`schema.prisma` định nghĩa 4 trạng thái `PENDING | CONFIRMED | CANCELLED | EXPIRED`, và UI `MyOrdersView.vue` có nhãn cho cả 4. Nhưng grep toàn bộ `server/src` cho thấy:
+`schema.prisma` định nghĩa 4 trạng thái `PENDING | CONFIRMED | CANCELLED | EXPIRED`. Trước đây chỉ `PENDING` (tạo đơn) và `EXPIRED` (job nền) được set; giờ có thêm hai endpoint:
 
-- **Chỉ** `PENDING` được set khi tạo đơn (`order.controller.ts`).
-- **Chỉ** `EXPIRED` được set bởi job nền (`expireOrders.job.ts`).
-- **Không có chỗ nào** set `CONFIRMED` hay `CANCELLED`.
+- `POST /orders/:id/confirm` — thanh toán **giả lập**. `updateMany` có điều kiện `status: 'PENDING'` và `expiresAt: { gt: new Date() }` đổi sang `CONFIRMED`; mỗi vé được gán `qrCode = randomBytes(16).toString('base64url')` (128 bit, mỗi vé một mã). Gọi lại khi đơn đã `CONFIRMED` trả 200 và giữ nguyên QR. Đơn đã huỷ hoặc quá hạn trả 409.
+- `POST /orders/:id/cancel` — chỉ huỷ đơn `PENDING`. `returnTicketsToStock` cộng vé về kho trong **cùng transaction**; gọi lại khi đã `CANCELLED` trả 200 nhưng không cộng vé lần nữa. Đơn đã thanh toán trả 409 (chưa có hoàn tiền).
+- Ở production, confirm trả 404 `"Chức năng thanh toán giả lập không khả dụng!"` trừ khi đặt `ALLOW_SIMULATED_PAYMENT=true`.
 
-Hệ quả: **không có endpoint thanh toán/xác nhận**, nên mọi đơn rồi cũng sẽ hết hạn sau 10 phút và doanh thu trong thống kê luôn bằng 0. `soldTickets` của organizer tính cả vé đang giữ chỗ. Nhãn "Đã xác nhận"/"Đã huỷ" trong UI hiện không bao giờ xuất hiện. Tương tự, `Ticket.qrCode` (`schema.prisma`) **chưa bao giờ được sinh** — luôn `NULL`.
+`updateMany` có điều kiện là CAS: confirm, cancel và job hết hạn tranh nhau đổi trạng thái, chỉ một bên thắng. Nhờ vậy không có chuyện vừa huỷ vừa thanh toán, và huỷ hai lần không trả vé hai lần.
 
-Đây là điều nên nói rõ khi review: đây là bản demo luồng giữ chỗ, chưa có payment. Khi bổ sung thanh toán cần: endpoint `POST /orders/:id/confirm` (đổi PENDING→CONFIRMED trong transaction), endpoint huỷ, và sinh `qrCode` khi confirm.
+Hệ quả: doanh thu trong thống kê admin/organizer chỉ cộng đơn `CONFIRMED`, nên **không còn luôn bằng 0**. Vé `PENDING` vẫn là giữ chỗ, không tính doanh thu. Giao diện `MyOrdersView.vue` đếm ngược `expiresAt`, hỏi lại bằng `ConfirmDialog` trước khi huỷ, disable nút khi đang gửi, và hiển thị QR từng vé (có nút xem lớn) cho đơn `CONFIRMED`.
+
+Hạn mức theo tài khoản: `MAX_TICKETS_PER_USER_PER_EVENT` (mặc định **100 vé cho mỗi sự kiện**, tính cả `PENDING` và `CONFIRMED`). Vẫn lách được bằng nhiều tài khoản vì chưa xác thực email.
 
 ### 15.3 Case frontend đáng học
 
@@ -1311,7 +1318,7 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 |---|-----|--------|---------|
 | 1 | Update event reset kho đã bán / lỗi FK | ✅ Đã sửa | Mục 15.1 — reconcile theo id + transaction + atomic inventory |
 | 1b | Delete event đã bán vé vẫn lỗi FK | ✅ Đã sửa | Bắt `P2003` → 400 (`event.controller.ts`) |
-| 2 | Không có thanh toán → `CONFIRMED`/`CANCELLED`/`qrCode` không dùng, doanh thu luôn bằng 0 | **Cao** | Luồng mua vé chưa khép kín — mục 15.2 |
+| 2 | Chưa có thanh toán thật → chỉ thanh toán giả lập | Trung bình | Đã có confirm/cancel + QR và doanh thu tính đơn `CONFIRMED`; chưa có VNPay/MoMo, webhook chữ ký và hoàn tiền — mục 15.2 |
 | 3 | Không có rate limit riêng cho `/auth/login`, `/auth/register` | ✅ Đã sửa | `authRateLimiter` cho login; `registerRateLimiter` cho register — mục 6.6 |
 | 4 | CORS mở mọi origin | ✅ Đã sửa | Whitelist qua `CORS_ORIGINS`; mục 15.4 |
 | 5 | Frontend bypass axios ở 3 chỗ | ✅ Đã sửa | Gom về `apiClient`; mục 15.4 |
@@ -1319,7 +1326,7 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 7 | Không có refresh token (JWT 1 ngày, hết là đăng nhập lại) | Thấp | Chấp nhận được cho demo |
 | 8 | `registerSchema` cho phép gửi `role: ORGANIZER` rồi controller bỏ qua | ✅ Đã sửa | Bỏ hẳn field `role` khỏi schema — `role` không còn tồn tại trên API đăng ký; mục 6.3 |
 | 9 | Không validate `endTime > startTime` | ✅ Đã sửa | `superRefine` ở cấp object của `createEventSchema` (áp cho cả POST và PUT) + check ở form client; mục 6.5 |
-| 10 | Không có CI và test client | Trung bình | `npm run test:all` chạy 8 bộ test tích hợp, nhưng phải chạy tay và cần server, MySQL, Redis |
+| 10 | Client chưa có test tự động | Thấp | CI đã chạy 9 bộ test tích hợp và build client trên mỗi pull request; chưa có test UI — mục 17 |
 | 11 | Tài khoản bị khoá vẫn giữ token cũ | ✅ Đã sửa | `authenticate` hỏi DB mỗi request (cache 30s, xoá cache khi đổi quyền); token hết hạn 1 ngày nhưng quyền bị thu hồi ngay — mục 6.7 |
 | 12 | Admin tự hạ quyền / khoá chính mình | ✅ Đã sửa | Chặn ở `admin.controller.ts` + audit log |
 | 13 | Hạ quyền admin cuối cùng → hệ thống mất người quản trị | ✅ Đã sửa | Đếm admin active trong transaction có `FOR UPDATE`; test race 2 admin cùng hạ quyền nhau (`test-admin-race.cjs`) — mục 8.5 |
@@ -1337,15 +1344,15 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 | 25 | Chạy cả bộ test liên tiếp vượt `apiRateLimiter` → 429, báo lỗi sai (tưởng server chết) | ✅ Đã sửa | `run-all-tests.cjs` đọc header `RateLimit-*` để chờ đúng cửa sổ; script báo rõ nguyên nhân — mục 8.6b |
 | 26 | Không có seed script → mỗi máy mới phải tự tạo admin, dễ quên mật khẩu | ✅ Đã sửa | `npm run seed` — idempotent, tạo/đặt lại `admin@test.com` — mục 12 |
 | 27 | Các lỗi mục 9 #19–#27 | ✅ Đã sửa | `test-regressions.cjs`, `test-admin-race.cjs` và kiểm tra bằng Chrome cho lỗi F5 |
-| 28 | Một tài khoản giữ được khoảng 3.000 vé miễn phí | **Cao** | 15 đơn/5 phút × 100 vé × giữ 10 phút; chưa giới hạn theo người hoặc sự kiện, đăng ký không xác thực email |
+| 28 | Một tài khoản giữ tối đa 100 vé mỗi sự kiện | Trung bình | `MAX_TICKETS_PER_USER_PER_EVENT` mặc định 100 (tính cả PENDING/CONFIRMED); vẫn lách được bằng nhiều tài khoản, chưa xác thực email |
 | 29 | Gửi trùng tạo hai đơn | Trung bình | Chưa có idempotency key — mục 7 |
 | 30 | Đặt vé phụ thuộc Redis | Trung bình | Redis chết thì không đặt được vé dù MySQL khoẻ — mục 4.3 |
 | 31 | Cache danh sách bị vô hiệu sau mỗi đơn | Trung bình | Hiệu quả cache giảm đúng lúc đông khách — mục 5.2 |
-| 32 | Rate limit nằm trong RAM, chưa bật `trust proxy` | Trung bình | Không dùng chung giữa các instance; sau proxy có thể gộp mọi người vào một IP |
-| 33 | Thiếu index | Trung bình | `orders(status, expiresAt)` bị job quét mỗi 60 giây; `events.createdAt` dùng để sắp xếp |
-| 34 | 429 từ rate limiter là text thuần | Thấp | Client đọc `data.message` không có nên hiện thông báo dự phòng |
-| 35 | `totalAmount` tính bằng số thực | Thấp | Nên dùng `Decimal.mul` |
-| 36 | `test-admin-race.cjs` không kiểm tra đang trỏ vào database nào | Trung bình | Script hạ quyền toàn bộ admin trong lúc chạy |
+| 32 | Rate limit nằm trong RAM | Trung bình | Không dùng chung giữa các instance. Đã hỗ trợ `TRUST_PROXY` khi chạy sau reverse proxy (mặc định tắt) |
+| 33 | Thiếu index | ✅ Đã sửa | Migration thêm `orders(status, expiresAt)` và `events(createdAt)` — mục 17 |
+| 34 | 429 từ rate limiter là text thuần | ✅ Đã sửa | Message đổi thành `{ message }` để client đọc `data.message` |
+| 35 | `totalAmount` tính bằng số thực | ✅ Đã sửa | Dùng `ticketType.price.mul(quantity)`; `exceedsOrderAmount` vẫn kiểm tra biên |
+| 36 | `test-admin-race.cjs` không kiểm tra đang trỏ vào database nào | ✅ Đã sửa | Từ chối chạy khi `NODE_ENV=production` hoặc tên DB không chứa test/dev/verify/eventhub, trừ khi `ALLOW_DESTRUCTIVE_TESTS=true` |
 | 37 | Thỉnh thoảng gặp `Server has closed the connection` | Chưa rõ | Gặp 1 lần trong khoảng 36 lần chạy `test:race`, MySQL không khởi động lại; chưa tìm ra nguyên nhân |
 
 ### Câu hỏi trick bổ sung
@@ -1353,8 +1360,11 @@ Endpoint của organizer (`/api/organizer/events`) lọc `where: { organizerId: 
 **9. Chuyện gì xảy ra nếu organizer sửa sự kiện đã bán vé?**
 Code cũ `deleteMany` rồi tạo lại `TicketType` nên hoặc lỗi FK (`Ticket` giữ `Restrict`), hoặc reset `availableQuantity = totalQuantity` → oversell. Bản hiện tại reconcile theo `id`: update tại chỗ giữ số đã bán, chỉ xoá loại chưa bán, chặn giảm `totalQuantity` dưới số đã bán, và ghi kho bằng `increment delta` trong transaction (chống race với luồng mua).
 
-**10. Vì sao đơn không bao giờ ở trạng thái `CONFIRMED`?**
-Vì chưa có endpoint thanh toán/xác nhận — chỉ có job chuyển `PENDING → EXPIRED`. `CONFIRMED`/`CANCELLED` mới chỉ là enum dự trù. Đây là giới hạn phạm vi của demo, không phải bug logic lock/CAS.
+**10. Vì sao confirm/cancel dùng `updateMany` có điều kiện thay vì đọc rồi ghi?**
+Vì ba đường confirm, cancel và job hết hạn cùng tranh nhau đổi trạng thái. Điều kiện `status = 'PENDING'` (và `expiresAt > now` khi confirm) được MySQL đánh giá trong chính câu UPDATE, nên chỉ một bên thắng; đọc trước rồi ghi sẽ có khe hở giữa hai bước. Gọi lại confirm/cancel là idempotent ở mức nghiệp vụ: confirm lại giữ nguyên QR, cancel lại không cộng vé lần nữa.
+
+**10b. Vì sao hạn mức vé phải khoá dòng user bằng `SELECT ... FOR UPDATE` và phải là câu đầu tiên của transaction?**
+Redlock khoá theo **loại vé**, nên hai đơn của cùng một người ở hai loại vé khác nhau không xếp hàng được. Ngoài ra MySQL mặc định `REPEATABLE READ` chụp snapshot ở lần đọc thường đầu tiên, nên nếu đọc `count` trước khi có khoá, transaction không thấy đơn vừa commit ở transaction khác. Khi gỡ khoá để thử, 8 đơn đồng thời mỗi đơn 30 vé giữ được **120 vé**, vượt hạn mức 100. Test: `test-order-lifecycle.cjs` mục 4.
 
 **11. Vì sao phải có cờ `loaded` ở frontend?**
 Vì `onMounted` chạy **sau** lần render đầu. Nếu chỉ kiểm tra `events.length === 0`, lần render đầu sẽ hiện "Không có sự kiện" trong tích tắc dù đang tải. Cờ `loaded` phân biệt "chưa gọi API" với "gọi xong và rỗng".
@@ -1396,6 +1406,20 @@ Chưa. Khi còn đủ vé, hai request đều thành công và tạo hai đơn; 
 
 **22. Vì sao một lỗi database từng làm sập cả server?**
 Express 4 không bắt được promise bị reject trong handler async, và từ Node 15 unhandled rejection mặc định làm tiến trình thoát. Chỉ một route thiếu `try/catch` là đủ. Test bằng cách dựng instance trỏ tới database không tồn tại, đặt sẵn trạng thái tài khoản trong Redis để request đi tới đúng handler.
+
+---
+
+## 17. Kết quả các việc bàn giao (09/11/2026)
+
+Ba phần việc trong `docs/HANDOFF_UI_PROMPT.md` đã hoàn thành trên nhánh `feat/order-lifecycle`, mỗi phần một commit (Prompt 2 tách theo từng mục):
+
+- **UI vòng đời đơn:** store có `confirmOrder`/`cancelOrder` và ghép lại `ticketType` sau response; đơn `PENDING` có đếm ngược giữ chỗ, nút thanh toán giả lập, huỷ đơn qua `ConfirmDialog`; đơn `CONFIRMED` hiện QR từng vé bằng thư viện `qrcode`, có hộp thoại xem lớn. Gặp 409 chỉ báo lỗi và tải lại danh sách, không đăng xuất.
+- **Backend nhỏ:** rate limit trả `{ message }`; `helmet` + `TRUST_PROXY`; index `orders(status, expiresAt)` và `events(createdAt)`; `totalAmount` tính bằng `Decimal.mul`; `MYOrders` phân trang `{ message, data, pagination }`; `test-admin-race.cjs` chặn database không an toàn.
+- **Hạ tầng:** script `npm start`; Dockerfile multi-stage cho server (Debian slim + OpenSSL cho Prisma) và client (Vite + nginx); `docker-compose.prod.yml` có service migrate, không publish MySQL/Redis, không chứa secret; CI GitHub Actions trên pull request; SIGTERM tắt êm.
+
+Đã kiểm chứng: `npx tsc --noEmit` sạch, `npm run build` của client sạch, `BASE_URL=http://localhost:5055/api npm run test:all` đạt **9/9 bộ** (sau khi cập nhật `test-jwt-security.cjs` theo dạng phân trang mới), và `docker compose -f docker-compose.prod.yml up --build` cho `/api/health` 200 qua nginx, SPA fallback `/my-orders` 200, migration chạy đủ 6 bản. Phần UI mới được kiểm tra bằng build/typecheck, chưa có test tự động hay kiểm thử trình duyệt trong môi trường này.
+
+Còn lại: thanh toán thật + webhook + hoàn tiền, soát vé QR/check-in, idempotency key, client test tự động.
 
 ---
 

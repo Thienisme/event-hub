@@ -24,7 +24,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:5000/api';
 const SECRET = process.env.JWT_SECRET;
 
 // Endpoint yêu cầu đăng nhập nhưng KHÔNG cần user có thật trong DB: nó chỉ lọc
-// đơn theo userId, nên token hợp lệ + userId không tồn tại -> 200 với mảng rỗng.
+// đơn theo userId, nên token hợp lệ + userId không tồn tại -> 200 với data rỗng.
 // Nhờ vậy test được chữ ký mà không cần credential nào.
 const AUTH_ONLY_PATH = '/orders/my-orders';
 
@@ -319,7 +319,8 @@ async function runTokenTests() {
   const validRes = await request(AUTH_ONLY_PATH, { token: realToken });
   check(
     'token hợp lệ -> 200 (chứng minh 403 ở trên là do chữ ký, không phải chặn hết)',
-    validRes.status === 200 && Array.isArray(validRes.body),
+    // MYOrders trả { message, data, pagination }, không còn là mảng trần.
+    validRes.status === 200 && Array.isArray(validRes.body?.data),
     `nhận ${validRes.status}`
   );
 
