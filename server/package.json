@@ -33,6 +33,7 @@
     "test:validation": "node test-validation.cjs",
     "test:cors": "node test-cors.cjs",
     "test:regressions": "node test-regressions.cjs",
+    "test:lifecycle": "node test-order-lifecycle.cjs",
     "test:all": "node run-all-tests.cjs",
     "seed": "ts-node prisma/seed.ts"
   },

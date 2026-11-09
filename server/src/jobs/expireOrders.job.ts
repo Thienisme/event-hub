@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma';
 import { invalidateEventCache } from '../utils/cache';
+import { returnTicketsToStock } from '../utils/orderInventory';
 
 /**
  * Quét các đơn PENDING đã quá `expiresAt`, chuyển sang EXPIRED và trả vé về kho.
@@ -44,26 +45,8 @@ export async function releaseExpiredOrders(): Promise<number> {
 
         if (claimed.count === 0) return null;
 
-        // Bước 2: gom số vé cần trả về theo từng loại vé
-        // (quantity vé = quantity record Ticket, xem createOrder)
-        const quantityByTicketType = new Map<string, number>();
-        for (const ticket of order.tickets) {
-          quantityByTicketType.set(
-            ticket.ticketTypeId,
-            (quantityByTicketType.get(ticket.ticketTypeId) ?? 0) + 1
-          );
-        }
-
-        // Bước 3: cộng trả vé
-        const eventIds: string[] = [];
-        for (const [ticketTypeId, quantity] of quantityByTicketType) {
-          const ticketType = await tx.ticketType.update({
-            where: { id: ticketTypeId },
-            data: { availableQuantity: { increment: quantity } },
-            select: { eventId: true },
-          });
-          eventIds.push(ticketType.eventId);
-        }
+        // Bước 2: cộng trả vé trong cùng transaction
+        const eventIds = await returnTicketsToStock(tx, order.tickets);
 
         return { eventIds };
       });

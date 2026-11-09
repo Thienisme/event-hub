@@ -2,7 +2,7 @@
 
 Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó nhất của lĩnh vực này: **không bán quá số vé khi nhiều người cùng mua một lúc**.
 
-> **Trạng thái:** dự án học tập, chưa sẵn sàng cho production. Luồng hiện tại dừng ở bước **giữ chỗ**: chưa có thanh toán nên mọi đơn đều ở `PENDING` rồi tự chuyển `EXPIRED` sau 10 phút. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
+> **Trạng thái:** dự án học tập, chưa sẵn sàng cho production. Thanh toán hiện là **giả lập** và mặc định tắt ở production; giao diện thanh toán đang được làm. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
 
 ## Tính năng
 
@@ -10,6 +10,7 @@ Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó n
 - Đăng ký, đăng nhập bằng JWT
 - Xem và tìm kiếm sự kiện có phân trang
 - Đặt vé, giữ chỗ 10 phút, xem lại đơn của mình
+- API thanh toán giả lập, huỷ đơn và sinh mã QR cho từng vé (giao diện đang làm)
 
 **Nhà tổ chức**
 - Tạo, sửa, xoá sự kiện với nhiều loại vé
@@ -127,9 +128,9 @@ Dự án chưa có CI và client chưa có test tự động.
 
 ## Giới hạn hiện tại
 
-- Chưa có thanh toán, huỷ đơn và mã QR, nên trạng thái `CONFIRMED`, `CANCELLED` và cột `qrCode` chưa được dùng, doanh thu luôn bằng 0.
+- Thanh toán mới là giả lập, chưa soát vé bằng QR và chưa huỷ được đơn đã thanh toán.
 - Chưa có xác thực email, đặt lại mật khẩu và refresh token.
-- Chưa giới hạn số vé theo người: một tài khoản có thể giữ nhiều vé bằng cách đặt liên tục.
+- Hạn mức vé tính theo tài khoản (mặc định 100 vé mỗi sự kiện), nên vẫn lách được bằng nhiều tài khoản.
 - Rate limit lưu trong RAM, chưa dùng chung được khi chạy nhiều instance.
 - Chưa có Dockerfile và cấu hình triển khai production.
 

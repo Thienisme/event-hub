@@ -23,24 +23,24 @@ const MAX_SEARCH_LENGTH = 100;
 const PUBLIC_ORGANIZER_SELECT = { id: true, fullName: true } as const;
 
 /**
- * Xoá các đơn EXPIRED đang tham chiếu tới những loại vé sắp bị xoá.
+ * Xoá các đơn EXPIRED và CANCELLED đang tham chiếu tới những loại vé sắp bị xoá.
  *
- * Job hết hạn đã trả vé về kho nhưng vẫn giữ dòng `Ticket` để người mua xem lại
+ * Các đơn này đã trả vé về kho nhưng vẫn giữ dòng `Ticket` để người mua xem lại
  * lịch sử. Khoá ngoại tickets -> ticket_types là RESTRICT, nên nếu không dọn thì
- * mọi sự kiện từng có đơn hết hạn đều không xoá được.
+ * mọi sự kiện từng có đơn hết hạn hoặc bị huỷ đều không xoá được.
  *
  * Tìm id trước rồi mới xoá: `deleteMany` với điều kiện quan hệ sinh câu truy vấn
  * mà MySQL từ chối (lỗi 1093). Đơn PENDING/CONFIRMED không bị đụng tới: khoá ngoại
  * vẫn chặn (P2003) và transaction của nơi gọi được rollback toàn bộ.
  */
-const deleteExpiredOrdersOf = async (
+const deleteReleasedOrdersOf = async (
   tx: Prisma.TransactionClient,
   ticketTypeIds: string[]
 ): Promise<void> => {
   if (ticketTypeIds.length === 0) return;
 
   const orders = await tx.order.findMany({
-    where: { status: 'EXPIRED', tickets: { some: { ticketTypeId: { in: ticketTypeIds } } } },
+    where: { status: { in: ['EXPIRED', 'CANCELLED'] }, tickets: { some: { ticketTypeId: { in: ticketTypeIds } } } },
     select: { id: true },
   });
 
@@ -351,7 +351,7 @@ export const updateEvent = async (req: Request, res: Response) => {
       }
 
       if (deletes.length > 0) {
-        await deleteExpiredOrdersOf(tx, deletes);
+        await deleteReleasedOrdersOf(tx, deletes);
         await tx.ticketType.deleteMany({
           where: { id: { in: deletes }, eventId: id },
         });
@@ -422,11 +422,11 @@ export const deleteEvent = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Bạn không có quyền xóa sự kiện này!' });
     }
 
-    // Xóa sự kiện (cascade xóa ticket types), kèm các đơn đã hết hạn của nó.
+    // Xóa sự kiện (cascade xóa ticket types), kèm các đơn đã hết hạn hoặc bị huỷ của nó.
     // Còn đơn PENDING/CONFIRMED thì FK RESTRICT giữ lại -> P2003 -> rollback cả
-    // transaction, nên đơn hết hạn cũng không bị xoá oan.
+    // transaction, nên các đơn đó cũng không bị xoá oan.
     await prisma.$transaction(async (tx) => {
-      await deleteExpiredOrdersOf(
+      await deleteReleasedOrdersOf(
         tx,
         existingEvent.ticketTypes.map((ticketType) => ticketType.id)
       );

@@ -30,6 +30,7 @@ const SUITES = [
   ['test:validation', 'test-validation.cjs'],
   ['test:cors', 'test-cors.cjs'],
   ['test:regressions', 'test-regressions.cjs'],
+  ['test:lifecycle', 'test-order-lifecycle.cjs'],
 ];
 
 const G = '\u001b[32m';

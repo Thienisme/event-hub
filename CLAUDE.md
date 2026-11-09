@@ -47,8 +47,9 @@ Luồng request ở server: `routes/` gắn middleware theo thứ tự `authenti
 `availableQuantity` là số vé còn lại; số đã "bán" được tính bằng `totalQuantity - availableQuantity`, nên đã gồm cả vé đang giữ chỗ.
 
 - **Chốt chặn chống bán quá số vé là `updateMany` có điều kiện `availableQuantity >= quantity`** trong `createOrder`, cùng `CHECK` ở database. Redlock chỉ là lớp bên ngoài. Không đổi thành kiểu đọc rồi mới ghi.
-- Vòng đời đơn: `createOrder` tạo `PENDING`, `jobs/expireOrders.job.ts` chuyển sang `EXPIRED` và trả vé về kho sau `ORDER_HOLD_MINUTES`. Chưa có code nào tạo `CONFIRMED` hoặc `CANCELLED`, và `qrCode` chưa được sinh.
-- Đơn `EXPIRED` vẫn giữ dòng `Ticket` để hiển thị lịch sử, mà `tickets -> ticket_types` là FK `RESTRICT`. Vì vậy xoá sự kiện hoặc loại vé phải xoá đơn `EXPIRED` liên quan trong cùng transaction (`deleteExpiredOrdersOf` trong `event.controller.ts`).
+- Vòng đời đơn: `createOrder` tạo `PENDING`; từ đó chỉ một trong ba đường đổi được trạng thái nhờ `updateMany` có điều kiện: `confirmOrder` (`CONFIRMED`, sinh `qrCode`, thanh toán giả lập), `cancelOrder` (`CANCELLED`) và `jobs/expireOrders.job.ts` (`EXPIRED`). Hai đường sau trả vé qua `returnTicketsToStock` trong cùng transaction.
+- Hạn mức theo tài khoản nằm trong `createOrder`: câu đầu tiên của transaction phải là `SELECT ... FOR UPDATE` trên dòng user. Redlock khoá theo loại vé nên không bảo vệ được hạn mức, và đọc thường trước đó sẽ chụp snapshot cũ.
+- Đơn `EXPIRED` và `CANCELLED` vẫn giữ dòng `Ticket` để hiển thị lịch sử, mà `tickets -> ticket_types` là FK `RESTRICT`. Vì vậy xoá sự kiện hoặc loại vé phải xoá đơn `EXPIRED` và `CANCELLED` liên quan trong cùng transaction (`deleteReleasedOrdersOf` trong `event.controller.ts`).
 - `updateEvent` đối chiếu loại vé theo `id` và dùng `increment` theo chênh lệch. `ticketTypes` là `undefined` nghĩa là không đụng tới, còn `[]` nghĩa là xoá hết các loại chưa bán. POST và PUT dùng chung `createEventSchema`.
 - MySQL từ chối `deleteMany` có điều kiện quan hệ (lỗi 1093): hãy tìm id trước rồi xoá theo id.
 
