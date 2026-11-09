@@ -52,6 +52,34 @@ const lockAndCountActiveAdmins = async (
   return rows.length;
 };
 
+const MAX_TRANSACTION_ATTEMPTS = 4;
+
+const isDeadlock = (error: unknown): boolean => {
+  const { code, message } = error as { code?: string; message?: string };
+  return code === 'P2034' || (code === 'P2010' && /\b1213\b/.test(message ?? ''));
+};
+
+/**
+ * Chạy transaction đổi quyền, tự chạy lại khi MySQL báo deadlock.
+ *
+ * Hai admin thao tác cùng lúc có thể khiến `FOR UPDATE` deadlock (lỗi 1213). MySQL
+ * đã huỷ giao dịch nạn nhân nên dữ liệu vẫn đúng, nhưng người dùng sẽ nhận 500 dù
+ * không làm gì sai. Chạy lại là cách MySQL khuyến nghị, và lần sau giao dịch đọc
+ * trạng thái mới nên vẫn tự chặn nếu sẽ làm hệ thống hết admin.
+ */
+const runWithDeadlockRetry = async <T>(
+  work: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await prisma.$transaction(work);
+    } catch (error) {
+      if (attempt >= MAX_TRANSACTION_ATTEMPTS || !isDeadlock(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 50 * attempt));
+    }
+  }
+};
+
 /**
  * Danh sách người dùng (ADMIN).
  *
@@ -155,7 +183,7 @@ export const updateUserRole = async (req: Request, res: Response) => {
       });
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await runWithDeadlockRetry(async (tx) => {
       const activeAdmins = await lockAndCountActiveAdmins(tx);
 
       // Đây là admin đang hoạt động cuối cùng -> hạ quyền nó là hệ thống không
@@ -225,7 +253,7 @@ export const updateUserStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await runWithDeadlockRetry(async (tx) => {
       const activeAdmins = await lockAndCountActiveAdmins(tx);
 
       // Khoá admin đang hoạt động cuối cùng -> không còn ai quản trị được.

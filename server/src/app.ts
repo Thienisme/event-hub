@@ -15,7 +15,7 @@ import orderRoutes from './routes/order.routes';
 import adminRoutes from './routes/admin.routes';
 import organizerRoutes from './routes/organizer.routes';
 import { startExpireOrdersJob } from './jobs/expireOrders.job';
-import { logUnexpectedError } from './utils/errors';
+import { errorMiddleware, logUnexpectedError } from './utils/errors';
 import { parseAllowedOrigins } from './utils/cors';
 import { assertAuthConfig } from './config/auth';
 import { apiRateLimiter } from './middlewares/rateLimit.middleware';
@@ -74,6 +74,9 @@ app.get('/api/health', async (req: Request, res: Response) => {
     });
   }
 });
+
+// Phải đứng sau mọi route: Express chỉ chuyển lỗi tới middleware khai báo sau đó.
+app.use(errorMiddleware);
 
 // Fail fast: thiếu hoặc secret quá yếu thì chết ngay lúc khởi động, thay vì
 // chạy với secret mặc định mà cả thế giới biết.

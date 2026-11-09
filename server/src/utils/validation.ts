@@ -227,7 +227,9 @@ import { Request, Response, NextFunction } from 'express';
 export const validateBody = (schema: z.ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+      // Ghi đè body bằng kết quả parse: đây mới là dữ liệu đã được trim và đã bỏ
+      // các field lạ. Chỉ kiểm tra rồi vứt kết quả thì controller vẫn nhận dữ liệu gốc.
+      req.body = schema.parse(req.body);
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {

@@ -18,7 +18,7 @@
  */
 const { spawn } = require('child_process');
 
-const API = 'http://localhost:5000/api';
+const API = process.env.BASE_URL || 'http://localhost:5000/api';
 
 // Thứ tự: test rẻ và nhanh trước, test nặng (race, load) sau.
 const SUITES = [
@@ -29,6 +29,7 @@ const SUITES = [
   ['test:order', 'test-order-amount.cjs'],
   ['test:validation', 'test-validation.cjs'],
   ['test:cors', 'test-cors.cjs'],
+  ['test:regressions', 'test-regressions.cjs'],
 ];
 
 const G = '\u001b[32m';
@@ -85,6 +86,14 @@ async function main() {
   const failed = [];
 
   for (const [name, script] of SUITES) {
+    // Bộ CORS cần đăng nhập thành công, nhưng các bộ trước cố tình đăng nhập sai
+    // và `authRateLimiter` chỉ cho 5 lần thất bại/phút. `waitForQuota` chỉ thấy
+    // hạn mức chung, nên phải chờ hết cửa sổ của limiter này.
+    if (name === 'test:cors') {
+      console.log(`${D}   chờ 61s cho hạn mức đăng nhập thất bại reset...${X}`);
+      await new Promise((r) => setTimeout(r, 61_000));
+    }
+
     console.log(`\n${D}──────── ${name} ────────${X}`);
     const code = await run(script);
     if (code !== 0) failed.push(name);
