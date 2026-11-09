@@ -1,181 +1,138 @@
 # Event Hub 🎟️
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](https://github.com/Thienisme/event-hub/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Vue 3](https://img.shields.io/badge/Vue-3-42b883?style=flat-square&logo=vuedotjs)](https://vuejs.org/)
-[![Laravel](https://img.shields.io/badge/Laravel-10-FF2D20?style=flat-square&logo=laravel)](https://laravel.com/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue?style=flat-square)](https://github.com/Thienisme/event-hub/pulls)
+Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó nhất của lĩnh vực này: **không bán quá số vé khi nhiều người cùng mua một lúc**.
 
-**Event Hub** is an open-source, scalable full-stack platform for organizing events, managing tickets, and tracking attendee registrations. It provides a seamless experience for event organizers and attendees alike, combining a modern Vue 3 frontend with a robust Laravel RESTful API backend.
+> **Trạng thái:** dự án học tập, chưa sẵn sàng cho production. Luồng hiện tại dừng ở bước **giữ chỗ**: chưa có thanh toán nên mọi đơn đều ở `PENDING` rồi tự chuyển `EXPIRED` sau 10 phút. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
 
----
+## Tính năng
 
-## ✨ Key Features
+**Khách hàng**
+- Đăng ký, đăng nhập bằng JWT
+- Xem và tìm kiếm sự kiện có phân trang
+- Đặt vé, giữ chỗ 10 phút, xem lại đơn của mình
 
-### 🔐 User Authentication
-- Secure registration & login with JWT / Laravel Sanctum
-- Role-based access control (Admin, Organizer, Attendee)
-- Password reset & email verification
+**Nhà tổ chức**
+- Tạo, sửa, xoá sự kiện với nhiều loại vé
+- Xem thống kê sự kiện của mình
 
-### 📅 Event Management
-- Create, edit, and publish events with rich details
-- Categories, tags, and search/filter capabilities
-- Event capacity & scheduling management
+**Quản trị viên**
+- Xem tổng quan hệ thống
+- Đổi vai trò, khoá và mở khoá tài khoản, có hiệu lực ở request kế tiếp
+- Xem nhật ký thao tác quản trị
 
-### 🎫 Booking & Ticketing
-- Ticket purchase flow with quantity selection
-- QR code ticket generation
-- Booking history & cancellation support
-- Real-time availability tracking
+## Điểm kỹ thuật chính
 
-### 🛠️ Admin Dashboard
-- Comprehensive analytics & reporting
-- User & event moderation tools
-- Order & revenue management
-- System settings & configuration
+| Bài toán | Cách giải quyết | Mã nguồn |
+|---|---|---|
+| Bán quá số vé | `UPDATE` có điều kiện trong transaction, Redlock, và `CHECK` ở database | `server/src/controllers/order.controller.ts` |
+| Đơn hết hạn | Job nền trả vé trong transaction, an toàn khi chạy nhiều instance | `server/src/jobs/expireOrders.job.ts` |
+| Tải đọc cao | Cache có version, single-flight, tự chuyển sang database khi Redis lỗi | `server/src/utils/cache.ts` |
+| Thu hồi quyền | Đọc role từ database (cache 30 giây, xoá ngay khi đổi quyền), không tin role trong JWT | `server/src/middlewares/auth.middleware.ts` |
+| Mất admin cuối cùng | `SELECT ... FOR UPDATE` trong transaction | `server/src/controllers/admin.controller.ts` |
 
----
+Phân tích chi tiết và các bug đã gặp nằm trong [`PROJECT_NOTES.md`](PROJECT_NOTES.md).
 
-## 🏗️ System Architecture / Tech Stack
+## Công nghệ
 
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | Vue 3 (Composition API), Vite, Pinia, Vue Router, Element Plus / Tailwind CSS, Axios |
-| **Backend** | PHP Laravel (RESTful API), JWT / Laravel Sanctum Authentication |
-| **Database** | MySQL |
-| **DevOps** | Docker, Docker Compose, Git |
+| Tầng | Công nghệ |
+|---|---|
+| Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, Tailwind CSS, Axios |
+| Backend | Node.js, Express, TypeScript, Prisma, Zod, JWT |
+| Dữ liệu | MySQL 8, Redis 7 (cache và Redlock) |
+| Hạ tầng dev | Docker Compose (chỉ MySQL và Redis) |
 
----
-
-## 📂 Project Directory Structure
+## Cấu trúc thư mục
 
 ```
 event-hub/
-├── client/                 # Vue 3 + Vite client application
+├── client/                 # Ứng dụng Vue
+│   └── src/
+│       ├── api/            # Axios client, xử lý phiên đăng nhập
+│       ├── components/
+│       ├── router/
+│       ├── stores/         # Pinia
+│       └── views/
+├── server/                 # API Express
+│   ├── prisma/             # Schema, migration, seed
 │   ├── src/
-│   │   ├── assets/           # Static assets
-│   │   ├── components/       # Reusable Vue components
-│   │   ├── views/            # Route views / pages
-│   │   ├── stores/           # Pinia state management
-│   │   ├── router/           # Vue Router configuration
-│   │   ├── services/         # Axios API services
-│   │   └── main.ts           # App entry point
-│   ├── public/               # Public static files
-│   ├── .env.example          # Environment variables template
-│   ├── package.json
-│   └── vite.config.ts
-├── server/                  # Laravel RESTful API
-│   ├── app/
-│   │   ├── Http/Controllers/ # API controllers
-│   │   ├── Models/           # Eloquent models
-│   │   └── ...
-│   ├── database/
-│   │   ├── migrations/       # Database migrations
-│   │   └── seeders/          # Database seeders
-│   ├── routes/
-│   │   └── api.php           # API route definitions
-│   ├── .env.example          # Environment variables template
-│   ├── composer.json
-│   └── artisan
-├── docker-compose.yml        # Docker Compose configuration
-├── .gitignore
-└── README.md
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── jobs/           # Job trả vé của đơn hết hạn
+│   │   ├── middlewares/
+│   │   ├── routes/
+│   │   └── utils/
+│   ├── test-*.cjs          # Test tích hợp, cần server đang chạy
+│   └── load-test*.js       # Load test bằng k6
+└── docker-compose.yml      # MySQL và Redis cho môi trường dev
 ```
 
----
+## Cài đặt
 
-## 🚀 Getting Started / Local Setup
+Yêu cầu: Node.js 20 trở lên, Docker.
 
-### Prerequisites
-- Node.js >= 18.x & npm
-- PHP >= 8.1 & Composer
-- MySQL >= 8.0
-- Git
-
-### 1. Clone the repository
+**1. Bật MySQL và Redis**
 
 ```bash
-git clone https://github.com/Thienisme/event-hub.git
-cd event-hub
+docker compose up -d
 ```
 
-### 2. Backend (Laravel) Setup
+**2. Chạy server** (`http://localhost:5000`)
 
 ```bash
 cd server
 cp .env.example .env
-composer install
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
 ```
 
-Update `.env` with your database credentials:
-
-```env
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=event_hub
-DB_USERNAME=root
-DB_PASSWORD=secret
-```
-
-### 3. Frontend (Vue 3) Setup
+Sửa `.env`:
+- `DATABASE_URL="mysql://root:root@127.0.0.1:3306/eventhub"`
+- `JWT_SECRET`: sinh bằng lệnh bên dưới. Server từ chối khởi động nếu thiếu hoặc dưới 32 ký tự.
 
 ```bash
-cd ../client
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+```bash
+npm install
+npx prisma migrate deploy
+npm run seed
+npm run dev
+```
+
+`npm run seed` tạo tài khoản admin và in thông tin đăng nhập ra màn hình. Đặt `SEED_ADMIN_EMAIL` và `SEED_ADMIN_PASSWORD` nếu muốn đổi.
+
+**3. Chạy client** (`http://localhost:5173`, ở terminal khác)
+
+```bash
+cd client
 cp .env.example .env
 npm install
 npm run dev
 ```
 
-Configure the API base URL in `client/.env`:
+Client mặc định gọi `http://localhost:5000/api`. Đặt `VITE_API_BASE_URL` trong `client/.env` nếu server chạy ở địa chỉ khác.
 
-```env
-VITE_API_BASE_URL=http://localhost:8000/api
-```
+## Test
 
-### 4. Access the Application
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-
----
-
-## 🐳 Docker Setup
-
-Run the entire stack with Docker Compose:
+Các script test là test tích hợp, gọi API thật và **ghi vào database**. Chỉ chạy trên database dev, không chạy trên dữ liệu thật.
 
 ```bash
-docker-compose up -d
+cd server
+npm run dev        # terminal 1
+npm run test:all   # terminal 2
 ```
 
-This will start the frontend, backend, and MySQL services. Once running, execute migrations:
+Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http://localhost:5055/api npm run test:all`.
 
-```bash
-docker-compose exec backend php artisan migrate --seed
-```
+Dự án chưa có CI và client chưa có test tự động.
 
----
+## Giới hạn hiện tại
 
-## 🤝 Contributing
+- Chưa có thanh toán, huỷ đơn và mã QR, nên trạng thái `CONFIRMED`, `CANCELLED` và cột `qrCode` chưa được dùng, doanh thu luôn bằng 0.
+- Chưa có xác thực email, đặt lại mật khẩu và refresh token.
+- Chưa giới hạn số vé theo người: một tài khoản có thể giữ nhiều vé bằng cách đặt liên tục.
+- Rate limit lưu trong RAM, chưa dùng chung được khi chạy nhiều instance.
+- Chưa có Dockerfile và cấu hình triển khai production.
 
-Contributions are welcome! To contribute:
+## Giấy phép
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m "feat: add your feature"`
-4. Push to the branch: `git push origin feature/your-feature`
-5. Open a Pull Request
-
-Please open an Issue first to discuss major changes. Follow the existing code style and include tests where applicable.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT). See the `LICENSE` file for details.
-
----
-
-> Built with ❤️ by [Thienisme](https://github.com/Thienisme) and the open-source community.
+[MIT](LICENSE)
