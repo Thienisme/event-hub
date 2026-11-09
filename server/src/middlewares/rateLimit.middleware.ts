@@ -7,7 +7,7 @@ import rateLimit from 'express-rate-limit';
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
   max: 100, // tối đa 100 request/phút
-  message: 'Quá nhiều yêu cầu. Vui lòng giảm tốc độ gửi request.',
+  message: { message: 'Quá nhiều yêu cầu. Vui lòng giảm tốc độ gửi request.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -22,7 +22,7 @@ export const apiRateLimiter = rateLimit({
 export const adminRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
   max: 30, // tối đa 30 request/phút
-  message: 'Quá nhiều thao tác quản trị. Vui lòng giảm tốc độ.',
+  message: { message: 'Quá nhiều thao tác quản trị. Vui lòng giảm tốc độ.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -49,7 +49,7 @@ export const orderRateLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 phút
   max: 15, // tối đa 15 lần đặt vé trong 5 phút
   keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
-  message: 'Tần suất đặt vé quá nhanh. Vui lòng thử lại sau vài phút.',
+  message: { message: 'Tần suất đặt vé quá nhanh. Vui lòng thử lại sau vài phút.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -66,8 +66,9 @@ export const authRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
   max: 5, // tối đa 5 lần thất bại trong 1 phút
   skipSuccessfulRequests: true, // chỉ đếm request THẤT BẠI ("sai 5 lần")
-  message:
-    'Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau 1 phút!',
+  message: {
+    message: 'Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau 1 phút!',
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -83,8 +84,9 @@ export const authRateLimiter = rateLimit({
 export const registerRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
   max: 10, // tối đa 10 lần đăng ký (thành công hay thất bại) trong 1 phút
-  message:
-    'Quá nhiều yêu cầu đăng ký. Vui lòng thử lại sau 1 phút!',
+  message: {
+    message: 'Quá nhiều yêu cầu đăng ký. Vui lòng thử lại sau 1 phút!',
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
