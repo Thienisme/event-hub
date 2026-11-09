@@ -119,7 +119,10 @@ export const createOrder = async (req: Request, res: Response) => {
         throw new AppError('Sự kiện đã kết thúc, không thể đặt vé!');
       }
 
-      const totalAmount = ticketType.price.toNumber() * quantity;
+      // Decimal.mul: giữ phép tính trong kiểu Decimal thay vì đổi sang double.
+      // Giá vé có 2 chữ số thập phân; nhân bằng số thực có thể lệch ở biên và
+      // ghi vào DECIMAL(12,2) một giá trị đã bị làm tròn ngầm.
+      const totalAmount = ticketType.price.mul(quantity);
 
       // Ràng buộc invariant của cột `orders.totalAmount` (DECIMAL(12,2)).
       //
