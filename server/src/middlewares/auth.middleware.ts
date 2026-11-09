@@ -34,10 +34,16 @@ export const authenticate = async (
 
   const token = authHeader.split(' ')[1];
 
-  // Lấy secret NGOÀI try. Thiếu JWT_SECRET là lỗi cấu hình phía SERVER, phải lộ
-  // ra là lỗi server — không được đội lốt thành "token không hợp lệ" (403) rồi
-  // khiến ta chẩn đoán nhầm phía client.
-  const secret = getJwtSecret();
+  // Tách riêng khỏi khối verify bên dưới. Thiếu JWT_SECRET là lỗi cấu hình phía
+  // SERVER, phải lộ ra là lỗi server — không được đội lốt thành "token không hợp
+  // lệ" (403). Phải chuyển cho `next`: ném thẳng trong hàm async thì Express 4
+  // không bắt được và tiến trình sẽ thoát.
+  let secret: string;
+  try {
+    secret = getJwtSecret();
+  } catch (error) {
+    return next(error);
+  }
 
   let decoded: JwtPayload;
   try {

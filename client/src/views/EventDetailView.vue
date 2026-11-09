@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '../stores/event';
 import type { EventItem, TicketType } from '../stores/event';
@@ -35,6 +35,11 @@ const deleteError = ref('');
  */
 const event = ref<EventItem | null>(null);
 const isLoading = ref(false);
+
+/** Sự kiện đã kết thúc thì không bán vé nữa (server cũng chặn, xem createOrder). */
+const isEnded = computed(
+  () => !!event.value && new Date(event.value.endTime).getTime() <= Date.now()
+);
 
 /** Số lượng vé user chọn cho từng loại vé, key = ticketTypeId */
 const quantities = ref<Record<string, number>>({});
@@ -325,17 +330,18 @@ const handleDelete = async () => {
                 type="number"
                 min="1"
                 :max="ticket.availableQuantity"
-                :disabled="ticket.availableQuantity <= 0"
+                :disabled="isEnded || ticket.availableQuantity <= 0"
                 class="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 @blur="normalizeQuantity(ticket)"
               />
 
               <button
-                :disabled="ticket.availableQuantity <= 0 || submittingId === ticket.id"
+                :disabled="isEnded || ticket.availableQuantity <= 0 || submittingId === ticket.id"
                 class="px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 @click="handleBook(ticket)"
               >
-                <span v-if="submittingId === ticket.id">Đang xử lý...</span>
+                <span v-if="isEnded">Đã kết thúc</span>
+                <span v-else-if="submittingId === ticket.id">Đang xử lý...</span>
                 <span v-else-if="ticket.availableQuantity <= 0">Hết vé</span>
                 <span v-else>Đặt vé</span>
               </button>

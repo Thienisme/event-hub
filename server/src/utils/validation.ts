@@ -88,10 +88,9 @@ export const LIMITS = {
 /**
  * So sánh tổng tiền với biên `MAX_ORDER_AMOUNT`.
  *
- * Tính tích trong JS là số thực (double), nên `3333333333.33 * 3` có thể ra
- * 9999999999.99000000001 — lệch 1 cent so với giá trị thật, và nếu so sánh thẳng
- * thì một đơn HỢP LỆ sẽ bị từ chối oan. Làm tròn về 2 chữ số thập phân trước
- * khi so sánh để không bị sai ở biên.
+ * Tính tích trong JS là số thực (double) nên có thể lệch (`0.1 * 3` ra
+ * 0.30000000000000004), và nếu so sánh thẳng thì một đơn nằm đúng biên có thể bị
+ * từ chối oan. Làm tròn về 2 chữ số thập phân trước khi so sánh.
  */
 export const exceedsOrderAmount = (price: number, quantity: number): boolean => {
   const total = Math.round(price * quantity * 100) / 100;
@@ -227,7 +226,9 @@ import { Request, Response, NextFunction } from 'express';
 export const validateBody = (schema: z.ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+      // Ghi đè body bằng kết quả parse: đây mới là dữ liệu đã được trim và đã bỏ
+      // các field lạ. Chỉ kiểm tra rồi vứt kết quả thì controller vẫn nhận dữ liệu gốc.
+      req.body = schema.parse(req.body);
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {

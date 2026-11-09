@@ -32,3 +32,9 @@ Thumbs.db
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Cấu hình của công cụ AI: không thuộc mã nguồn dự án
+.agents/
+.claude/
+.cursor/
+.devin/

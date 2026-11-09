@@ -4,6 +4,7 @@ import { authenticate } from '../middlewares/auth.middleware';
 import { validateBody, registerSchema, loginSchema } from '../utils/validation';
 import { authRateLimiter, registerRateLimiter } from '../middlewares/rateLimit.middleware';
 import prisma from '../utils/prisma';
+import { handleControllerError } from '../utils/errors';
 
 const router = Router();
 
@@ -16,25 +17,31 @@ router.post('/register', registerRateLimiter, validateBody(registerSchema), regi
 router.get('/me', authenticate, async (req: Request, res: Response) => {
   // req.user là nội dung đã decode từ JWT (chỉ có userId/role/iat/exp),
   // nên phải query lại DB để trả về đủ fullName/email cho FE hiển thị.
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.userId },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      role: true,
-      createdAt: true,
-    },
-  });
+  // Bắt buộc có try/catch: lỗi ném trong handler async không được Express 4 bắt,
+  // Node sẽ coi là unhandled rejection và thoát cả tiến trình.
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        createdAt: true,
+      },
+    });
 
-  if (!user) {
-    return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
+    }
+
+    return res.json({
+      message: 'Lấy thông tin tài khoản thành công!',
+      user,
+    });
+  } catch (error) {
+    return handleControllerError(res, 'auth.me', error);
   }
-
-  return res.json({
-    message: 'Lấy thông tin tài khoản thành công!',
-    user,
-  });
 });
 
 export default router;

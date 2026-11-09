@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { ErrorRequestHandler, Response } from 'express';
 
 /**
  * Lỗi NGHIỆP VỤ: message được viết để NGƯỜI DÙNG cuối đọc
@@ -146,4 +146,31 @@ export const handleControllerError = (
   logUnexpectedError(context, error);
 
   return res.status(fallback.statusCode).json({ message: fallback.message });
+};
+
+/**
+ * Lưới cuối cho lỗi được chuyển qua `next(error)` hoặc do middleware ném ra.
+ *
+ * Thiếu middleware này thì Express trả về trang HTML mặc định, và ngoài production
+ * trang đó chứa cả stack trace.
+ */
+export const errorMiddleware: ErrorRequestHandler = (error, _req, res, next) => {
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  if (error?.type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'Dữ liệu JSON không hợp lệ!' });
+  }
+
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Dữ liệu gửi lên quá lớn!' });
+  }
+
+  // Lỗi 4xx khác của Express/body-parser (charset sai, URL không decode được...).
+  if (typeof error?.status === 'number' && error.status >= 400 && error.status < 500) {
+    return res.status(error.status).json({ message: 'Yêu cầu không hợp lệ!' });
+  }
+
+  return handleControllerError(res, 'express', error);
 };

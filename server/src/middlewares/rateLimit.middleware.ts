@@ -55,7 +55,7 @@ export const orderRateLimiter = rateLimit({
 });
 
 /**
- * Rate limiter cho xác thực (login, register).
+ * Rate limiter cho đăng nhập.
  *
  * Chống brute-force mật khẩu: 5 lần THẤT BẠI thì chặn 1 phút.
  * `skipSuccessfulRequests: true` khiến chỉ request trả về lỗi (4xx/5xx)

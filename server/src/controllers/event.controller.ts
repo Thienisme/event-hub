@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { AppError, handleControllerError } from '../utils/errors';
 import {
@@ -9,6 +10,44 @@ import {
   invalidateEventDetails,
   listCacheKey,
 } from '../utils/cache';
+
+/** Giới hạn tham số của API danh sách công khai. */
+const MAX_LIST_LIMIT = 100;
+const MAX_LIST_PAGE = 1_000_000;
+const MAX_SEARCH_LENGTH = 100;
+
+/**
+ * Thông tin nhà tổ chức được phép xuất hiện ở API CÔNG KHAI.
+ * Không có email: người chưa đăng nhập không được thu thập email từ đây.
+ */
+const PUBLIC_ORGANIZER_SELECT = { id: true, fullName: true } as const;
+
+/**
+ * Xoá các đơn EXPIRED đang tham chiếu tới những loại vé sắp bị xoá.
+ *
+ * Job hết hạn đã trả vé về kho nhưng vẫn giữ dòng `Ticket` để người mua xem lại
+ * lịch sử. Khoá ngoại tickets -> ticket_types là RESTRICT, nên nếu không dọn thì
+ * mọi sự kiện từng có đơn hết hạn đều không xoá được.
+ *
+ * Tìm id trước rồi mới xoá: `deleteMany` với điều kiện quan hệ sinh câu truy vấn
+ * mà MySQL từ chối (lỗi 1093). Đơn PENDING/CONFIRMED không bị đụng tới: khoá ngoại
+ * vẫn chặn (P2003) và transaction của nơi gọi được rollback toàn bộ.
+ */
+const deleteExpiredOrdersOf = async (
+  tx: Prisma.TransactionClient,
+  ticketTypeIds: string[]
+): Promise<void> => {
+  if (ticketTypeIds.length === 0) return;
+
+  const orders = await tx.order.findMany({
+    where: { status: 'EXPIRED', tickets: { some: { ticketTypeId: { in: ticketTypeIds } } } },
+    select: { id: true },
+  });
+
+  if (orders.length > 0) {
+    await tx.order.deleteMany({ where: { id: { in: orders.map((order) => order.id) } } });
+  }
+};
 
 // 1. Tạo sự kiện mới
 export const createEvent = async (req: Request, res: Response) => {
@@ -63,9 +102,17 @@ export const createEvent = async (req: Request, res: Response) => {
 // 2. Lấy danh sách sự kiện (Có Redis Cache)
 export const getEvents = async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const search = (req.query.search as string) || '';
+    // Đây là API công khai và các giá trị này còn nằm trong khoá cache, nên phải
+    // giới hạn: không để một request tải cả bảng hay làm phình Redis.
+    const page = Math.min(
+      MAX_LIST_PAGE,
+      Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1)
+    );
+    const limit = Math.min(
+      MAX_LIST_LIMIT,
+      Math.max(1, parseInt(String(req.query.limit ?? '10'), 10) || 10)
+    );
+    const search = String(req.query.search ?? '').trim().slice(0, MAX_SEARCH_LENGTH);
 
     // Khoá cache có kèm version: khi version tăng, mọi key cũ trở nên vô hình.
     const version = await getListVersion();
@@ -92,9 +139,7 @@ export const getEvents = async (req: Request, res: Response) => {
           take: limit,
           orderBy: { createdAt: 'desc' },
           include: {
-            organizer: {
-              select: { id: true, fullName: true, email: true },
-            },
+            organizer: { select: PUBLIC_ORGANIZER_SELECT },
             ticketTypes: true,
           },
         }),
@@ -134,9 +179,7 @@ export const getEventById = async (req: Request, res: Response) => {
         prisma.event.findUnique({
           where: { id },
           include: {
-            organizer: {
-              select: { id: true, fullName: true, email: true },
-            },
+            organizer: { select: PUBLIC_ORGANIZER_SELECT },
             ticketTypes: true,
           },
         })
@@ -308,6 +351,7 @@ export const updateEvent = async (req: Request, res: Response) => {
       }
 
       if (deletes.length > 0) {
+        await deleteExpiredOrdersOf(tx, deletes);
         await tx.ticketType.deleteMany({
           where: { id: { in: deletes }, eventId: id },
         });
@@ -365,6 +409,7 @@ export const deleteEvent = async (req: Request, res: Response) => {
     // Kiểm tra sự kiện tồn tại
     const existingEvent = await prisma.event.findUnique({
       where: { id },
+      include: { ticketTypes: { select: { id: true } } },
     });
 
     if (!existingEvent) {
@@ -377,10 +422,15 @@ export const deleteEvent = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Bạn không có quyền xóa sự kiện này!' });
     }
 
-    // Xóa sự kiện (cascade xóa ticket types).
-    // Nếu đã có vé bán ra, ticket_types bị FK RESTRICT giữ lại -> P2003.
-    await prisma.event.delete({
-      where: { id },
+    // Xóa sự kiện (cascade xóa ticket types), kèm các đơn đã hết hạn của nó.
+    // Còn đơn PENDING/CONFIRMED thì FK RESTRICT giữ lại -> P2003 -> rollback cả
+    // transaction, nên đơn hết hạn cũng không bị xoá oan.
+    await prisma.$transaction(async (tx) => {
+      await deleteExpiredOrdersOf(
+        tx,
+        existingEvent.ticketTypes.map((ticketType) => ticketType.id)
+      );
+      await tx.event.delete({ where: { id } });
     });
 
     // Vô hiệu cache
@@ -392,7 +442,7 @@ export const deleteEvent = async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error?.code === 'P2003') {
       return res.status(400).json({
-        message: 'Không thể xóa sự kiện vì đã có vé được bán!',
+        message: 'Không thể xóa sự kiện vì đang có đơn giữ chỗ hoặc vé đã bán!',
       });
     }
     return handleControllerError(res, 'deleteEvent', error);

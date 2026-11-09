@@ -68,10 +68,16 @@ export const createOrder = async (req: Request, res: Response) => {
       // Đọc lại SAU khi đã khoá row để lấy giá/eventId khớp với phiên bản đã ghi
       const ticketType = await tx.ticketType.findUnique({
         where: { id: ticketTypeId },
+        include: { event: { select: { endTime: true } } },
       });
 
       if (!ticketType) {
         throw new AppError('Loại vé không tồn tại!');
+      }
+
+      // Ném lỗi ở đây là an toàn: transaction rollback nên số vé vừa trừ được trả lại.
+      if (ticketType.event.endTime <= new Date()) {
+        throw new AppError('Sự kiện đã kết thúc, không thể đặt vé!');
       }
 
       const totalAmount = ticketType.price.toNumber() * quantity;

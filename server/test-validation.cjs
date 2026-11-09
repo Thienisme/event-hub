@@ -16,7 +16,7 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
-const API = 'http://localhost:5000/api';
+const API = process.env.BASE_URL || 'http://localhost:5000/api';
 
 const G = '\u001b[32m';
 const R = '\u001b[31m';

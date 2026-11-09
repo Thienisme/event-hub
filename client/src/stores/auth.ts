@@ -18,6 +18,7 @@ export interface User {
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null);
   const token = ref<string | null>(localStorage.getItem('token'));
+  let profileRequest: Promise<void> | null = null;
 
   const isAuthenticated = computed(() => !!token.value);
   const isOrganizer = computed(() => user.value?.role === 'ORGANIZER' || user.value?.role === 'ADMIN');
@@ -39,10 +40,27 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await apiClient.get<{ user: User }>('/auth/me');
       user.value = response.data.user;
-    } catch (error) {
-      // Token hỏng/hết hạn -> dọn sạch state, tránh trạng thái "đăng nhập ma"
-      logout();
+    } catch (error: any) {
+      // Token hỏng/hết hạn hoặc tài khoản không còn -> dọn sạch state, tránh trạng
+      // thái "đăng nhập ma". Lỗi mạng hay 5xx thì giữ phiên: server chập chờn không
+      // phải lý do để đăng xuất người dùng.
+      if ([401, 403, 404].includes(error?.response?.status)) {
+        logout();
+      }
     }
+  }
+
+  /**
+   * Bảo đảm đã có `user` khi đang giữ token. Các lời gọi đồng thời dùng chung một
+   * request, để router guard và main.ts không gọi /auth/me hai lần.
+   */
+  function ensureProfile(): Promise<void> {
+    if (!token.value || user.value) return Promise.resolve();
+
+    profileRequest ??= fetchProfile().finally(() => {
+      profileRequest = null;
+    });
+    return profileRequest;
   }
 
   // Đăng xuất
@@ -60,6 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     login,
     fetchProfile,
+    ensureProfile,
     logout,
   };
 });

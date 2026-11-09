@@ -19,7 +19,7 @@ require('dotenv').config();
 const { spawn } = require('child_process');
 const path = require('path');
 
-const API = 'http://localhost:5000/api';
+const API = process.env.BASE_URL || 'http://localhost:5000/api';
 
 const G = '\u001b[32m';
 const R = '\u001b[31m';

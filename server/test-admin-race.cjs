@@ -15,7 +15,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 
-const API = 'http://localhost:5000/api';
+const API = process.env.BASE_URL || 'http://localhost:5000/api';
 const prisma = new PrismaClient();
 
 const G = '\u001b[32m';
@@ -128,17 +128,25 @@ async function main() {
       ]);
 
       const okCount = [resA, resB].filter((r) => r.status === 200).length;
-      const blocked = [resA, resB].filter((r) => r.status === 400);
+      // Request thua có hai cách bị chặn, đều đúng:
+      //   400: cùng vào transaction, và thấy mình sẽ hạ quyền admin cuối cùng;
+      //   403: tới sau khi người gửi vừa bị hạ quyền, nên không còn quyền admin.
+      const blocked = [resA, resB].filter((r) => r.status !== 200);
 
       check(
-        'tối đa một request được phép (không cả hai)',
-        okCount <= 1,
+        'đúng một request được phép (không cả hai)',
+        okCount === 1,
         `thành công ${okCount}/2 (${resA.status}, ${resB.status})`
       );
 
       check(
-        'request bị chặn trả 400 kèm lý do rõ ràng',
-        blocked.length >= 1 && blocked.every((r) => /admin cuối cùng/i.test(r.message)),
+        'request bị chặn trả 400 hoặc 403 kèm lý do rõ ràng',
+        blocked.length === 1 &&
+          blocked.every(
+            (r) =>
+              (r.status === 400 && /admin cuối cùng/i.test(r.message)) ||
+              (r.status === 403 && /không có quyền/i.test(r.message))
+          ),
         blocked.map((r) => `${r.status} "${r.message}"`).join(' | ') || 'không có request nào bị chặn'
       );
 
