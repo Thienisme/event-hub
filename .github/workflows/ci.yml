@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  server:
+    name: Server (typecheck + integration tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: eventhub
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+
+    env:
+      # Giá trị giả, chỉ dùng trong CI. JWT_SECRET phải >= 32 ký tự.
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/eventhub
+      JWT_SECRET: ci-only-secret-khong-dung-cho-production-0123456789abcdef
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      NODE_ENV: development
+      TZ: Asia/Ho_Chi_Minh
+      BASE_URL: http://127.0.0.1:5000/api
+      ORDER_SWEEP_INTERVAL_MS: "3600000"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Cài dependency
+        run: npm ci
+
+      - name: Tạo .env cho test
+        run: |
+          cat > .env <<'EOF'
+          DATABASE_URL="mysql://root:root@127.0.0.1:3306/eventhub"
+          JWT_SECRET="ci-only-secret-khong-dung-cho-production-0123456789abcdef"
+          REDIS_HOST="127.0.0.1"
+          REDIS_PORT="6379"
+          NODE_ENV=development
+          TZ=Asia/Ho_Chi_Minh
+          ORDER_SWEEP_INTERVAL_MS=3600000
+          EOF
+
+      - name: Áp dụng migration
+        run: npx prisma migrate deploy
+
+      - name: Tạo tài khoản admin
+        run: npm run seed
+
+      - name: Kiểm tra kiểu
+        run: npx tsc --noEmit
+
+      - name: Build server
+        run: npm run build
+
+      - name: Khởi động server
+        run: |
+          node dist/app.js > /tmp/eventhub-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS "$BASE_URL/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/eventhub-server.log
+          exit 1
+
+      - name: Chạy toàn bộ test tích hợp
+        run: npm run test:all
+
+      - name: In log server khi lỗi
+        if: failure()
+        run: cat /tmp/eventhub-server.log || true
+
+  client:
+    name: Client (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Cài dependency
+        run: npm ci
+
+      - name: Build client
+        run: npm run build

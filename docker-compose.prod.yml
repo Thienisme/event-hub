@@ -1,0 +1,119 @@
+# Hạ tầng production tối thiểu: MySQL + Redis + migrate + API + client nginx.
+#
+# Khác docker-compose.yml (chỉ dành cho dev): file này build image từ
+# server/Dockerfile và client/Dockerfile, không publish MySQL/Redis ra host, và
+# không chứa secret. Bắt buộc đặt trước khi chạy:
+#
+#   MYSQL_ROOT_PASSWORD=<mật khẩu mạnh> \
+#   JWT_SECRET=<chuỗi ngẫu nhiên >= 32 ký tự> \
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# Sau khi chạy: client ở http://localhost:8081, health check qua
+# http://localhost:8081/api/health (nginx chuyển /api sang service server).
+#
+# Không dùng ALLOW_SIMULATED_PAYMENT=true ở đây: thanh toán vẫn là giả lập và
+# mặc định tắt ở production.
+
+name: event-hub-prod
+
+# DATABASE_URL dựng từ biến môi trường để không lặp lại ở hai service.
+x-database-url: &database-url "mysql://root:${MYSQL_ROOT_PASSWORD:?Đặt MYSQL_ROOT_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-eventhub}"
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Đặt MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-eventhub}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Chạy migration một lần trước khi API khởi động. Service này phải kết thúc
+  # thành công; server chờ điều kiện service_completed_successfully.
+  migrate:
+    build: ./server
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: *database-url
+      JWT_SECRET: ${JWT_SECRET:?Đặt JWT_SECRET dài ít nhất 32 ký tự}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
+      # Sau nginx đúng 1 hop, nên tin X-Forwarded-For để rate limit theo IP thật.
+      TRUST_PROXY: "1"
+      ALLOW_SIMULATED_PAYMENT: "false"
+    expose:
+      - "5000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  client:
+    build:
+      context: ./client
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      # Chỉ mở trên loopback; đặt sau reverse proxy/TLS nếu cần public.
+      - "127.0.0.1:${WEB_PORT:-8081}:80"
+
+volumes:
+  mysql_data:
+  redis_data:
