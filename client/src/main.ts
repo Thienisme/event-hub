@@ -60,8 +60,6 @@ setPermissionChangedHandler(() => {
 // `token` được lưu ở localStorage nên sống qua F5, nhưng `user` chỉ nằm trong RAM.
 // Không gọi lại /auth/me thì sau khi refresh app sẽ "tưởng" mình đã đăng nhập
 // nhưng user = null -> navbar mất tên, isOrganizer sai.
-if (authStore.token) {
-  authStore.fetchProfile();
-}
+authStore.ensureProfile();
 
 app.mount('#app');

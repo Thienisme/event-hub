@@ -85,8 +85,14 @@ const router = createRouter({
 // Guard kiểm tra quyền truy cập
 // Dùng kiểu `return` thay vì `next(...)`: đây là cách vue-router khuyến nghị,
 // `next` chỉ còn được giữ lại để tương thích ngược và sẽ bị xóa ở bản sau.
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore();
+
+  // Sau F5 chỉ còn token, `user` chưa về nên chưa biết role. Không chờ thì admin
+  // đang ở /admin sẽ bị coi là không đủ quyền và bị đẩy về trang chủ.
+  if (to.meta.organizerOnly || to.meta.adminOnly) {
+    await authStore.ensureProfile();
+  }
 
   // Route yêu cầu đăng nhập -> nhớ đường dẫn đang vào để quay lại sau khi login
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
