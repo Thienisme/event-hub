@@ -2,15 +2,15 @@
 
 Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó nhất của lĩnh vực này: **không bán quá số vé khi nhiều người cùng mua một lúc**.
 
-> **Trạng thái:** dự án học tập, chưa sẵn sàng cho production. Thanh toán hiện là **giả lập** và mặc định tắt ở production; giao diện thanh toán đang được làm. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
+> **Trạng thái:** dự án học tập, chưa sẵn sàng cho production. Thanh toán hiện là **giả lập** và mặc định tắt ở production; giao diện đã có nút thanh toán giả lập, huỷ đơn và xem mã QR. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
 
 ## Tính năng
 
 **Khách hàng**
 - Đăng ký, đăng nhập bằng JWT
 - Xem và tìm kiếm sự kiện có phân trang
-- Đặt vé, giữ chỗ 10 phút, xem lại đơn của mình
-- API thanh toán giả lập, huỷ đơn và sinh mã QR cho từng vé (giao diện đang làm)
+- Đặt vé, giữ chỗ 10 phút, xem lại đơn của mình (có đếm ngược)
+- Thanh toán giả lập, huỷ đơn đang giữ chỗ, xem mã QR của từng vé
 
 **Nhà tổ chức**
 - Tạo, sửa, xoá sự kiện với nhiều loại vé
@@ -27,6 +27,7 @@ Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó n
 |---|---|---|
 | Bán quá số vé | `UPDATE` có điều kiện trong transaction, Redlock, và `CHECK` ở database | `server/src/controllers/order.controller.ts` |
 | Đơn hết hạn | Job nền trả vé trong transaction, an toàn khi chạy nhiều instance | `server/src/jobs/expireOrders.job.ts` |
+| Vòng đời đơn | `updateMany` có điều kiện khi confirm/cancel, hạn mức theo tài khoản, mã QR từng vé | `server/src/controllers/order.controller.ts` |
 | Tải đọc cao | Cache có version, single-flight, tự chuyển sang database khi Redis lỗi | `server/src/utils/cache.ts` |
 | Thu hồi quyền | Đọc role từ database (cache 30 giây, xoá ngay khi đổi quyền), không tin role trong JWT | `server/src/middlewares/auth.middleware.ts` |
 | Mất admin cuối cùng | `SELECT ... FOR UPDATE` trong transaction | `server/src/controllers/admin.controller.ts` |
@@ -40,20 +41,20 @@ Phân tích chi tiết và các bug đã gặp nằm trong [`PROJECT_NOTES.md`](
 | Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, Tailwind CSS, Axios |
 | Backend | Node.js, Express, TypeScript, Prisma, Zod, JWT |
 | Dữ liệu | MySQL 8, Redis 7 (cache và Redlock) |
-| Hạ tầng dev | Docker Compose (chỉ MySQL và Redis) |
+| Hạ tầng | Docker Compose cho dev; Dockerfile multi-stage và GitHub Actions cho CI |
 
 ## Cấu trúc thư mục
 
 ```
 event-hub/
-├── client/                 # Ứng dụng Vue
+├── client/                 # Ứng dụng Vue (Dockerfile, nginx.conf)
 │   └── src/
 │       ├── api/            # Axios client, xử lý phiên đăng nhập
 │       ├── components/
 │       ├── router/
 │       ├── stores/         # Pinia
 │       └── views/
-├── server/                 # API Express
+├── server/                 # API Express (Dockerfile)
 │   ├── prisma/             # Schema, migration, seed
 │   ├── src/
 │   │   ├── config/
@@ -64,7 +65,9 @@ event-hub/
 │   │   └── utils/
 │   ├── test-*.cjs          # Test tích hợp, cần server đang chạy
 │   └── load-test*.js       # Load test bằng k6
-└── docker-compose.yml      # MySQL và Redis cho môi trường dev
+├── docker-compose.yml      # MySQL và Redis cho môi trường dev
+├── docker-compose.prod.yml # MySQL, Redis, migrate, API và client nginx
+└── .github/workflows/ci.yml
 ```
 
 ## Cài đặt
@@ -124,15 +127,27 @@ npm run test:all   # terminal 2
 
 Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http://localhost:5055/api npm run test:all`.
 
-Dự án chưa có CI và client chưa có test tự động.
+`npm run test:all` chạy 9 bộ test tích hợp. GitHub Actions chạy lại toàn bộ trên mỗi pull request; client mới chỉ được build, chưa có test tự động.
+
+## Chạy bằng Docker (production)
+
+`docker-compose.prod.yml` build image cho server và client, chạy migration một lần rồi mới khởi động API. MySQL và Redis không publish ra host; client phục vụ bằng nginx và chuyển `/api` sang server.
+
+```bash
+MYSQL_ROOT_PASSWORD=<mật-khẩu-mạnh> \
+JWT_SECRET=<chuỗi-ngẫu-nhiên-ít-nhất-32-ký-tự> \
+docker compose -f docker-compose.prod.yml up --build
+```
+
+Client ở `http://localhost:8081`, health check ở `http://localhost:8081/api/health`. Đổi cổng bằng `WEB_PORT`. File compose không chứa secret; hai biến trên là bắt buộc.
 
 ## Giới hạn hiện tại
 
-- Thanh toán mới là giả lập, chưa soát vé bằng QR và chưa huỷ được đơn đã thanh toán.
+- Thanh toán mới là giả lập; chưa tích hợp VNPay/MoMo, chưa soát vé bằng QR và chưa huỷ được đơn đã thanh toán (không hoàn tiền).
 - Chưa có xác thực email, đặt lại mật khẩu và refresh token.
-- Hạn mức vé tính theo tài khoản (mặc định 100 vé mỗi sự kiện), nên vẫn lách được bằng nhiều tài khoản.
-- Rate limit lưu trong RAM, chưa dùng chung được khi chạy nhiều instance.
-- Chưa có Dockerfile và cấu hình triển khai production.
+- Hạn mức 100 vé mỗi sự kiện cho mỗi tài khoản (`MAX_TICKETS_PER_USER_PER_EVENT`), nên vẫn lách được bằng nhiều tài khoản.
+- Rate limit lưu trong RAM, chưa dùng chung được khi chạy nhiều instance. Đã hỗ trợ `TRUST_PROXY` khi chạy sau reverse proxy.
+- Client chưa có test tự động; CI mới build client.
 
 ## Giấy phép
 

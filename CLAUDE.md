@@ -12,6 +12,7 @@ docker compose up -d                 # chỉ bật MySQL và Redis; server và c
 # server/ (mặc định http://localhost:5000, cần .env với DATABASE_URL và JWT_SECRET >= 32 ký tự)
 npm run dev                          # ts-node-dev, tự reload
 npm run build                        # tsc; dùng `npx tsc --noEmit` để chỉ kiểm tra kiểu
+npm start                            # chạy dist/app.js sau khi build
 npx prisma migrate deploy            # áp dụng migration
 npx prisma migrate dev --name <ten>  # tạo migration mới (kèm DROP DEFAULT của actorEmail do schema đang lệch)
 npm run seed                         # tạo hoặc đặt lại admin@test.com
@@ -21,7 +22,11 @@ npm run dev
 npm run build                        # vue-tsc rồi vite build
 ```
 
-Dự án không có linter, CI, script `start` hay test cho client.
+Dự án không có linter. CI ở `.github/workflows/ci.yml`; client chưa có test tự động.
+
+```bash
+docker compose -f docker-compose.prod.yml up --build   # client :8081; cần MYSQL_ROOT_PASSWORD và JWT_SECRET
+```
 
 ### Test
 
@@ -33,8 +38,8 @@ node test-regressions.cjs            # một bộ; không lọc được từng 
 BASE_URL=http://localhost:5055/api npm run test:all   # server ở cổng khác
 ```
 
-- **Script test ghi vào database mà `DATABASE_URL` trỏ tới và không kiểm tra đó là database nào.** `test-admin-race.cjs` tạm hạ quyền toàn bộ admin. Không chạy trên dữ liệu thật. Biến môi trường đã đặt sẵn sẽ được ưu tiên hơn `.env`, nên có thể trỏ sang database tạm.
-- Rate limit theo IP nằm trong RAM server (100 request/phút, 30 request admin/phút, 5 lần đăng nhập sai/phút) và áp dụng cả cho test. Chạy lặp liên tục sẽ nhận 429, thường biểu hiện thành lỗi đăng nhập hoặc lỗi parse JSON, không phải bug. Hãy chờ khoảng 1 phút hoặc khởi động lại server.
+- **Script test ghi vào database mà `DATABASE_URL` trỏ tới.** `test-admin-race.cjs` tạm hạ quyền toàn bộ admin, nhưng đã từ chối chạy khi `NODE_ENV=production` hoặc tên database không chứa `test`, `dev`, `verify` hay `eventhub`, trừ khi đặt `ALLOW_DESTRUCTIVE_TESTS=true`. Các test khác vẫn ghi thật, nên không chạy trên dữ liệu thật. Biến môi trường đã đặt sẵn sẽ được ưu tiên hơn `.env`, nên có thể trỏ sang database tạm.
+- Rate limit theo IP nằm trong RAM server (100 request/phút, 30 request admin/phút, 5 lần đăng nhập sai/phút) và áp dụng cả cho test. Chạy lặp liên tục sẽ nhận 429 dạng JSON `{ message }`, không phải bug. Hãy chờ khoảng 1 phút hoặc khởi động lại server.
 - Bộ test mới cần thêm vào `SUITES` trong `run-all-tests.cjs` và `scripts` trong `package.json`.
 - `load-test*.js` chạy bằng k6. `oversell-*.cjs` là kịch bản tái hiện tranh chấp vé, không nằm trong `test:all`, và cần có sẵn ít nhất một sự kiện trong database.
 
@@ -80,6 +85,7 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 - `api/session.ts` là kênh callback giữa axios và `main.ts`, dùng để tránh vòng import với router.
 - `token` lưu ở `localStorage`, còn `user` chỉ nằm trong RAM. Router guard của route cần role phải chờ `authStore.ensureProfile()`.
 - Prisma `Decimal` được serialize thành chuỗi trong JSON, nên phải chuyển sang số trước khi tính toán hoặc định dạng.
+- `MyOrdersView` gọi `confirmOrder`/`cancelOrder` của store; response của hai endpoint này chỉ kèm `tickets` trần, nên store ghép lại `ticketType` cũ theo ticket id. Đồng hồ đếm ngược dùng một interval chung và phải clear trong `onUnmounted`.
 
 ## Tài liệu
 

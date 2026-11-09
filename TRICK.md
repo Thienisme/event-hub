@@ -375,7 +375,7 @@ router.post('/', authenticate, orderRateLimiter, validateBody(createOrderSchema)
 
 `authRateLimiter` dùng `skipSuccessfulRequests: true` → chỉ request **thất bại** mới bị đếm, người gõ sai 4 lần rồi nhập đúng vẫn dùng bình thường.
 
-**Giới hạn cần biết:** bộ đếm nằm trong RAM nên không dùng chung giữa các instance, và chưa bật `trust proxy` nên sau reverse proxy mọi người có thể bị tính chung một IP. Hạn mức theo tài khoản cũng không chặn được người tạo nhiều tài khoản.
+**Giới hạn cần biết:** bộ đếm nằm trong RAM nên không dùng chung giữa các instance. Khi chạy sau reverse proxy phải bật `TRUST_PROXY` (mặc định tắt) để không gộp mọi người vào IP của proxy. Hạn mức theo tài khoản cũng không chặn được người tạo nhiều tài khoản.
 
 ### 5.5. RBAC — 3 tầng (xác thực, role, quyền sở hữu), và vì sao role trong token bị bỏ qua
 
@@ -667,7 +667,7 @@ Nếu interviewer hỏi *"Ứng dụng đã khoá nút rồi thì cần khoá �
 | 191 × 4 = 764 < 767 byte | giới hạn index utf8mb4 | mục 9.2 |
 | TTL lock 5000 ms | độ giữ lock tối đa, không tự gia hạn | mục 3.2 |
 | 16/30 → 30/30 | test hồi quy trước và sau khi sửa | mục 9.12 |
-| ~3.000 vé | một tài khoản giữ được: 15 đơn/5 phút × 100 vé × giữ 10 phút | mục 12 |
+| 100 vé | hạn mức mỗi tài khoản cho một sự kiện (`MAX_TICKETS_PER_USER_PER_EVENT`) | mục 12 |
 | 10 vé / 200 VU | load test: 10 đơn, zero oversell, zero 5xx | mục 3.4 |
 | 100 req/phút | `apiRateLimiter` | mục 5.4 |
 | 15 lần / 5 phút | `orderRateLimiter` (theo tài khoản) | mục 5.4 |
@@ -685,16 +685,16 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 
 | Gap | Mức độ | Trả lời như thế nào |
 |-----|--------|-------------------|
-| **Chưa có thanh toán** | **Cao** | *"Chưa làm VNPay/MoMo. Đó là ranh giới của project. Anh/chị sẽ làm được ở bước nào?"* — bước: thêm bảng trạng thái thanh toán, webhook xác nhận, `updateMany` đổi trạng thái `PENDING → CONFIRMED` có điều kiện (CAS, đúng pattern job hết hạn). **Ghi chú quan trọng:** vì vậy `CONFIRMED`/`CANCELLED` chưa bao giờ được set, nên **doanh thu trong admin/organizer stats luôn = 0**. Nói thẳng điều này. |
-| **Một tài khoản giữ được ~3.000 vé** | **Cao** | *"Chưa giới hạn số vé theo người hoặc sự kiện. Tôi sẽ thêm hạn mức theo người mỗi sự kiện và xác thực email khi đăng ký."* |
+| **Chưa có thanh toán thật** | Trung bình | *"Đã có confirm/cancel, QR và doanh thu tính đơn CONFIRMED, nhưng thanh toán vẫn giả lập. Bước tiếp theo: VNPay/MoMo, webhook xác thực chữ ký, hoàn tiền khi huỷ đơn đã trả."* |
+| **Một tài khoản giữ tối đa 100 vé/sự kiện** | Trung bình | *"Đã có `MAX_TICKETS_PER_USER_PER_EVENT`, tính cả đơn PENDING và CONFIRMED. Vẫn lách được bằng nhiều tài khoản, nên bước tiếp theo là xác thực email."* |
 | **Gửi trùng tạo hai đơn** | Trung bình | *"Chưa có idempotency key. Client gửi một khoá cho mỗi lần bấm, server lưu kèm ràng buộc UNIQUE."* |
 | **Đặt vé phụ thuộc Redis** | Trung bình | *"Redis chết thì không đặt được vé dù MySQL khoẻ. CAS đã đủ cho tính đúng đắn, nên tôi sẽ đo rồi cân nhắc bỏ Redlock."* |
 | **Cache danh sách bị vô hiệu sau mỗi đơn** | Trung bình | *"Lúc đông khách cache gần như vô tác dụng. Tôi sẽ tách số vé còn lại khỏi dữ liệu sự kiện, hoặc chấp nhận số vé trễ vài giây ở trang danh sách."* |
-| **Rate limit trong RAM, chưa bật `trust proxy`** | Trung bình | *"Muốn chạy nhiều instance thì cần chuyển bộ đếm sang Redis và cấu hình proxy."* |
-| **Thiếu index** | Trung bình | *"`orders(status, expiresAt)` bị job quét mỗi 60 giây, sẽ chậm khi bảng lớn."* |
+| **Rate limit trong RAM** | Trung bình | *"Muốn chạy nhiều instance thì cần chuyển bộ đếm sang Redis. `TRUST_PROXY` đã có cho reverse proxy."* |
+| **Index** | ✅ Đã sửa | *"Migration thêm `orders(status, expiresAt)` cho job quét đơn và `events(createdAt)` cho danh sách sắp theo thời gian."* |
 | **Chưa có refresh token** | Thấp | xem mục 5.7 |
-| **Chưa có CI** | Trung bình | *"Chạy 8 bộ test tích hợp bằng script (`npm run test:all`) và k6, chưa có CI. Nếu có thời gian, tôi sẽ đưa vào GitHub Actions: service MySQL + Redis, chạy test, k6 smoke test."* |
-| **Chưa có Dockerfile / HTTPS / helmet / structured logging** | Thấp | *"`docker-compose.yml` hiện chỉ có MySQL và Redis cho dev. Phần còn lại là việc cần làm trước khi lên production."* |
+| **Client chưa có test tự động** | Thấp | *"CI đã chạy 9 bộ test tích hợp và build client trên mỗi pull request; phần UI vẫn chưa có test tự động."* |
+| **Chưa có HTTPS / secret management / structured logging** | Thấp | *"Đã có Dockerfile, docker-compose.prod.yml và helmet. Trước khi lên production thật còn cần TLS, secret manager, logging và refresh token."* |
 | **Chưa có email xác nhận / quên mật khẩu** | Thấp | *"Chưa làm, sẽ thêm luồng OTP và bảng token tạm."* |
 | **RBAC tĩnh, chưa có bảng `permissions`** | Thấp | xem mục 5.5 — có lý do rõ ràng |
 
@@ -734,7 +734,8 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 ### 14.2. Phải chạy được không cần tìm
 
 - [ ] `npm run seed` — tạo admin
-- [ ] `npm run test:all` — 8 bộ test
+- [ ] `npm run test:all` — 9 bộ test
+- [ ] `npm run test:lifecycle` — confirm/cancel, QR, hạn mức theo tài khoản
 - [ ] `npm run test:security` — 17 case bảo mật
 - [ ] `k6 run load-test-concurrent.js` — 200 VU
 - [ ] `node oversell-repro.cjs` — mô phỏng mất lock
@@ -752,6 +753,7 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 9. Vì sao có 3 lớp bảo vệ? → **Defense in depth**, nhưng chỉ CAS và CHECK quyết định tính đúng đắn
 9b. Redlock có chống được bấm hai lần không? → **Không, cần idempotency key**
 10. Làm gì khi Redis chết? → **Fail-open, đọc DB**
+11. Hạn mức vé có cần `FOR UPDATE` không? → **Có**, trên dòng user và là câu đầu tiên: Redlock khoá theo loại vé, còn REPEATABLE READ chụp snapshot ở lần đọc thường đầu tiên. Gỡ khoá thì 8 đơn × 30 vé giữ 120 vé, vượt hạn mức 100.
 
 ### 14.4. Lỗi thường gặp khi bị hỏi "anh/chị làm gì thêm được"
 
