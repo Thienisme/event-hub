@@ -22,10 +22,10 @@ const errorMessage = ref('');
 // sẽ nháy lên "Bạn chưa có đơn vé nào" dù user đang có đơn.
 const loaded = ref(false);
 
-const loadOrders = async () => {
+const loadOrders = async (page?: number, limit?: number) => {
   errorMessage.value = '';
   try {
-    await orderStore.fetchMyOrders();
+    await orderStore.fetchMyOrders(page, limit);
   } catch (error: any) {
     const status = error.response?.status;
 
@@ -44,6 +44,12 @@ const loadOrders = async () => {
   }
 };
 
+const changePage = (page: number) => {
+  if (page < 1 || page > orderStore.pagination.totalPages || orderStore.loading) return;
+  loadOrders(page, orderStore.pagination.limit);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
 /**
  * Đồng hồ đếm ngược dùng chung cho mọi đơn PENDING: một interval cập nhật
  * `now`, mỗi đơn tự tính phần còn lại. Nhờ vậy không phải tạo/thu dọn timer
@@ -53,6 +59,7 @@ const now = ref(Date.now());
 let countdownTimer: ReturnType<typeof setInterval> | undefined;
 
 onMounted(() => {
+  // Luôn về trang 1: đơn mới nhất nằm ở đó, người vừa đặt vé phải thấy ngay.
   loadOrders();
   countdownTimer = setInterval(() => {
     now.value = Date.now();
@@ -129,7 +136,13 @@ const handleActionError = async (error: any, fallback: string) => {
 
   if (status === 409) {
     try {
-      await orderStore.fetchMyOrders();
+      const currentPage = orderStore.pagination.page;
+      const totalPages = orderStore.pagination.totalPages;
+      await orderStore.fetchMyOrders(currentPage, orderStore.pagination.limit);
+      // Nếu trang hiện tại không còn đơn nào và page > 1 thì lùi về trang trước
+      if (orderStore.orders.length === 0 && currentPage > 1 && currentPage <= totalPages) {
+        await loadOrders(currentPage - 1, orderStore.pagination.limit);
+      }
     } catch {
       // Đây chỉ là lần tải lại để đồng bộ UI; lỗi chính đã hiện ở toast.
     }
@@ -238,7 +251,7 @@ const groupTickets = (order: Order): TicketLine[] => {
         empty-title="Bạn chưa có đơn vé nào"
         empty-description="Hãy khám phá các sự kiện đang mở bán nhé."
         empty-action-label="Xem sự kiện"
-        @retry="loadOrders"
+        @retry="loadOrders(orderStore.pagination.page, orderStore.pagination.limit)"
         @empty-action="router.push({ name: 'Home' })"
       >
         <template #skeleton>
@@ -372,6 +385,41 @@ const groupTickets = (order: Order): TicketLine[] => {
           </article>
         </div>
       </DataState>
+
+      <!-- Phân trang -->
+      <div
+        v-if="orderStore.pagination.totalPages > 1 && orderStore.orders.length > 0"
+        class="flex items-center justify-between gap-3 mt-6"
+      >
+        <p class="text-sm text-gray-500">
+          Tổng <strong class="text-gray-900">{{ orderStore.pagination.total }}</strong> đơn
+        </p>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            :disabled="orderStore.pagination.page === 1 || orderStore.loading"
+            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            @click="changePage(orderStore.pagination.page - 1)"
+          >
+            Trang trước
+          </button>
+
+          <span class="text-sm text-gray-600 px-3">
+            Trang <strong class="text-gray-900">{{ orderStore.pagination.page }}</strong>
+            / {{ orderStore.pagination.totalPages }}
+          </span>
+
+          <button
+            type="button"
+            :disabled="orderStore.pagination.page === orderStore.pagination.totalPages || orderStore.loading"
+            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            @click="changePage(orderStore.pagination.page + 1)"
+          >
+            Trang sau
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Hỏi lại trước khi huỷ: huỷ đơn không hoàn tác được -->
