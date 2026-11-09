@@ -13,7 +13,7 @@ docker compose up -d                 # chỉ bật MySQL và Redis; server và c
 npm run dev                          # ts-node-dev, tự reload
 npm run build                        # tsc; dùng `npx tsc --noEmit` để chỉ kiểm tra kiểu
 npx prisma migrate deploy            # áp dụng migration
-npx prisma migrate dev --name <ten>  # tạo migration mới
+npx prisma migrate dev --name <ten>  # tạo migration mới (kèm DROP DEFAULT của actorEmail do schema đang lệch)
 npm run seed                         # tạo hoặc đặt lại admin@test.com
 
 # client/ (http://localhost:5173)

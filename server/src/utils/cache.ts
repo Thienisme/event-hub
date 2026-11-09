@@ -13,7 +13,7 @@ import { cacheClient } from '../config/redis';
  *  4. Không cache giá trị "không tìm thấy" (xem cacheGetOrLoad).
  */
 
-/** TTL của mọi entry cache đọc. Giữ khớp với giá trị đang dùng ở event.controller.ts. */
+/** TTL của mọi entry cache đọc. */
 const READ_TTL_SECONDS = 60;
 
 /**

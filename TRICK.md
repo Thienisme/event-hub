@@ -20,8 +20,8 @@ Một hệ thống bán vé sự kiện có:
 |---|----------|--------------|-----------------|
 | 1 | Không bán quá số lượng | Race condition khi trừ kho | Redlock + CAS ở DB + CHECK constraint |
 | 2 | Giảm tải database | Cache stampede / invalidate | Versioned key + Single-flight + Fail-open |
-| 3 | Bảo mật production-ready | Giả mạo JWT, leo quyền, brute-force | Fail-fast secret, pin algorithm, RBAC, rate limit |
-| 4 | Chịu tải cao | Nhiều request đồng thời | Xử lý lock ở Redis, CAS ở MySQL |
+| 3 | Bảo mật lớp ứng dụng | Giả mạo JWT, leo quyền, brute-force | Fail-fast secret, pin algorithm, RBAC, rate limit |
+| 4 | Chịu tải đồng thời (đã kiểm chứng tới 200 VU) | Nhiều request đồng thời | Xử lý lock ở Redis, CAS ở MySQL |
 | 5 | Dữ liệu nhất quán | Đơn hết hạn, tồn kho ảo | Transaction + job nền + cache invalidation |
 
 ---
@@ -34,7 +34,7 @@ Một hệ thống bán vé sự kiện có:
 | 2 | Cache Redis: stampede, versioned key, fail-open | `server/src/utils/cache.ts` | 3 ngày | **Cao nhất** |
 | 3 | JWT + RBAC + rate limit | `server/src/middlewares/auth.middleware.ts`, `config/auth.ts` | 2 ngày | Cao |
 | 4 | Job nền trả vé (CAS không cần lock) | `server/src/jobs/expireOrders.job.ts` | 1 ngày | Cao |
-| 5 | Race hành trị (FOR UPDATE) | `server/src/controllers/admin.controller.ts` | 1 ngày | Trung bình |
+| 5 | Race quản trị (FOR UPDATE) | `server/src/controllers/admin.controller.ts` | 1 ngày | Trung bình |
 | 6 | Phân loại lỗi 400/409/429/500 | `server/src/utils/errors.ts` | 1 ngày | Trung bình |
 | 7 | Double booking phía client | `client/src/views/EventDetailView.vue` | 0,5 ngày | Trung bình |
 | 8 | Sửa sự kiện + quy đổi tồn kho | `server/src/controllers/event.controller.ts` | 1 ngày | Trung bình |
@@ -47,7 +47,7 @@ Một hệ thống bán vé sự kiện có:
 
 ### 3.1. Vấn đề
 
-`server/src/controllers/order.controller.ts:42-49` — code **sai** trước đây:
+Code **sai** trước đây của `createOrder`:
 
 ```ts
 // READ-THEN-WRITE — có lỗ hổng
@@ -62,7 +62,7 @@ Hai request A và B cùng `findUnique` → cùng thấy `availableQuantity = 1` 
 
 ### 3.2. Giải pháp — 3 lớp bảo vệ
 
-**Lớp 1 — Distributed Lock (Redlock)** — `order.controller.ts:21-27`
+**Lớp 1 — Distributed Lock (Redlock)** — `order.controller.ts`
 
 ```ts
 const lockKey = `locks:ticketType:${ticketTypeId}`;
@@ -70,9 +70,9 @@ const ttl = 5000;
 lock = await redlock.acquire([lockKey], ttl);
 ```
 
-Khóa theo `ticketTypeId` để vé VIP và vé Standard không chặn nhau.
+Khóa theo `ticketTypeId` để vé VIP và vé Standard không chặn nhau. Dự án có **một node Redis** và gọi `acquire`, nên lock không tự gia hạn và chưa phải Redlock đa node.
 
-**Lớp 2 — Compare-And-Swap ở tầng DB (CHỐT CHẶN THẬT)** — `order.controller.ts:42-53`
+**Lớp 2 — Compare-And-Swap ở tầng DB (CHỐT CHẶN THẬT)** — `order.controller.ts`
 
 ```ts
 const reserved = await tx.ticketType.updateMany({
@@ -104,13 +104,17 @@ Prisma **không diễn đạt được** CHECK constraint, nên nó nằm trong 
 
 **"Tại sao không dùng `SELECT ... FOR UPDATE`?"**
 
-> Nó giữ row lock suốt transaction; hàng trăm request cùng một `ticket_type` sẽ xếp hàng dài và timeout. Redis xử lý lock ở bộ nhớ (micro giây) và giảm tải cho MySQL. Tuy vậy tầng DB vẫn có CAS + CHECK constraint làm lưới an toàn.
+> Không cần, chứ không phải vì nó sai. `FOR UPDATE` cũng đúng, nhưng thêm một lượt đọc mà câu `UPDATE` có điều kiện đã làm được. Đừng nói CAS tránh được row lock: câu `UPDATE` trong transaction cũng giữ row lock tới khi commit. Redlock chỉ đưa bớt hàng đợi sang Redis để giảm số kết nối chờ ở MySQL.
+
+**"Đã có `UPDATE` có điều kiện thì Redlock để làm gì?"**
+
+> Không phải để đúng dữ liệu, vì CAS và CHECK đã đủ. Redlock chỉ để giảm tranh chấp ở MySQL, và tôi chưa đo lợi ích đó. Cái giá là đặt vé phụ thuộc Redis: Redis chết thì không đặt được vé dù MySQL khoẻ. Bỏ Redlock thì vẫn không oversell, và tôi sẽ đo so sánh rồi mới quyết định có giữ không.
 
 **"Nếu lock mất giữa transaction thì sao?"**
 
 > CAS vẫn bảo vệ: request thứ hai khi được chạy sẽ đánh giá lại `WHERE availableQuantity >= quantity` trên dữ liệu đã commit, thấy không đủ thì `count = 0`. Kể cả CAS bị vượt, CHECK constraint chặn số âm.
 
-**"Tại sao job hết hạn không cần Redlock?"** — `server/src/jobs/expireOrders.job.ts:40-43`
+**"Tại sao job hết hạn không cần Redlock?"** — `server/src/jobs/expireOrders.job.ts`
 
 > Nó không "đọc rồi ghi" — nó dùng `updateMany` có điều kiện `status='PENDING'` như một phép CAS; MySQL khóa row, chỉ MỘT worker thắng. CAS mạnh hơn lock vì không thể "hết hạn giữa chừng".
 
@@ -118,18 +122,20 @@ Prisma **không diễn đạt được** CHECK constraint, nên nó nằm trong 
 
 | Số liệu | Ý nghĩa |
 |-----------|---------|
-| TTL lock = **5000 ms** | `order.controller.ts:22` |
+| TTL lock = **5000 ms** | `order.controller.ts` |
 | `count === 0` | Không đủ vé **tại thời điểm ghi** |
 | 200 VU, 10 vé | 10 đơn thành công, `availableQuantity = 0`, **zero oversell**, zero 5xx |
 
-### 3.5. Câu hỏi BẪM — đừng trả lời sai
+### 3.5. Câu hỏi BẪY — đừng trả lời sai
 
 | Bẫy | Sai | Đúng |
 |------|-----|------|
 | "Lock đã đủ chống race rồi" | "Đúng, lock là đủ" | Lock có thể mất, CAS mới là chốt chặn thật |
 | "Có `if` kiểm tra số vé nên an toàn" | "Đúng" | `if` kiểm tra giá trị **đã cũ**, không phải điều kiện của hành động |
-| "Dùng `SELECT ... FOR UPDATE` an toàn hơn" | "Đúng" | Giữ row lock lâu, xếp hàng dài; Redis + CAS tốt hơn |
-| "Transaction đã lo được race rồi" | "Đúng" | Isolation level mặc định không chặn **write skew** trên read-then-write |
+| "Dùng `SELECT ... FOR UPDATE` an toàn hơn" | "Đúng" | Cả hai đều an toàn; `UPDATE` có điều kiện đơn giản hơn và cũng giữ row lock tới khi commit |
+| "Transaction đã lo được race rồi" | "Đúng" | `REPEATABLE READ` mặc định không chặn **lost update** trên read-then-write dùng đọc thường |
+| "Redlock tự gia hạn lock" | "Đúng" | Thư viện có hỗ trợ qua `using`, nhưng dự án gọi `acquire` nên không gia hạn |
+| "Có Redlock nên bấm hai lần không tạo trùng đơn" | "Đúng" | Sai: còn đủ vé thì cả hai request đều tạo đơn |
 
 ---
 
@@ -156,7 +162,7 @@ Vô hiệu cache danh sách thường được làm bằng `KEYS events:list:*` 
 
 Vì invalidation chạy **sau mỗi đơn đặt vé**, cách cũ biến mỗi đơn hàng thành một cú chặn 111 ms lên toàn bộ Redis.
 
-`server/src/utils/cache.ts:40, 71-78, 220-224`:
+`server/src/utils/cache.ts`:
 
 ```ts
 const LIST_VERSION_KEY = 'events:list:v';
@@ -175,10 +181,11 @@ Khi cần vô hiệu, chỉ **tăng một con số**. Mọi key cũ mang version
 
 - **Đánh đổi:** mỗi request đọc phải đọc thêm version (~0,1 ms) — vẫn rẻ hơn nhiều so với đọc DB (~40 ms).
 - **Lỗi Redis khi đọc version** → dùng `VERSION_FALLBACK = '0'` (sẽ MISS, an toàn).
+- **Hạn chế:** mọi đơn đặt vé đều tăng version, nên lúc mở bán đông khách cache danh sách liên tục bị vô hiệu đúng khi cần nó nhất.
 
 ### 4.3. Single-flight — chống stampede
 
-Khi cache MISS, nếu để mọi request cùng đọc DB thì stampede. Hàm `cacheGetOrLoad` (`cache.ts:151-208`) chỉ cho **một** request đi tính lại:
+Khi cache MISS, nếu để mọi request cùng đọc DB thì stampede. Hàm `cacheGetOrLoad` (`cache.ts`) chỉ cho **một** request đi tính lại:
 
 ```ts
 // 1. Thử giành lock bằng SET NX (chỉ người đầu tiên thành công)
@@ -215,8 +222,8 @@ return { value: await loader(), source: 'database' };
 
 **Hai chi tiết tinh tế:**
 
-- **Phân biệt MISS với ERROR** (`cache.ts:101-116`). Nếu gộp chung, khi Redis chết mọi request sẽ thử giành lock rồi chờ nhau vô ích. Code xử lý: Redis lỗi → đi thẳng DB, **không giành lock, không chờ ai** (`cache.ts:163-165`).
-- **Nhả lock an toàn bằng Lua script** (`cache.ts:57-65, 128`). Chỉ `DEL` nếu giá trị lock vẫn đúng token của mình. Nếu dùng `DEL` trần mà lệnh của ta chậm hơn TTL, lock đã thuộc về người khác → ta xóa oan lock của họ, mở đường cho stampede quay lại.
+- **Phân biệt MISS với ERROR** (`cache.ts`). Nếu gộp chung, khi Redis chết mọi request sẽ thử giành lock rồi chờ nhau vô ích. Code xử lý: Redis lỗi → đi thẳng DB, **không giành lock, không chờ ai** (`cache.ts`).
+- **Nhả lock an toàn bằng Lua script** (`cache.ts`). Chỉ `DEL` nếu giá trị lock vẫn đúng token của mình. Nếu dùng `DEL` trần mà lệnh của ta chậm hơn TTL, lock đã thuộc về người khác → ta xóa oan lock của họ, mở đường cho stampede quay lại.
 
 ```lua
 if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -228,7 +235,7 @@ end
 
 ### 4.4. Fail-open — Redis chết thì vẫn sống
 
-`server/src/config/redis.ts:36-49`:
+`server/src/config/redis.ts`:
 
 ```ts
 export const cacheClient = new Redis({
@@ -244,7 +251,7 @@ export const cacheClient = new Redis({
 
 ### 4.5. Vì sao có HAI Redis client?
 
-`server/src/config/redis.ts:11` và `:36`
+`server/src/config/redis.ts`
 
 | | `redisClient` | `cacheClient` |
 |---|---|---|
@@ -257,23 +264,23 @@ Hai bên có yêu cầu **trái ngược nhau**:
 - Nếu dùng chung một client cấu hình fail-fast → Redlock sẽ không chờ nổi khi tải cao → không đặt được vé.
 - Nếu dùng chung cấu hình kiên nhẫn → cache làm treo request khi Redis chết.
 
-Tách ra thì Redis chết **chỉ ảnh hưởng lock**, còn đọc dữ liệu vẫn chạy qua DB.
+Tách ra thì Redis chết **chỉ ảnh hưởng lock**, còn đọc dữ liệu vẫn chạy qua DB. Nhưng "chỉ ảnh hưởng lock" đồng nghĩa với **không đặt được vé** trong lúc Redis chết.
 
 ### 4.6. Không cache giá trị null
 
-`cache.ts:186-189`: chỉ ghi cache khi `value !== null && value !== undefined`.
+`cache.ts`: chỉ ghi cache khi `value !== null && value !== undefined`.
 
 Nếu cache null, mọi request sau nhận "not found" **ngay cả khi data đã được tạo ra** — nhưng phải chờ hết TTL mới thấy. Muốn cache "không tìm thấy" thì cần một sentinel riêng để phân biệt với MISS.
 
 ### 4.7. Invalidate list vs detail
 
-`cache.ts:220-252`:
+`cache.ts`:
 
 - `invalidateEventList()` — chỉ `INCR` version.
 - `invalidateEventDetails(ids)` — `DEL` key chi tiết (số lượng nhỏ, xóa trực tiếp rẻ).
 - `invalidateEventCache(ids)` — làm **cả hai**, vì response danh sách **cũng chứa `ticketTypes`** (tức là có luôn số vé còn lại), giống response chi tiết.
 
-TTL cache = 60 giây (`cache.ts:17`).
+TTL cache = 60 giây (`cache.ts`).
 
 ### 4.8. Câu hỏi PV
 
@@ -299,48 +306,48 @@ TTL cache = 60 giây (`cache.ts:17`).
 
 ### 5.1. JWT — không bao giờ có secret mặc định
 
-`server/src/config/auth.ts:34-60`:
+`server/src/config/auth.ts`:
 
 ```ts
 export function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET?.trim();
   if (!secret) throw new Error('Thiếu biến môi trường JWT_SECRET...');
-  if (secret === OLD_LEAKED_DEFAULT) throw new Error('JWT_SECRET đang dùng giá trị mặc định cũ đã bị lộ...');
+  if (FORBIDDEN_SECRETS.has(secret)) throw new Error('JWT_SECRET đang dùng giá trị mặc định cũ đã bị lộ...');
   if (secret.length < MIN_SECRET_LENGTH) throw new Error(`JWT_SECRET quá ngắn (${secret.length}, cần ít nhất ${MIN_SECRET_LENGTH})...`);
   return secret;
 }
 ```
 
-`MIN_SECRET_LENGTH = 32` (`auth.ts:13`).
+`MIN_SECRET_LENGTH = 32` (`config/auth.ts`).
 
-**Điểm hay:** fail fast ngay lúc **khởi động** (`assertAuthConfig()` gọi ở `app.ts:80`), thay vì chạy với secret mặc định mà cả thế giới biết. Bộ test có 4 case chạy `getJwtSecret()` trong **process con** để kiểm tra từng trường hợp.
+**Điểm hay:** fail fast ngay lúc **khởi động** (`assertAuthConfig()` gọi ở `app.ts`), thay vì chạy với secret mặc định mà cả thế giới biết. Bộ test có 4 case chạy `getJwtSecret()` trong **process con** để kiểm tra từng trường hợp.
 
 ### 5.2. Algorithm pinning — chống algorithm confusion
 
-`server/src/middlewares/auth.middleware.ts:46`:
+`server/src/middlewares/auth.middleware.ts`:
 
 ```ts
 decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JwtPayload;
 ```
 
-Nếu để trống, thư viện tự chọn thuật toán theo header của token → kẻ tấn công ký token bằng `alg: none` hoặc đổi HS256 sang RS256. **Ghim `algorithms` là chống thuốc.**
+Nếu để trống, thư viện tự chọn thuật toán theo header của token → kẻ tấn công ký token bằng `alg: none` hoặc đổi HS256 sang RS256. **Ghim `algorithms` là cách chặn.**
 
 ### 5.3. Không tin role trong JWT — đọc từ DB
 
 JWT sống **1 ngày**. Nếu tin token, sau khi admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn — đúng thứ mà tính năng "hạ quyền" sinh ra để chặn.
 
-`auth.middleware.ts:24-70`:
+`auth.middleware.ts`:
 
 ```ts
 // verify token → đọc trạng thái tài khoản (có cache Redis) → gán currentRole
 req.user.currentRole = state.role;
 ```
 
-`server/src/utils/userState.ts`: cache trạng thái trong Redis, **TTL 30 giây** (`userState.ts:49`), đọc DB theo PK mất **0,32 ms**, đọc cache **~0,1 ms**. Khi đổi quyền thì `invalidateUserState` chạy ngay trong request → hiệu lực **tức thời**, không cần chờ TTL.
+`server/src/utils/userState.ts`: cache trạng thái trong Redis, **TTL 30 giây**, đọc DB theo PK mất **0,32 ms**, đọc cache **~0,1 ms**. Khi đổi quyền thì `invalidateUserState` chạy ngay trong request → thông thường có hiệu lực ở request kế tiếp. Trường hợp hiếm (Redis lỗi lúc xoá, hoặc một request ghi lại cache cũ sau lệnh xoá) thì quyền cũ còn tối đa 30 giây.
 
 **Controller chỉ đọc `currentRole`, không đọc `req.user.role`.**
 
-### 5.4. Rate limit — 4 bộ, 4 mục đích
+### 5.4. Rate limit — 5 bộ, 5 mục đích
 
 `server/src/middlewares/rateLimit.middleware.ts`
 
@@ -350,8 +357,9 @@ req.user.currentRole = state.role;
 | `authRateLimiter` | 5 **thất bại**/phút | IP | Chống brute-force mật khẩu |
 | `registerRateLimiter` | 10/phút (kể cả thành công) | IP | Chống spam account |
 | `orderRateLimiter` | 15/5 phút | **`userId`** | Chống đặt vé liên tục |
+| `adminRateLimiter` | 30/phút | IP | Bảo vệ thao tác quản trị |
 
-**Điểm đặc biệt — `orderRateLimiter` khoá theo TÀI KHOẢN chứ không phải IP** (`rateLimit.middleware.ts:48-55`):
+**Điểm đặc biệt — `orderRateLimiter` khoá theo TÀI KHOẢN chứ không phải IP** (`rateLimit.middleware.ts`):
 
 ```ts
 keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
@@ -367,9 +375,11 @@ router.post('/', authenticate, orderRateLimiter, validateBody(createOrderSchema)
 
 `authRateLimiter` dùng `skipSuccessfulRequests: true` → chỉ request **thất bại** mới bị đếm, người gõ sai 4 lần rồi nhập đúng vẫn dùng bình thường.
 
-### 5.5. RBAC — 2 tầng, và vì sao role trong token bị bỏ qua
+**Giới hạn cần biết:** bộ đếm nằm trong RAM nên không dùng chung giữa các instance, và chưa bật `trust proxy` nên sau reverse proxy mọi người có thể bị tính chung một IP. Hạn mức theo tài khoản cũng không chặn được người tạo nhiều tài khoản.
 
-`auth.middleware.ts:96-130` (`authorize`): so sánh `currentRole` (từ DB) với danh sách cho phép. `authenticate` đã đọc trạng thái rồi nên `authorize` không cần hỏi DB lần nữa (nếu cache còn hiệu lực).
+### 5.5. RBAC — 3 tầng (xác thực, role, quyền sở hữu), và vì sao role trong token bị bỏ qua
+
+`auth.middleware.ts` (`authorize`): so sánh `currentRole` (từ DB) với danh sách cho phép. `authenticate` đã đọc trạng thái rồi nên `authorize` không cần đọc lại. Tầng thứ ba nằm trong controller: chỉ chủ sự kiện hoặc ADMIN mới sửa, xoá được.
 
 **Vì sao không tách bảng `roles`/`permissions`/`role_user`/`permission_role`:**
 
@@ -380,19 +390,15 @@ router.post('/', authenticate, orderRateLimiter, validateBody(createOrderSchema)
 
 ### 5.6. Không rò rỉ lỗi ra client
 
-`server/src/utils/errors.ts:11`:
+`server/src/utils/errors.ts`: chỉ message của `AppError` mới được ra client nguyên văn. Mọi lỗi khác → `logUnexpectedError` ghi log ở server, client nhận thông báo chung. Server không được lộ chi tiết lỗi (host, port, tên database…).
 
-```ts
-export class AppError extends Error {}
-```
-
-Chỉ `AppError` mới được ra client nguyên văn. Mọi lỗi khác → `logUnexpectedError` ghi log ở server, client nhận thông báo chung. Server không được lộ chi tiết lỗi (host, port, tên database…).
+`errorMiddleware` là lưới cuối ở tầng Express: JSON sai định dạng trả 400 dạng JSON thay vì trang HTML có stack trace.
 
 ### 5.7. Câu hỏi PV
 
 **"Tại sao không tin role trong JWT?"**
 
-> JWT sống tới 1 ngày. Tin token → sau khi admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn. `authenticate` luôn hỏi DB và gán `currentRole`; controller chỉ đọc `currentRole`. Cache Redis 30 giây giữ đường đặt vé không phải đọc DB mỗi request, nhưng khi đổi quyền thì `invalidateUserState` chạy ngay trong request nên hiệu lực tức thời.
+> JWT sống tới 1 ngày. Tin token → sau khi admin hạ quyền, người đó vẫn giữ quyền cũ tới hết hạn. `authenticate` luôn hỏi DB và gán `currentRole`; controller chỉ đọc `currentRole`. Cache Redis 30 giây giữ đường đặt vé không phải đọc DB mỗi request, nhưng khi đổi quyền thì `invalidateUserState` chạy ngay trong request nên thông thường có hiệu lực ở request kế tiếp.
 
 **"Vì sao rate limit đặt vé theo tài khoản chứ không theo IP?"**
 
@@ -400,7 +406,7 @@ Chỉ `AppError` mới được ra client nguyên văn. Mọi lỗi khác → `l
 
 **"Algorithm confusion là gì?"**
 
-> Nếu để trống `algorithms`, thư viện tự chọn thuật toán theo header của token. Kẻ tấn công ký token bằng `alg: none` → token được coi là hợp lệ mà không cần biết secret. Ghim `algorithms: ['HS256']` là chống thuốc.
+> Nếu để trống `algorithms`, thư viện tự chọn thuật toán theo header của token. Kẻ tấn công ký token bằng `alg: none` → token được coi là hợp lệ mà không cần biết secret. Ghim `algorithms: ['HS256']` là cách chặn.
 
 **"Token hết hạn rồi phải đăng nhập lại? Refresh token có cần không?"**
 
@@ -410,7 +416,7 @@ Chỉ `AppError` mới được ra client nguyên văn. Mọi lỗi khác → `l
 
 ## 6. Chủ đề 4 — Job nền trả vé (bài toán con: đơn hết hạn)
 
-`server/src/jobs/expireOrders.job.ts:22-90`
+`server/src/jobs/expireOrders.job.ts`
 
 ```ts
 const result = await prisma.$transaction(async (tx) => {
@@ -429,15 +435,15 @@ const result = await prisma.$transaction(async (tx) => {
 1. **CAS ở đây thay cho lock**: job không đọc giá trị cũ để quyết định (khác `createOrder`), nó chỉ đổi trạng thái có điều kiện. MySQL khóa row, worker thua nhận `count = 0` và bỏ qua.
 2. **Đổi trạng thái và trả vé phải cùng MỘT transaction**: nếu tách rời mà bước cộng vé lỗi, ta có đơn `EXPIRED` nhưng vé biến mất vĩnh viễn (không còn `PENDING` để job bắt lần sau).
 3. **Một đơn lỗi không làm chết cả lượt quét**: mỗi đơn bọc trong `try/catch` riêng.
-4. **Trả vé xong phải xoá cache** (`job:86`), nếu không UI còn hiển thị số vé cũ tới 60 giây.
+4. **Trả vé xong phải xoá cache** (cuối `releaseExpiredOrders`), nếu không UI còn hiển thị số vé cũ tới 60 giây.
 
-`startExpireOrdersJob` (`job:96-115`) quét ngay 1 lượt lúc khởi động (bắt các đơn hết hạn trong lúc server tắt) rồi lặp mỗi `ORDER_SWEEP_INTERVAL_MS` (mặc định 60s). `.unref()` để job không giữ process sống.
+`startExpireOrdersJob` quét ngay 1 lượt lúc khởi động (bắt các đơn hết hạn trong lúc server tắt) rồi lặp mỗi `ORDER_SWEEP_INTERVAL_MS` (mặc định 60s). `.unref()` để job không giữ process sống.
 
 ---
 
-## 7. Chủ đề 5 — Race hành trị (ba câu hỏi hay)
+## 7. Chủ đề 5 — Race quản trị (ba câu hỏi hay)
 
-`server/src/controllers/admin.controller.ts:50`:
+`server/src/controllers/admin.controller.ts`:
 
 ```sql
 SELECT id FROM `users` WHERE `role` = 'ADMIN' AND `isActive` = 1 FOR UPDATE
@@ -447,13 +453,15 @@ Tình huống: hệ thống chỉ còn đúng 2 admin (A và B). A gọi "hạ q
 
 **Điểm hay — KHÔNG dùng `count()`:** trong MySQL, `count()` là **consistent read theo snapshot** của transaction, nên nó có thể đọc trạng thái **CŨ HƠN** trạng thái mà một locking read vừa khoá, mở lại đúng lỗ hổng đang cố chặn. Cách đúng: locking read để chặn, rồi **đếm kết quả trả về trong JS** (`rows.length`) chứ không `count()` lần nữa trong cùng transaction.
 
-Test: `npm run test:race` — 2 admin cùng hạ quyền nhau → chỉ 1 thắng, "Không thể hạ quyền admin cuối cùng của hệ thống!" (400).
+Test: `npm run test:race` — 2 admin cùng hạ quyền nhau → đúng 1 thắng. Request thua nhận **400** "Không thể hạ quyền admin cuối cùng của hệ thống!", hoặc **403** nếu tới sau khi vừa bị hạ quyền.
+
+**Deadlock:** hai `FOR UPDATE` đồng thời có thể bị MySQL báo lỗi 1213. Dữ liệu vẫn đúng nhưng request thua từng nhận 500, nên `runWithDeadlockRetry` chạy lại transaction tối đa 4 lần.
 
 ---
 
 ## 8. Chủ đề 6 — Phân loại lỗi (dễ bị hỏi, dễ bị trượt)
 
-`server/src/utils/errors.ts:51-100` — hàm `mapPrismaError`:
+`server/src/utils/errors.ts` — hàm `mapPrismaError`:
 
 | Mã lỗi Prisma | Ý nghĩa | HTTP |
 |---------------|---------|------|
@@ -464,12 +472,12 @@ Test: `npm run test:race` — 2 admin cùng hạ quyền nhau → chỉ 1 thắn
 | Lỗi MySQL thô | Không có mã Prisma | 400 |
 | Lỗi lạ | Không xác định được | `null` → 500 |
 
-**Với `createOrder`** (`order.controller.ts:127-148`):
+**Với `createOrder`** (`order.controller.ts`):
 
 | Tình huống | Status | Vì sao |
 |-----------|--------|--------|
 | Redlock không lấy được lock (`ExecutionError`) | **429** | Quá tải, client thử lại được |
-| Hết vé / loại vé không tồn tại (`AppError`) | **400** | Lỗi thuộc về request, thử lại y nguyên là vô ích |
+| Hết vé, loại vé không tồn tại, sự kiện đã kết thúc (`AppError`) | **400** | Lỗi thuộc về request, thử lại y nguyên là vô ích |
 | Mọi lỗi còn lại (Prisma timeout, mất DB…) | **500** | Lỗi server |
 
 **Nếu gộp 500 vào 400** như code cũ, khi DB quá tải client sẽ được báo "request của bạn sai" → không thử lại, và monitoring đếm hụt lỗi server. **Phân loại sai làm chẩn đoán sai.**
@@ -515,13 +523,13 @@ tạo sự kiện: giá 9.999.999.999,99 × 2 vé  ->  201 (thành công, lên k
 
 Sự kiện lên kệ thành công nhưng **không ai mua được** — lỗi chỉ lộ ra ở bước thanh toán, xa hơn nhiều so với lúc tạo sự kiện.
 
-**Sửa:** `superRefine` kiểm tra tích lúc tạo/sửa sự kiện + **kiểm tra lại trong `order.controller.ts`** (vì giá vé có thể được sửa sau khi sự kiện đã tạo — `order.controller.ts:85-87`).
+**Sửa:** `superRefine` kiểm tra tích lúc tạo/sửa sự kiện + **kiểm tra lại trong `order.controller.ts`** (vì giá vé có thể được sửa sau khi sự kiện đã tạo — `order.controller.ts`).
 
-**Chi tiết kỹ thuật:** khi so sánh ở biên phải **làm tròn về 2 chữ số thập phân trước**: `3333333333.33 × 3` trong JS ra `9999999999.9899997711181640625`, so thẳng với `9999999999.99` sẽ **chặn oan** một đơn hợp lệ.
+**Chi tiết kỹ thuật:** khi so sánh ở biên, `exceedsOrderAmount` **làm tròn về 2 chữ số thập phân trước**, vì phép nhân số thực có thể lệch (`0.1 * 3` ra `0.30000000000000004`).
 
 ### 9.4. Một request có thể làm sập server (DoS)
 
-`order.controller.ts:98`:
+`order.controller.ts`:
 
 ```ts
 tickets: { create: Array.from({ length: quantity }).map(() => ({ ticketTypeId })) }
@@ -576,7 +584,7 @@ Ba nguyên nhân (đều là lỗi trong chính bộ test):
 
 ### 9.7. Chạy cả bộ test liên tiếp vượt rate limit, báo lỗi sai
 
-`apiRateLimiter` giới hạn **100 request/phút**. Mỗi bộ test riêng lẻ dùng chưa tới 40 request, nhưng cả 7 bộ cộng lại vượt 100.
+`apiRateLimiter` giới hạn **100 request/phút**. Mỗi bộ test riêng lẻ dùng chưa tới 40 request, nhưng cả bộ cộng lại vượt 100.
 
 Triệu chứng **rất dễ hiểu nhầm**:
 
@@ -599,6 +607,30 @@ RateLimit-Reset: 42
 
 Dùng header này để **tự điều chỉnh** (ví dụ: client tự chậm lại khi còn ít quota) thay vì hardcode.
 
+### 9.9. Một lỗi database làm sập cả server
+
+**Triệu chứng:** database lỗi đúng lúc gọi `/auth/me` → tiến trình Node thoát, mọi người dùng đều mất kết nối.
+
+**Nguyên nhân:** Express 4 không bắt được promise bị reject trong handler async, và từ Node 15 unhandled rejection mặc định làm tiến trình thoát. Chỉ một route thiếu `try/catch` là đủ.
+
+**Sửa:** thêm `try/catch`, thêm `errorMiddleware`. Test dựng một instance trỏ tới database không tồn tại và đặt sẵn trạng thái tài khoản trong Redis để request đi tới đúng handler.
+
+### 9.10. Sự kiện từng có đơn hết hạn không xoá được
+
+Job trả vé về kho nhưng giữ dòng `Ticket` của đơn `EXPIRED`, mà FK `tickets -> ticket_types` là RESTRICT. Vì mọi đơn hiện đều hết hạn, sự kiện nào từng có người đặt cũng bị kẹt, kèm thông báo sai "đã có vé được bán".
+
+**Sửa:** `deleteExpiredOrdersOf` xoá đơn `EXPIRED` trong cùng transaction. Đơn `PENDING` hoặc `CONFIRMED` vẫn bị FK chặn và cả transaction rollback. **Đánh đổi:** các đơn đó biến mất khỏi lịch sử người mua.
+
+### 9.11. Test tưởng ngẫu nhiên hoá ra là deadlock thật
+
+`test:race` lúc đạt lúc không. Log server cho thấy MySQL báo lỗi 1213 và request thua nhận 500. Giữ được quy tắc "còn ít nhất một admin" không có nghĩa là hành vi đã đúng. Sau khi sửa, test vẫn thỉnh thoảng lỗi với `200, 403`: đó là kết quả hợp lệ mà test chưa tính tới, nên phải sửa kỳ vọng của test.
+
+**Bài học:** đừng coi test chập chờn là nhiễu; hãy đọc status code và log thật rồi mới phân loại.
+
+### 9.12. Test hồi quy viết trước khi sửa
+
+Bộ `test-regressions.cjs` được chạy trên code chưa sửa: **16/30 kiểm tra thất bại**, gồm cả server sập thật. Sau khi sửa đạt 30/30. Đây là cách chứng minh test thật sự bắt được lỗi.
+
 ---
 
 ## 10. Chủ đề 8 — Client: chống double-booking (chỉ là UX!)
@@ -606,16 +638,18 @@ Dùng header này để **tự điều chỉnh** (ví dụ: client tự chậm l
 `client/src/views/EventDetailView.vue`
 
 ```vue
-:disabled="ticket.availableQuantity <= 0 || submittingId === ticket.id"
+:disabled="isEnded || ticket.availableQuantity <= 0 || submittingId === ticket.id"
 ```
 
-- `submittingId` (dòng 21) — chỉ một loại vé được gửi một lúc, các loại khác bị disable.
-- `normalizeQuantity` (dòng 109) — chuẩn hoá khi blur: xoá trắng → về 1; vượt tồn kho → kẹp về `availableQuantity`.
-- Comment ở dòng 81–82: *"Chỉ tắt loading nếu đây vẫn là request mới nhất"* — request bị huỷ vẫn chạy tới `finally` và không được tắt loading của request đang bay.
+- `submittingId` — chỉ một loại vé được gửi một lúc, các loại khác bị disable.
+- `normalizeQuantity` — chuẩn hoá khi blur: xoá trắng → về 1; vượt tồn kho → kẹp về `availableQuantity`.
+- Comment trong `loadEvent`: *"Chỉ tắt loading nếu đây vẫn là request mới nhất"* — request bị huỷ vẫn chạy tới `finally` và không được tắt loading của request đang bay.
 
-**Điểm quan trọng nhất:** frontend disable nút chỉ là **UX**. Kẻ tấn công bỏ qua UI và gọi API trực tiếp. **Đây là lý do phải có đủ cả redlock + CAS + rate limit.**
+**Điểm quan trọng nhất:** frontend disable nút chỉ là **UX**. Kẻ tấn công bỏ qua UI và gọi API trực tiếp, nên đảm bảo về tồn kho nằm ở backend (CAS + CHECK).
 
-Nếu interviewer hỏi *"Ứng dụng đã khoá nút rồi thì cần khoá ở backend nữa không?"* — đây là câu hỏi dễ vang: trả lời *"Có, và đây là lý do tôi có 3 lớp bảo vệ."*
+**Backend chưa chống được double booking.** Khi còn đủ vé, hai request đều thành công và tạo hai đơn; Redlock chỉ khiến chúng chạy lần lượt. Rate limit chỉ giới hạn số lần.
+
+Nếu interviewer hỏi *"Ứng dụng đã khoá nút rồi thì cần khoá ở backend nữa không?"*, hãy trả lời: *"Có. Về tồn kho thì backend đã bảo đảm không bán quá. Về gửi trùng thì hiện chưa chặn, tôi sẽ thêm idempotency key với ràng buộc UNIQUE."*
 
 ---
 
@@ -631,13 +665,16 @@ Nếu interviewer hỏi *"Ứng dụng đã khoá nút rồi thì cần khoá �
 | ~100 GB | RAM khi `quantity` = 2.147.483.647 | mục 9.4 |
 | 0,32 ms vs ~0,1 ms | đọc DB theo PK vs đọc cache Redis | mục 5.3 |
 | 191 × 4 = 764 < 767 byte | giới hạn index utf8mb4 | mục 9.2 |
-| TTL lock 5000 ms | độ giữ lock tối đa | mục 3.2 |
+| TTL lock 5000 ms | độ giữ lock tối đa, không tự gia hạn | mục 3.2 |
+| 16/30 → 30/30 | test hồi quy trước và sau khi sửa | mục 9.12 |
+| ~3.000 vé | một tài khoản giữ được: 15 đơn/5 phút × 100 vé × giữ 10 phút | mục 12 |
 | 10 vé / 200 VU | load test: 10 đơn, zero oversell, zero 5xx | mục 3.4 |
 | 100 req/phút | `apiRateLimiter` | mục 5.4 |
 | 15 lần / 5 phút | `orderRateLimiter` (theo tài khoản) | mục 5.4 |
 | 5 lần thất bại / phút | `authRateLimiter` | mục 5.4 |
-| TTL cache 60 s | `READ_TTL_SECONDS` (`cache.ts:17`) | mục 4.2 |
-| TTL user state 30 s | `USER_STATE_TTL_SECONDS` (`userState.ts:49`) | mục 5.3 |
+| 30 req/phút | `adminRateLimiter` | mục 5.4 |
+| TTL cache 60 s | `READ_TTL_SECONDS` (`cache.ts`) | mục 4.2 |
+| TTL user state 30 s | `USER_STATE_TTL_SECONDS` | mục 5.3 |
 | JWT 1 ngày | hạn token | mục 5.3 |
 
 ---
@@ -648,10 +685,16 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 
 | Gap | Mức độ | Trả lời như thế nào |
 |-----|--------|-------------------|
-| **Chưa có thanh toán** | Trung bình | *"Chưa làm VNPay/MoMo. Đó là ranh giới của project. Anh/chị sẽ làm được ở bước nào?"* — bước: thêm bảng trạng thái thanh toán, webhook xác nhận, `updateMany` đổi trạng thái `PENDING → CONFIRMED` có điều kiện (CAS, đúng pattern job hết hạn). **Ghi chú quan trọng:** vì vậy `CONFIRMED`/`CANCELLED` chưa bao giờ được set, nên **doanh thu trong admin/organizer stats luôn = 0**. Nói thẳng điều này. |
+| **Chưa có thanh toán** | **Cao** | *"Chưa làm VNPay/MoMo. Đó là ranh giới của project. Anh/chị sẽ làm được ở bước nào?"* — bước: thêm bảng trạng thái thanh toán, webhook xác nhận, `updateMany` đổi trạng thái `PENDING → CONFIRMED` có điều kiện (CAS, đúng pattern job hết hạn). **Ghi chú quan trọng:** vì vậy `CONFIRMED`/`CANCELLED` chưa bao giờ được set, nên **doanh thu trong admin/organizer stats luôn = 0**. Nói thẳng điều này. |
+| **Một tài khoản giữ được ~3.000 vé** | **Cao** | *"Chưa giới hạn số vé theo người hoặc sự kiện. Tôi sẽ thêm hạn mức theo người mỗi sự kiện và xác thực email khi đăng ký."* |
+| **Gửi trùng tạo hai đơn** | Trung bình | *"Chưa có idempotency key. Client gửi một khoá cho mỗi lần bấm, server lưu kèm ràng buộc UNIQUE."* |
+| **Đặt vé phụ thuộc Redis** | Trung bình | *"Redis chết thì không đặt được vé dù MySQL khoẻ. CAS đã đủ cho tính đúng đắn, nên tôi sẽ đo rồi cân nhắc bỏ Redlock."* |
+| **Cache danh sách bị vô hiệu sau mỗi đơn** | Trung bình | *"Lúc đông khách cache gần như vô tác dụng. Tôi sẽ tách số vé còn lại khỏi dữ liệu sự kiện, hoặc chấp nhận số vé trễ vài giây ở trang danh sách."* |
+| **Rate limit trong RAM, chưa bật `trust proxy`** | Trung bình | *"Muốn chạy nhiều instance thì cần chuyển bộ đếm sang Redis và cấu hình proxy."* |
+| **Thiếu index** | Trung bình | *"`orders(status, expiresAt)` bị job quét mỗi 60 giây, sẽ chậm khi bảng lớn."* |
 | **Chưa có refresh token** | Thấp | xem mục 5.7 |
-| **Chưa có CI** | Trung bình | *"Chạy 7 bộ test bằng script (`npm run test:all`) và k6, chưa có CI. Nếu có thời gian, tôi sẽ đưa vào GitHub Actions: service MySQL + Redis, chạy test, k6 smoke test."* |
-| **Chưa có Docker / HTTPS / helmet / structured logging** | Thấp | *"Chưa làm. Đây là danh sách việc production-ready, nằm trong roadmap."* |
+| **Chưa có CI** | Trung bình | *"Chạy 8 bộ test tích hợp bằng script (`npm run test:all`) và k6, chưa có CI. Nếu có thời gian, tôi sẽ đưa vào GitHub Actions: service MySQL + Redis, chạy test, k6 smoke test."* |
+| **Chưa có Dockerfile / HTTPS / helmet / structured logging** | Thấp | *"`docker-compose.yml` hiện chỉ có MySQL và Redis cho dev. Phần còn lại là việc cần làm trước khi lên production."* |
 | **Chưa có email xác nhận / quên mật khẩu** | Thấp | *"Chưa làm, sẽ thêm luồng OTP và bảng token tạm."* |
 | **RBAC tĩnh, chưa có bảng `permissions`** | Thấp | xem mục 5.5 — có lý do rõ ràng |
 
@@ -659,7 +702,7 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 
 > *"Anh/chị nói project này chạy production chưa?"*
 >
-> Trả lời: *"Chưa. Hiện tại là project học tập và mới chạy ở môi trường dev với MySQL/Redis local. Phần còn thiếu để lên production đã được nằm trong roadmap: Docker, secret management, structured logging, refresh token, và tích hợp thanh toán."*
+> Trả lời: *"Chưa. Hiện tại là project học tập và mới chạy ở môi trường dev với MySQL/Redis local. Phần còn thiếu để lên production gồm: Dockerfile, secret management, structured logging, refresh token, và tích hợp thanh toán."*
 
 ---
 
@@ -677,22 +720,23 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 
 ### 14.1. Code phải đọc thuộc (không tìm trong file lúc PV)
 
-- [ ] `server/src/controllers/order.controller.ts` — 183 dòng, đọc hết
-- [ ] `server/src/utils/cache.ts` — đọc hết, đặc biệt `cacheGetOrLoad` và `parseAllowedOrigins`
+- [ ] `server/src/controllers/order.controller.ts` — đọc hết
+- [ ] `server/src/utils/cache.ts` — đọc hết, đặc biệt `cacheGetOrLoad`
+- [ ] `server/src/utils/cors.ts` — `parseAllowedOrigins`
 - [ ] `server/src/middlewares/auth.middleware.ts` — đọc hết
 - [ ] `server/src/jobs/expireOrders.job.ts` — đọc hết
 - [ ] `server/src/config/redis.ts` và `config/auth.ts`
 - [ ] `server/src/utils/errors.ts` và `utils/validation.ts`
-- [ ] `server/prisma/schema.prisma` — 139 dòng
-- [ ] `server/src/controllers/admin.controller.ts` — phần `FOR UPDATE`
+- [ ] `server/prisma/schema.prisma`
+- [ ] `server/src/controllers/admin.controller.ts` — phần `FOR UPDATE` và `runWithDeadlockRetry`
 - [ ] `client/src/views/EventDetailView.vue` — phần double-booking
 
 ### 14.2. Phải chạy được không cần tìm
 
 - [ ] `npm run seed` — tạo admin
-- [ ] `npm run test:all` — 7 bộ test
+- [ ] `npm run test:all` — 8 bộ test
 - [ ] `npm run test:security` — 17 case bảo mật
-- [ ] `npx k6 run load-test-concurrent.js` — 200 VU
+- [ ] `k6 run load-test-concurrent.js` — 200 VU
 - [ ] `node oversell-repro.cjs` — mô phỏng mất lock
 
 ### 14.3. Câu hỏi bắt buộc tự trả lời được (không hỏi lại)
@@ -705,7 +749,8 @@ Interviewer **sẽ** hỏi về cái còn thiếu. Nếu biết, bạn được 
 6. Vì sao có 2 Redis client? → **2 yêu cầu trái ngược**
 7. Vì sao không tin role trong JWT? → **JWT sống 1 ngày**
 8. Rate limit theo IP hay tài khoản? → **Tùy use case** (đặt vé: theo tài khoản)
-9. Vì sao có 3 lớp bảo vệ? → **Defense in depth**
+9. Vì sao có 3 lớp bảo vệ? → **Defense in depth**, nhưng chỉ CAS và CHECK quyết định tính đúng đắn
+9b. Redlock có chống được bấm hai lần không? → **Không, cần idempotency key**
 10. Làm gì khi Redis chết? → **Fail-open, đọc DB**
 
 ### 14.4. Lỗi thường gặp khi bị hỏi "anh/chị làm gì thêm được"
@@ -718,7 +763,7 @@ Nếu câu hỏi nằm ngoài kiến thức của project (ví dụ "implement b
 
 | Cách | Thời gian | Dùng để |
 |------|-----------|---------|
-| **Kể lại 3 bug** (mục 9.2, 9.3, 9.5) theo **STAR**: Situation → Task → Action → Result | 10 phút | Thay vì "em dùng Zod và Prisma", kể bằng 3 câu chuyện có triệu chứng, số liệu và kết quả |
+| **Kể lại 3 bug** (mục 9.5, 9.9, 9.11) theo **STAR**: Situation → Task → Action → Result | 10 phút | Thay vì "em dùng Zod và Prisma", kể bằng 3 câu chuyện có triệu chứng, số liệu và kết quả |
 | **Vẽ lại 3 lớp bảo vệ** trên giấy | 5 phút | Nếu vẽ sai, interviewer sẽ biết mình hiểu |
 | **Phân biệt `updateMany` có điều kiện** với `SELECT ... FOR UPDATE` | 5 phút | Phân biệt thường gặp nhất |
 | **Mở code tìm bằng mắt** (VD: "tìm chỗ đang giữ lock sau khi commit") | 5 phút | Chứng minh thuộc codebase |
@@ -727,4 +772,4 @@ Nếu câu hỏi nằm ngoài kiến thức của project (ví dụ "implement b
 
 ---
 
-*Tài liệu học tập — cập nhật 21/10/2026. Đọc kèm `PROJECT_NOTES.md` (giải thích chi tiết từng cơ chế, kèm số dòng) và `README.md`.*
+*Tài liệu học tập — cập nhật 09/11/2026. Đọc kèm `PROJECT_NOTES.md` (giải thích chi tiết từng cơ chế) và `README.md`.*

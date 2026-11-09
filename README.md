@@ -68,7 +68,7 @@ event-hub/
 
 ## Cài đặt
 
-Yêu cầu: Node.js 20 trở lên, Docker.
+Yêu cầu: Node.js 20.19+ hoặc 22.12+, Docker.
 
 **1. Bật MySQL và Redis**
 

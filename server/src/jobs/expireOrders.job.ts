@@ -5,11 +5,11 @@ import { invalidateEventCache } from '../utils/cache';
  * Quét các đơn PENDING đã quá `expiresAt`, chuyển sang EXPIRED và trả vé về kho.
  *
  * VÌ SAO KHÔNG CẦN REDLOCK Ở ĐÂY (khác với createOrder):
- * createOrder phải khoá vì nó làm việc kiểu "đọc rồi ghi" (check availableQuantity
- * xong mới trừ), hai request chen nhau sẽ cùng đọc thấy còn vé và cùng trừ -> âm kho.
- * Ở đây ta không đọc giá trị cũ, mà dùng `updateMany` có kèm điều kiện
- * `status: 'PENDING'` như một phép compare-and-swap: MySQL khoá row lại, chỉ MỘT
- * worker đổi được PENDING -> EXPIRED, worker còn lại nhận `count = 0` và bỏ qua.
+ * Tính đúng đắn của cả hai nơi đều đến từ compare-and-swap, không đến từ lock:
+ * createOrder dùng Redlock chỉ để giảm tranh chấp ở MySQL. Job này chạy thưa nên
+ * không cần giảm tranh chấp. `updateMany` có điều kiện `status: 'PENDING'` khiến
+ * MySQL khoá row, chỉ MỘT worker đổi được PENDING -> EXPIRED, worker còn lại nhận
+ * `count = 0` và bỏ qua.
  * CAS mạnh hơn lock ở chỗ nó không thể bị "hết hạn lock giữa chừng".
  *
  * VÌ SAO PHẢI CÙNG MỘT TRANSACTION:
