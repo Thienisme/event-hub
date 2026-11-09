@@ -42,8 +42,28 @@ export interface CreateOrderResponse {
 /** POST /orders/:id/confirm và /orders/:id/cancel trả cùng dạng này */
 export type UpdateOrderResponse = CreateOrderResponse;
 
+export interface OrderPagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** GET /orders/my-orders: cùng dạng phân trang với danh sách sự kiện của admin */
+export interface OrderListResponse {
+  message: string;
+  data: Order[];
+  pagination: OrderPagination;
+}
+
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);
+  const pagination = ref<OrderPagination>({
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0,
+  });
   const loading = ref(false);
 
   /**
@@ -63,12 +83,15 @@ export const useOrderStore = defineStore('order', () => {
     return response.data;
   }
 
-  /** BE trả về mảng order trực tiếp (không bọc trong { data }) */
-  async function fetchMyOrders(): Promise<Order[]> {
+  /** BE trả về { message, data, pagination }, mặc định 20 đơn mỗi trang */
+  async function fetchMyOrders(page = 1, limit = 20): Promise<OrderListResponse> {
     loading.value = true;
     try {
-      const response = await apiClient.get<Order[]>('/orders/my-orders');
-      orders.value = response.data;
+      const response = await apiClient.get<OrderListResponse>('/orders/my-orders', {
+        params: { page, limit },
+      });
+      orders.value = response.data.data;
+      pagination.value = response.data.pagination;
       return response.data;
     } finally {
       loading.value = false;
@@ -125,6 +148,7 @@ export const useOrderStore = defineStore('order', () => {
 
   return {
     orders,
+    pagination,
     loading,
     createOrder,
     fetchMyOrders,

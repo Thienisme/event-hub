@@ -202,29 +202,49 @@ export const createOrder = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Danh sách đơn của chính người dùng, có phân trang.
+ *
+ * Phân trang ở server vì một tài khoản có thể có rất nhiều đơn theo thời gian;
+ * trả hết mọi đơn sẽ làm response phình dần. Cùng dạng với listAllEvents:
+ * `{ message, data, pagination }`.
+ */
 export const MYOrders = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
 
-    const orders = await prisma.order.findMany({
-      where: { userId },
-      include: {
-        tickets: {
-          include: {
-            ticketType: {
-              include: {
-                event: {
-                  select: { title: true, startTime: true, location: true },
+    const where = { userId };
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          tickets: {
+            include: {
+              ticketType: {
+                include: {
+                  event: {
+                    select: { title: true, startTime: true, location: true },
+                  },
                 },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
 
-    return res.json(orders);
+    return res.json({
+      message: 'Lấy danh sách đơn hàng thành công!',
+      data: orders,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     return handleControllerError(res, 'MYOrders', error);
   }
