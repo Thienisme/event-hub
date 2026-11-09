@@ -13,8 +13,8 @@ const { PrismaClient } = require('@prisma/client');
 const Redis = require('ioredis');
 
 const prisma = new PrismaClient();
-const redis = new Redis({ host: '127.0.0.1', port: 6379 });
-const BASE = 'http://localhost:5000/api';
+const redis = new Redis({ host: process.env.REDIS_HOST || '127.0.0.1', port: Number(process.env.REDIS_PORT) || 6379 });
+const BASE = process.env.BASE_URL || 'http://localhost:5000/api';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log('  ', ...a);
