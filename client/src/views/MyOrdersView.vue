@@ -7,7 +7,13 @@ import type { Order, OrderStatus, OrderTicket } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { formatPrice, formatDateTime } from '../utils/format';
-import DataState from '../components/DataState.vue';
+import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import QrCodeImage from '../components/QrCodeImage.vue';
 
@@ -219,235 +225,138 @@ const groupTickets = (order: Order): TicketLine[] => {
 
   return Array.from(grouped.values());
 };
+const activeTab = ref('all');
+const matchesTab = (order: Order, tab: string) => {
+  const status = displayStatus(order);
+  return tab === 'all' || (tab === 'closed' ? status === 'CANCELLED' || status === 'EXPIRED' : status === tab);
+};
+const statusTabs = computed(() => [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'PENDING', label: 'Chờ thanh toán' },
+  { value: 'CONFIRMED', label: 'Đã xác nhận' },
+  { value: 'closed', label: 'Đã huỷ/Hết hạn' },
+].map(tab => ({ ...tab, count: orderStore.orders.filter(order => matchesTab(order, tab.value)).length })));
+const visibleOrders = computed(() => orderStore.orders.filter(order => matchesTab(order, activeTab.value)));
+const ticketBorder = (order: Order) => ({
+  PENDING: 'border-l-warning', CONFIRMED: 'border-l-success',
+  CANCELLED: 'border-l-danger', EXPIRED: 'border-l-muted-foreground',
+})[displayStatus(order)];
+
+const copyOrderId = async (id: string) => {
+  try {
+    await navigator.clipboard.writeText(id);
+    toastStore.success('Đã sao chép mã đơn');
+  } catch {
+    toastStore.error('Không thể sao chép mã đơn. Vui lòng thử lại.');
+  }
+};
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Vé của tôi</h1>
-        <p class="mt-1 text-sm text-gray-500">Danh sách đơn đặt vé của bạn</p>
-      </div>
+  <main class="min-h-screen bg-surface px-4 py-8 text-foreground sm:px-6 sm:py-12">
+    <div class="mx-auto max-w-4xl space-y-6">
+      <header>
+        <h1 class="text-3xl font-semibold tracking-tight">Vé của tôi</h1>
+        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">Quản lý đơn đặt vé, thanh toán và lưu mã QR cho những trải nghiệm sắp tới.</p>
+      </header>
 
-      <!-- Đang tải / lỗi / rỗng / có dữ liệu — dùng chung component DataState -->
-      <DataState
-        :loading="orderStore.loading"
-        :loaded="loaded"
-        :error="errorMessage"
-        :empty="orderStore.orders.length === 0"
-        empty-title="Bạn chưa có đơn vé nào"
-        empty-description="Hãy khám phá các sự kiện đang mở bán nhé."
-        empty-action-label="Xem sự kiện"
-        @retry="loadOrders(orderStore.pagination.page, orderStore.pagination.limit)"
-        @empty-action="router.push({ name: 'Home' })"
-      >
-        <template #skeleton>
-          <div class="space-y-4">
-            <div v-for="n in 3" :key="n" class="bg-white rounded-xl h-40 animate-pulse border border-gray-100"></div>
+      <Tabs v-model="activeTab" class="min-w-0 gap-5">
+        <TabsList aria-label="Lọc đơn theo trạng thái" class="grid h-auto! w-full grid-cols-2 gap-1 rounded-xl p-1 sm:grid-cols-4">
+          <TabsTrigger v-for="tab in statusTabs" :key="tab.value" :value="tab.value" class="min-w-0 gap-1.5 px-2 py-2.5 text-xs sm:text-sm">
+            {{ tab.label }} <Badge variant="secondary" class="px-1.5 tabular-nums">{{ tab.count }}</Badge>
+          </TabsTrigger>
+        </TabsList>
+        <p class="text-xs text-muted-foreground">Số đếm và bộ lọc áp dụng cho các đơn trên trang hiện tại.</p>
+        <TabsContent :value="activeTab" class="min-w-0 space-y-5">
+          <div v-if="orderStore.loading || !loaded" role="status" aria-label="Đang tải vé" class="space-y-5">
+            <Card v-for="n in 3" :key="n" class="gap-5 rounded-2xl border border-l-4 border-l-muted-foreground p-5 shadow-sm">
+              <div class="flex justify-between gap-4"><Skeleton class="h-6 w-3/5" /><Skeleton class="h-6 w-20" /></div>
+              <Skeleton class="h-4 w-2/5" /><Skeleton class="h-12 w-full" />
+              <div class="flex justify-end border-t border-dashed pt-5"><Skeleton class="h-8 w-32" /></div>
+            </Card>
           </div>
-        </template>
-
-        <!-- Danh sách đơn -->
-        <div class="space-y-4">
-          <article
-            v-for="order in orderStore.orders"
-            :key="order.id"
-            class="bg-white border border-gray-100 rounded-xl overflow-hidden"
-          >
-            <header class="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p class="text-xs text-gray-500">Mã đơn</p>
-                <p class="font-mono text-sm font-semibold text-gray-900">
-                  #{{ order.id.slice(0, 8).toUpperCase() }}
-                </p>
-                <p class="mt-1 text-xs text-gray-500">Đặt lúc {{ formatDateTime(order.createdAt) }}</p>
-              </div>
-
-              <OrderStatusBadge :status="displayStatus(order)" />
-            </header>
-
-            <div class="px-5 py-4 space-y-3">
-              <div
-                v-for="line in groupTickets(order)"
-                :key="line.id"
-                class="flex items-center justify-between text-sm"
-              >
-                <div>
-                  <p class="font-medium text-gray-900">{{ line.name }} × {{ line.quantity }}</p>
-                  <p v-if="line.event" class="text-xs text-gray-500">
-                    {{ line.event.title }} — {{ line.event.location }}
-                  </p>
+          <Card v-else-if="errorMessage" role="alert" class="items-center rounded-2xl border p-8 text-center shadow-sm">
+            <AlertCircle class="size-10 text-danger" aria-hidden="true" />
+            <div><h2 class="font-semibold">Không tải được danh sách vé</h2><p class="mt-2 break-words text-sm text-muted-foreground">{{ errorMessage }}</p></div>
+            <Button @click="loadOrders(orderStore.pagination.page, orderStore.pagination.limit)">Thử lại</Button>
+          </Card>
+          <Card v-else-if="visibleOrders.length === 0" class="items-center rounded-2xl border px-5 py-12 text-center shadow-sm">
+            <div class="rounded-2xl bg-primary/5 p-4"><Ticket class="size-9 text-primary" aria-hidden="true" /></div>
+            <div><h2 class="text-lg font-semibold tracking-tight">{{ orderStore.orders.length === 0 ? 'Bạn chưa có đơn vé nào' : 'Chưa có đơn vé ở trạng thái này' }}</h2>
+              <p class="mt-2 text-sm text-muted-foreground">{{ orderStore.orders.length === 0 ? 'Khám phá sự kiện yêu thích và đặt vé cho trải nghiệm tiếp theo.' : 'Chọn trạng thái khác hoặc khám phá thêm các sự kiện đang mở bán.' }}</p></div>
+            <Button @click="router.push({ name: 'Home' })">Khám phá sự kiện</Button>
+          </Card>
+          <div v-else class="space-y-5">
+            <Card v-for="order in visibleOrders" :key="order.id" class="gap-0 rounded-2xl border border-l-4 py-0 shadow-sm transition-shadow hover:shadow-md" :class="ticketBorder(order)">
+              <header class="flex flex-col gap-4 p-5 sm:flex-row sm:justify-between sm:p-6">
+                <div class="min-w-0 space-y-2">
+                  <h2 class="break-words text-lg font-semibold tracking-tight">{{ order.tickets[0]?.ticketType?.event?.title || 'Sự kiện' }}</h2>
+                  <p v-if="order.tickets[0]?.ticketType?.event?.startTime" class="flex items-start gap-2 text-sm text-muted-foreground"><CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ formatDateTime(order.tickets[0]!.ticketType!.event!.startTime) }}</p>
+                  <p v-if="order.tickets[0]?.ticketType?.event?.location" class="flex items-start gap-2 break-words text-sm text-muted-foreground"><MapPin class="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{{ order.tickets[0]?.ticketType?.event?.location }}</span></p>
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span class="font-mono">#{{ order.id.slice(0, 8).toUpperCase() }}</span>
+                    <Button variant="ghost" size="icon" class="size-7" :aria-label="`Sao chép mã đơn ${order.id.slice(0, 8).toUpperCase()}`" title="Sao chép mã đơn" @click="copyOrderId(order.id)"><Copy class="size-3.5" aria-hidden="true" /></Button>
+                    <span>Đặt lúc {{ formatDateTime(order.createdAt) }}</span>
+                  </div>
                 </div>
-                <p class="text-gray-600">{{ formatPrice(line.price) }}</p>
-              </div>
-            </div>
-
-            <!-- Chỉ đơn đã thanh toán mới có mã QR vào cổng -->
-            <div
-              v-if="order.status === 'CONFIRMED'"
-              class="px-5 py-4 border-t border-gray-100"
-            >
-              <p class="text-sm font-semibold text-gray-900">Mã QR vào cổng</p>
-              <p class="mt-1 text-xs text-gray-500">
-                Xuất trình mã này khi soát vé. Mỗi vé có một mã riêng.
-              </p>
-
-              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <div
-                  v-for="(ticket, index) in order.tickets"
-                  :key="ticket.id"
-                  class="border border-gray-100 rounded-lg p-3 flex flex-col items-center"
-                >
-                  <QrCodeImage v-if="ticket.qrCode" :value="ticket.qrCode" :size="132" />
-                  <p v-else class="py-6 text-xs text-gray-400 text-center">Chưa có mã QR</p>
-
-                  <p class="mt-2 text-xs text-gray-500">Vé {{ index + 1 }}</p>
-
-                  <button
-                    v-if="ticket.qrCode"
-                    type="button"
-                    class="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
-                    @click="openQr(order, ticket)"
-                  >
-                    Xem lớn
-                  </button>
+                <div class="shrink-0"><OrderStatusBadge :status="displayStatus(order)" /></div>
+              </header>
+              <div class="space-y-4 px-5 pb-5 sm:px-6">
+                <div v-for="line in groupTickets(order)" :key="line.id" class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 text-sm">
+                  <div class="min-w-0"><p class="break-words font-medium">{{ line.name }} × {{ line.quantity }}</p><p class="mt-1 text-xs text-muted-foreground tabular-nums">Đơn giá {{ formatPrice(line.price) }}</p></div>
+                  <p class="text-right font-medium tabular-nums">{{ formatPrice(Number(line.price) * line.quantity) }}</p>
                 </div>
               </div>
-            </div>
-
-            <footer class="px-5 py-4 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
-              <div class="flex items-baseline gap-2">
-                <span class="text-sm text-gray-600">Tổng tiền</span>
-                <span class="text-lg font-extrabold text-indigo-600">
-                  {{ formatPrice(order.totalAmount) }}
-                </span>
+              <div class="flex flex-wrap items-center justify-between gap-2 border-t border-dashed px-5 py-5 sm:px-6">
+                <span class="text-sm text-muted-foreground">Tổng tiền</span><span class="ml-auto text-right text-2xl font-semibold tracking-tight text-primary tabular-nums">{{ formatPrice(order.totalAmount) }}</span>
               </div>
-
-              <!-- Chỉ đơn đang giữ chỗ mới có thao tác thanh toán/huỷ -->
-              <div
-                v-if="order.status === 'PENDING'"
-                class="flex flex-wrap items-center gap-3"
-              >
-                <span
-                  v-if="isHoldExpired(order)"
-                  class="text-sm font-medium text-gray-500"
-                >
-                  Đã hết hạn giữ chỗ
-                </span>
-
+              <div v-if="order.status === 'PENDING'" class="mx-5 mb-5 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:mx-6 sm:mb-6">
+                <p v-if="isHoldExpired(order)" class="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Timer class="size-4 shrink-0" aria-hidden="true" />Đã hết hạn giữ chỗ</p>
                 <template v-else>
-                  <span class="text-sm text-gray-600">
-                    Giữ chỗ còn
-                    <span class="font-mono font-semibold text-yellow-700">
-                      {{ formatCountdown(remainingMs(order)) }}
-                    </span>
-                  </span>
-
-                  <button
-                    type="button"
-                    :disabled="actionOrderId === order.id"
-                    class="px-4 py-2 text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    @click="askCancel(order)"
-                  >
-                    Huỷ đơn
-                  </button>
-
-                  <button
-                    type="button"
-                    :disabled="actionOrderId === order.id"
-                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    @click="handleConfirm(order)"
-                  >
-                    <span v-if="actionOrderId === order.id">Đang xử lý...</span>
-                    <span v-else>Thanh toán (giả lập)</span>
-                  </button>
+                  <p class="flex items-center gap-2 text-sm font-medium"><Timer class="size-4 shrink-0 text-warning" aria-hidden="true" /><span>Còn <span class="font-mono font-semibold tabular-nums">{{ formatCountdown(remainingMs(order)) }}</span> để thanh toán</span></p>
+                  <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <Button :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán (giả lập)' }}</Button>
+                    <Button variant="outline" class="border-danger/30 bg-card text-danger hover:bg-danger/10 hover:text-danger" :disabled="actionOrderId === order.id" @click="askCancel(order)">Huỷ đơn</Button>
+                  </div>
                 </template>
               </div>
-            </footer>
-          </article>
-        </div>
-      </DataState>
+              <section v-if="order.status === 'CONFIRMED'" class="border-t bg-surface/60 p-5 sm:p-6">
+                <h3 class="font-semibold">Mã QR vào cổng</h3>
+                <p class="mt-1 text-xs leading-relaxed text-muted-foreground">Xuất trình mã này khi soát vé. Mỗi vé có một mã riêng.</p>
+                <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  <div v-for="(ticket, index) in order.tickets" :key="ticket.id" class="flex min-w-0 flex-col items-center rounded-xl border bg-card p-3">
+                    <p class="mb-2 text-xs font-medium">Vé {{ index + 1 }}</p>
+                    <QrCodeImage v-if="ticket.qrCode" :value="ticket.qrCode" :size="132" />
+                    <p v-else class="py-6 text-center text-xs text-muted-foreground">Chưa có mã QR</p>
+                    <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
+                  </div>
+                </div>
+              </section>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
 
-      <!-- Phân trang -->
-      <div
-        v-if="orderStore.pagination.totalPages > 1 && orderStore.orders.length > 0"
-        class="flex items-center justify-between gap-3 mt-6"
-      >
-        <p class="text-sm text-gray-500">
-          Tổng <strong class="text-gray-900">{{ orderStore.pagination.total }}</strong> đơn
-        </p>
-
+      <nav v-if="orderStore.pagination.totalPages > 1 && orderStore.orders.length > 0" aria-label="Phân trang đơn vé" class="flex flex-col items-center justify-between gap-4 sm:flex-row">
+        <p class="text-sm text-muted-foreground">Tổng <strong class="text-foreground tabular-nums">{{ orderStore.pagination.total }}</strong> đơn</p>
         <div class="flex items-center gap-2">
-          <button
-            type="button"
-            :disabled="orderStore.pagination.page === 1 || orderStore.loading"
-            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            @click="changePage(orderStore.pagination.page - 1)"
-          >
-            Trang trước
-          </button>
-
-          <span class="text-sm text-gray-600 px-3">
-            Trang <strong class="text-gray-900">{{ orderStore.pagination.page }}</strong>
-            / {{ orderStore.pagination.totalPages }}
-          </span>
-
-          <button
-            type="button"
-            :disabled="orderStore.pagination.page === orderStore.pagination.totalPages || orderStore.loading"
-            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            @click="changePage(orderStore.pagination.page + 1)"
-          >
-            Trang sau
-          </button>
+          <Button variant="outline" size="sm" :disabled="orderStore.pagination.page === 1 || orderStore.loading" @click="changePage(orderStore.pagination.page - 1)">Trang trước</Button>
+          <span class="text-xs text-muted-foreground tabular-nums">Trang {{ orderStore.pagination.page }} / {{ orderStore.pagination.totalPages }}</span>
+          <Button variant="outline" size="sm" :disabled="orderStore.pagination.page === orderStore.pagination.totalPages || orderStore.loading" @click="changePage(orderStore.pagination.page + 1)">Trang sau</Button>
         </div>
-      </div>
+      </nav>
     </div>
 
-    <!-- Hỏi lại trước khi huỷ: huỷ đơn không hoàn tác được -->
-    <ConfirmDialog
-      :open="cancelTarget !== null"
-      title="Huỷ đơn hàng?"
-      :message="cancelMessage"
-      confirm-label="Huỷ đơn"
-      cancel-label="Giữ lại"
-      danger
-      :loading="cancelLoading"
-      @cancel="cancelTarget = null"
-      @confirm="handleCancel"
-    />
-
-    <!-- Xem mã QR lớn -->
-    <Teleport to="body">
-      <div
-        v-if="selectedQr"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
-      >
-        <div
-          class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
-          @click="selectedQr = null"
-        ></div>
-
-        <div
-          role="dialog"
-          aria-modal="true"
-          class="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center space-y-4"
-        >
-          <h3 class="text-lg font-bold text-gray-900">{{ selectedQr.label }}</h3>
-
+    <ConfirmDialog :open="cancelTarget !== null" title="Huỷ đơn hàng?" :message="cancelMessage" confirm-label="Huỷ đơn" cancel-label="Giữ lại" danger :loading="cancelLoading" @cancel="cancelTarget = null" @confirm="handleCancel" />
+    <Dialog :open="selectedQr !== null" @update:open="(open) => { if (!open) selectedQr = null; }">
+      <DialogContent class="max-w-sm rounded-2xl">
+        <template v-if="selectedQr">
+          <DialogHeader><DialogTitle class="break-words pr-6">{{ selectedQr.label }}</DialogTitle><DialogDescription>Xuất trình mã QR này tại cổng soát vé.</DialogDescription></DialogHeader>
           <QrCodeImage :value="selectedQr.qrCode" :size="288" />
-
-          <p class="font-mono text-xs text-gray-500 break-all">{{ selectedQr.qrCode }}</p>
-
-          <button
-            type="button"
-            class="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            @click="selectedQr = null"
-          >
-            Đóng
-          </button>
-        </div>
-      </div>
-    </Teleport>
-  </div>
+          <p class="break-all text-center font-mono text-xs text-muted-foreground">{{ selectedQr.qrCode }}</p>
+          <Button variant="outline" class="w-full" @click="selectedQr = null">Đóng</Button>
+        </template>
+      </DialogContent>
+    </Dialog>
+  </main>
 </template>
