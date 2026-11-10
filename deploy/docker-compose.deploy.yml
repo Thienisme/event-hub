@@ -1,0 +1,23 @@
+# Cần Compose >= 2.24.4 cho !reset; đường dẫn dựa trên compose gốc.
+services:
+  # VM chỉ tải image đã build; hai proxy cần tin đúng hai hop.
+  server:
+    build: !reset null
+    image: ghcr.io/thienisme/event-hub-server:${IMAGE_TAG:-latest}
+    environment:
+      TRUST_PROXY: "2"
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:?Đặt SEED_DEMO_PASSWORD}
+  # Migration dùng cùng phiên bản code với API.
+  migrate:
+    build: !reset null
+    image: ghcr.io/thienisme/event-hub-server:${IMAGE_TAG:-latest}
+  # Xoá cổng local: chỉ Caddy được public.
+  client:
+    build: !reset null
+    image: ghcr.io/thienisme/event-hub-client:${IMAGE_TAG:-latest}
+    ports: !reset []
+  # Bật Caddy mặc định khi dùng override.
+  caddy:
+    profiles: !reset []
+    environment:
+      DOMAIN: ${DOMAIN:?Đặt DOMAIN}

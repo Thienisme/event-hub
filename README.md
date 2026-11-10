@@ -132,6 +132,8 @@ Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http:/
 
 ## Chạy bằng Docker (production)
 
+Triển khai Oracle ARM64, HTTPS và CD: [hướng dẫn từng bước](deploy/README.md).
+
 `docker-compose.prod.yml` build image cho server và client, chạy migration một lần rồi mới khởi động API. MySQL và Redis không publish ra host; client phục vụ bằng nginx và chuyển `/api` sang server.
 
 ```bash

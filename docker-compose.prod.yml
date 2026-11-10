@@ -20,6 +20,23 @@ name: event-hub-prod
 x-database-url: &database-url "mysql://root:${MYSQL_ROOT_PASSWORD:?Đặt MYSQL_ROOT_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-eventhub}"
 
 services:
+  # Profile giữ cách chạy local; override deploy sẽ bật HTTPS tự động.
+  caddy:
+    image: caddy:2-alpine
+    profiles: [https]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      # Giữ chứng chỉ qua các lần thay container.
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      client:
+        condition: service_started
+
   mysql:
     image: mysql:8.0
     restart: unless-stopped
@@ -118,7 +135,10 @@ services:
       # Chỉ mở trên loopback; đặt sau reverse proxy/TLS nếu cần public.
       - "127.0.0.1:${WEB_PORT:-8081}:80"
 
+# Dữ liệu tồn tại độc lập với container; không dùng down -v trên máy thật.
 volumes:
+  caddy_data:
+  caddy_config:
   mysql_data:
   redis_data:
   uploads_data:
