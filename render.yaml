@@ -42,7 +42,7 @@ services:
         value: "true"
       # Sau deploy, đổi thành URL thực tế nếu Render thêm hậu tố tên.
       - key: CORS_ORIGINS
-        value: https://eventhub.onrender.com
+        value: https://eventhub-v3xy.onrender.com
     # Không khai báo PORT: Render cấp và ứng dụng đọc process.env.PORT.
 
   # Redis chỉ nhận kết nối nội bộ từ dịch vụ cùng region.
