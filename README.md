@@ -132,7 +132,7 @@ Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http:/
 
 ## Chạy bằng Docker (production)
 
-Triển khai Oracle ARM64, HTTPS và CD: [hướng dẫn từng bước](deploy/README.md).
+Triển khai máy nhà Ubuntu x86_64 qua Cloudflare Quick Tunnel: [hướng dẫn từng bước](deploy/home/README.md).
 
 `docker-compose.prod.yml` build image cho server và client, chạy migration một lần rồi mới khởi động API. MySQL và Redis không publish ra host; client phục vụ bằng nginx và chuyển `/api` sang server.
 

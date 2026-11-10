@@ -1,0 +1,29 @@
+# Ghép với compose gốc bằng Compose >= 2.24.4 để hiểu !reset.
+# Các dịch vụ lâu dài có restart: unless-stopped nên tự chạy khi Docker khởi động;
+# migrate giữ restart: no vì chỉ chạy một lần. Caddy giữ profile https, không bật.
+services:
+  server:
+    # Dùng image CI đã build, không build lại trên máy nhà.
+    build: !reset null
+    image: ghcr.io/thienisme/event-hub-server:${IMAGE_TAG:-latest}
+    environment:
+      # Hai proxy: cloudflared -> nginx -> Node, phục vụ rate limit theo IP.
+      TRUST_PROXY: "2"
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:?Đặt SEED_DEMO_PASSWORD}
+  migrate:
+    # Migration và API phải dùng cùng phiên bản code.
+    build: !reset null
+    image: ghcr.io/thienisme/event-hub-server:${IMAGE_TAG:-latest}
+  client:
+    build: !reset null
+    image: ghcr.io/thienisme/event-hub-client:${IMAGE_TAG:-latest}
+    # Chỉ tunnel truy cập nginx trong mạng Docker, không mở cổng host.
+    ports: !reset []
+  tunnel:
+    # Ghim bản phát hành; kiểm tra tag mới trên registry trước khi nâng cấp.
+    image: cloudflare/cloudflared:2025.2.1
+    command: [tunnel, --no-autoupdate, --url, "http://client:80"]
+    restart: unless-stopped
+    depends_on:
+      client:
+        condition: service_started

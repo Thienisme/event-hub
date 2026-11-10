@@ -11,6 +11,9 @@ build/
 .env
 .env.local
 .env.*.local
+# Secret khi deploy: máy nhà (deploy/home/.env.home) và VPS (.env.prod). Chỉ commit file *.example.
+.env.home
+.env.prod
 
 # Logs
 *.log

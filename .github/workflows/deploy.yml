@@ -1,5 +1,5 @@
-# CD build ARM native rồi triển khai qua SSH; CI kiểm thử nằm ở ci.yml.
-name: Deploy ARM64
+# Build AMD64 cho máy nhà tự kéo image; CI kiểm thử nằm ở ci.yml.
+name: Deploy
 on:
   push:
     branches: [main]
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -31,7 +31,7 @@ jobs:
         run: echo "enabled=true" >> "$GITHUB_OUTPUT"
       - id: meta
         run: echo "tag=sha-${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
-      # Buildx chạy native linux/arm64, không cần QEMU.
+      # Buildx chạy native linux/amd64, không cần QEMU.
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -42,25 +42,26 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ./server
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ghcr.io/thienisme/event-hub-server:latest
             ghcr.io/thienisme/event-hub-server:${{ steps.meta.outputs.tag }}
-          cache-from: type=gha,scope=server-arm64
-          cache-to: type=gha,mode=max,scope=server-arm64
+          cache-from: type=gha,scope=server-amd64
+          cache-to: type=gha,mode=max,scope=server-amd64
       - uses: docker/build-push-action@v6
         with:
           context: ./client
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           build-args: VITE_API_BASE_URL=/api
           tags: |
             ghcr.io/thienisme/event-hub-client:latest
             ghcr.io/thienisme/event-hub-client:${{ steps.meta.outputs.tag }}
-          cache-from: type=gha,scope=client-arm64
-          cache-to: type=gha,mode=max,scope=client-arm64
+          cache-from: type=gha,scope=client-amd64
+          cache-to: type=gha,mode=max,scope=client-amd64
 
+  # SSH dành cho VPS sau này; máy nhà dùng pull-based, không cần DEPLOY_HOST.
   # Cờ được tạo bằng if/env ở build; thiếu host thì bỏ qua cả job.
   deploy:
     needs: build

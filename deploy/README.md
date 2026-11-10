@@ -1,3 +1,5 @@
+> **Deploy hiện tại trên máy nhà Ubuntu x86_64:** xem [hướng dẫn từng bước](home/README.md). Phần Oracle bên dưới là tài liệu cũ để tham khảo.
+
 # Triển khai Event Hub trên Oracle ARM64
 
 Tài liệu dành cho người mới: thực hiện theo thứ tự, thay mọi giá trị mẫu.
