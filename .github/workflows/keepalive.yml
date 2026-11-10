@@ -1,0 +1,43 @@
+name: Keepalive
+
+# Render free ngủ sau 15 phút không có truy cập; gọi health mỗi 10 phút.
+# GitHub có thể chạy trễ lịch; với repo public, lịch có thể bị tắt sau
+# 60 ngày repo không có hoạt động. Đây không phải cam kết luôn hoạt động.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      APP_URL: ${{ vars.APP_URL }}
+    steps:
+      - name: Gọi health của Render (tối đa 3 lần)
+        shell: bash
+        run: |
+          if [[ -z "${APP_URL//[[:space:]]/}" ]]; then
+            echo "Chưa đặt repository variable APP_URL; bỏ qua thành công."
+            exit 0
+          fi
+          url="${APP_URL%/}/api/health"
+          for attempt in 1 2 3; do
+            # Lần đầu có thể đang đánh thức container. Chỉ 2xx là thành công.
+            status=0
+            code=$(curl --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' --max-time 90 "$url") || status=$?
+            echo "Lần $attempt: HTTP $code; mã thoát curl $status"
+            if [[ "$status" -eq 0 && "$code" =~ ^2[0-9][0-9]$ ]]; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep 20
+            fi
+          done
+          echo "Health thất bại sau 3 lần; xem URL và Logs trên Render."
+          exit 1

@@ -1,0 +1,55 @@
+# Blueprint: một image Docker phục vụ cả Vue và /api tại Singapore.
+services:
+  - type: web
+    name: eventhub
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    branch: main
+    # Mỗi commit vào main tự kích hoạt build và deploy.
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    # Dockerfile phải tự chạy migrate deploy rồi node dist/app.js.
+    # Không dùng preDeployCommand vì web service free không hỗ trợ.
+    envVars:
+      # Người triển khai nhập secret trên Render, không lưu vào Git.
+      - key: DATABASE_URL
+        sync: false
+      - key: SEED_DEMO_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Render tự nối URL Redis nội bộ, không cần chép mật khẩu.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: eventhub-redis
+          property: connectionString
+      # Ảnh nằm trong TiDB; Vue đã build nằm trong image duy nhất.
+      - key: STORAGE_DRIVER
+        value: db
+      - key: SERVE_CLIENT_DIR
+        value: /app/public
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: TZ
+        value: Asia/Ho_Chi_Minh
+      - key: ALLOW_SIMULATED_PAYMENT
+        value: "true"
+      # Sau deploy, đổi thành URL thực tế nếu Render thêm hậu tố tên.
+      - key: CORS_ORIGINS
+        value: https://eventhub.onrender.com
+    # Không khai báo PORT: Render cấp và ứng dụng đọc process.env.PORT.
+
+  # Redis chỉ nhận kết nối nội bộ từ dịch vụ cùng region.
+  - type: keyvalue
+    name: eventhub-redis
+    plan: free
+    region: singapore
+    ipAllowList: []
+    # Không tự xoá khoá Redlock khi đầy RAM; lệnh ghi có thể báo lỗi.
+    maxmemoryPolicy: noeviction
