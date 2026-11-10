@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatDateTime, formatPrice } from '../utils/format';
+import { APP_TIMEZONE, formatEventDateShort, formatPrice, getEventPhase } from '@/utils/format';
+import { CalendarDays, MapPin } from '@lucide/vue';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 // Dùng chung type với store để tránh lệch kiểu (vd description có thể là null từ Prisma)
 import type { EventItem } from '../stores/event';
 import EventBanner from './EventBanner.vue';
@@ -16,61 +20,58 @@ const minPrice = computed(() => {
   return Math.min(...prices);
 });
 
-// Format ngày tháng hiển thị đẹp mắt (dùng chung với các trang khác)
-const formatDate = (dateString: string) => formatDateTime(dateString);
+const phase = computed(() => getEventPhase(props.event.startTime, props.event.endTime));
+const inventory = computed(() => (props.event.ticketTypes ?? []).reduce(
+  (sum, ticket) => ({ total: sum.total + ticket.totalQuantity, available: sum.available + ticket.availableQuantity }),
+  { total: 0, available: 0 }
+));
+const soldOut = computed(() => !!props.event.ticketTypes?.length && inventory.value.available === 0);
+const status = computed(() => {
+  if (phase.value === 'ended') return { label: 'Đã kết thúc', variant: 'muted' as const };
+  if (soldOut.value) return { label: 'Hết vé', variant: 'danger' as const };
+  if (inventory.value.available > 0 && inventory.value.available <= inventory.value.total * 0.1)
+    return { label: 'Sắp hết vé', variant: 'warning' as const };
+  if (phase.value === 'ongoing') return { label: 'Đang diễn ra', variant: 'success' as const };
+  return null;
+});
+const calendar = computed(() => {
+  const date = new Date(props.event.startTime);
+  if (Number.isNaN(date.getTime())) return { day: '—', month: '—' };
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: APP_TIMEZONE, day: '2-digit', month: '2-digit' }).formatToParts(date);
+  return { day: parts.find(part => part.type === 'day')?.value, month: parts.find(part => part.type === 'month')?.value };
+});
 </script>
 
 <template>
-  <div class="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 overflow-hidden flex flex-col h-full">
-    <!-- Banner Event (class `group` để ảnh zoom khi hover cả card) -->
-    <div class="group relative h-48 bg-gray-100 overflow-hidden">
-      <EventBanner :src="event.bannerUrl" :alt="event.title" />
-    </div>
-
-    <!-- Nội dung Event -->
-    <div class="p-5 flex-1 flex flex-col justify-between">
-      <div>
-        <!-- Thời gian -->
-        <p class="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">
-          {{ formatDate(event.startTime) }} - {{ formatDate(event.endTime) }}
-        </p>
-
-        <!-- Tiêu đề -->
-        <h3 class="text-lg font-bold text-gray-900 line-clamp-2 hover:text-indigo-600 transition-colors">
-          {{ event.title }}
-        </h3>
-
-        <!-- Địa điểm -->
-        <p class="mt-2 text-sm text-gray-500 flex items-center gap-1 line-clamp-1">
-          <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          {{ event.location }}
-        </p>
-      </div>
-
-      <!-- Footer Card: Giá & Nút Chi tiết -->
-      <div class="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
-        <div>
-          <span class="text-xs text-gray-500 block">Giá từ</span>
-          <span class="text-base font-extrabold text-indigo-600">
-            <!--
-              Phân biệt 3 trường hợp: chưa cấu hình loại vé / giá 0 / có giá.
-              Trước đây gộp chung null thành "Miễn phí" nên sự kiện chưa mở bán
-              bị hiển thị nhầm là vé miễn phí.
-            -->
-            {{ minPrice === null ? 'Chưa mở bán' : minPrice === 0 ? 'Miễn phí' : formatPrice(minPrice) }}
-          </span>
+  <router-link :to="`/events/${event.id}`" class="group block h-full min-w-0 rounded-2xl transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+    <Card class="h-full gap-0 rounded-2xl border py-0 shadow-sm ring-0 transition-shadow group-hover:shadow-md">
+      <div class="relative aspect-video overflow-hidden bg-surface">
+        <EventBanner :src="event.bannerUrl" :alt="event.title" />
+        <div aria-hidden="true" class="absolute left-3 top-3 w-12 overflow-hidden rounded-lg bg-white text-center text-slate-900 shadow-sm">
+          <div class="bg-primary/10 py-1 text-[10px] font-semibold text-primary">TH {{ calendar.month }}</div>
+          <div class="py-1 text-2xl font-semibold tabular-nums">{{ calendar.day }}</div>
         </div>
-
-        <router-link
-          :to="`/events/${event.id}`"
-          class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-sm font-semibold rounded-lg transition-colors"
-        >
-          Xem chi tiết
-        </router-link>
+        <Badge v-if="status" :variant="status.variant" class="absolute right-3 top-3 max-w-[calc(100%-5rem)] shadow-sm">{{ status.label }}</Badge>
       </div>
-    </div>
-  </div>
+      <div class="flex flex-1 flex-col p-4">
+        <h3 class="mb-3 line-clamp-2 min-h-12 break-words text-base font-semibold tracking-tight transition-colors group-hover:text-primary">{{ event.title }}</h3>
+        <p class="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+          <CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{{ formatEventDateShort(event.startTime, event.endTime) }}</span>
+        </p>
+        <p class="mt-2 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <MapPin class="size-4 shrink-0" aria-hidden="true" /><span class="truncate">{{ event.location }}</span>
+        </p>
+        <div class="mt-auto pt-5">
+          <div class="flex items-center justify-between gap-2 border-t pt-4">
+            <div class="min-w-0">
+              <span v-if="minPrice !== null && minPrice !== 0" class="block text-xs text-muted-foreground">Từ</span>
+              <span class="break-words font-semibold text-primary tabular-nums">{{ minPrice === null ? 'Chưa mở bán' : minPrice === 0 ? 'Miễn phí' : formatPrice(minPrice) }}</span>
+            </div>
+            <Button as="span" size="sm" class="shrink-0">{{ phase === 'ended' || soldOut ? 'Xem' : 'Đặt vé' }}</Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  </router-link>
 </template>
