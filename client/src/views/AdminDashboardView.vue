@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OrderStatusBadge from '@/components/OrderStatusBadge.vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import apiClient from '../api/axios';
@@ -27,20 +28,6 @@ const stats = ref<AdminStats | null>(null);
 const loading = ref(false);
 const loaded = ref(false);
 const errorMessage = ref('');
-
-const statusLabel: Record<string, string> = {
-  PENDING: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  CANCELLED: 'Đã huỷ',
-  EXPIRED: 'Hết hạn',
-};
-
-const statusClass: Record<string, string> = {
-  PENDING: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  CONFIRMED: 'bg-green-50 text-green-700 border-green-200',
-  CANCELLED: 'bg-red-50 text-red-600 border-red-200',
-  EXPIRED: 'bg-gray-100 text-gray-600 border-gray-200',
-};
 
 let inFlight: AbortController | undefined;
 
@@ -190,12 +177,7 @@ onUnmounted(() => inFlight?.abort());
                       {{ formatPrice(order.totalAmount) }}
                     </td>
                     <td class="px-5 py-3">
-                      <span
-                        class="px-2.5 py-1 text-xs font-semibold rounded-full border"
-                        :class="statusClass[order.status]"
-                      >
-                        {{ statusLabel[order.status] }}
-                      </span>
+                      <OrderStatusBadge :status="order.status" />
                     </td>
                     <td class="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {{ formatDateTime(order.createdAt) }}

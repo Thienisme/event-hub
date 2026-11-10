@@ -8,6 +8,11 @@ export const badgeVariants = cva(
   {
     variants: {
       variant: {
+        success: 'bg-success/10 text-success border-success/20',
+        warning: 'bg-warning/10 text-warning border-warning/20',
+        danger: 'bg-danger/10 text-danger border-danger/20',
+        info: 'bg-info/10 text-info border-info/20',
+        muted: 'bg-muted text-muted-foreground border-muted-foreground/20',
         default: 'bg-primary text-primary-foreground [a]:hover:bg-primary/80',
         secondary: 'bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80',
         destructive: 'bg-destructive/10 [a]:hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive dark:bg-destructive/20',

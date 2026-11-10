@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OrderStatusBadge from '@/components/OrderStatusBadge.vue';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useOrderStore } from '../stores/order';
@@ -69,20 +70,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer);
 });
-
-const statusLabel: Record<OrderStatus, string> = {
-  PENDING: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  CANCELLED: 'Đã huỷ',
-  EXPIRED: 'Hết hạn',
-};
-
-const statusClass: Record<OrderStatus, string> = {
-  PENDING: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  CONFIRMED: 'bg-green-50 text-green-700 border-green-200',
-  CANCELLED: 'bg-red-50 text-red-600 border-red-200',
-  EXPIRED: 'bg-gray-100 text-gray-600 border-gray-200',
-};
 
 const remainingMs = (order: Order): number => {
   if (!order.expiresAt) return 0;
@@ -276,12 +263,7 @@ const groupTickets = (order: Order): TicketLine[] => {
                 <p class="mt-1 text-xs text-gray-500">Đặt lúc {{ formatDateTime(order.createdAt) }}</p>
               </div>
 
-              <span
-                class="px-3 py-1 text-xs font-semibold rounded-full border"
-                :class="statusClass[displayStatus(order)]"
-              >
-                {{ statusLabel[displayStatus(order)] }}
-              </span>
+              <OrderStatusBadge :status="displayStatus(order)" />
             </header>
 
             <div class="px-5 py-4 space-y-3">

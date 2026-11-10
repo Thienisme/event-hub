@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import { Plus, Trash2 } from '@lucide/vue';
+import DateTimePicker from '@/components/DateTimePicker.vue';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -37,6 +45,7 @@ const eventStore = useEventStore();
  */
 const eventId = computed(() => (route.params.id as string | undefined) || undefined);
 const isEditMode = computed(() => !!eventId.value);
+const minimumStartTime = computed(() => isEditMode.value ? undefined : toAppDateTimeInput(new Date().toISOString()));
 
 /**
  * Giới hạn nhập liệu — PHẢI khớp với cột DB và với LIMITS ở
@@ -262,191 +271,88 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-16">
-    <div class="max-w-3xl mx-auto px-4 py-8">
-      <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">
-          {{ isEditMode ? 'Chỉnh sửa sự kiện' : 'Tạo sự kiện mới' }}
-        </h1>
-        <button
-          @click="router.push({ name: 'Home' })"
-          class="px-4 py-2 text-sm text-gray-600 hover:text-indigo-600 transition-colors"
-        >
-          Quay lại
-        </button>
+  <div class="min-h-screen bg-surface pb-16">
+    <div class="mx-auto max-w-4xl px-4 py-8">
+      <div class="mb-4 flex justify-end">
+        <Button variant="ghost" @click="router.push({ name: 'Home' })">Quay lại</Button>
       </div>
-
       <AppAlert :message="errorMessage" type="error" class="mb-4" />
       <AppAlert :message="successMessage" type="success" class="mb-4" />
-
-      <form @submit.prevent="handleSubmit" class="bg-white rounded-xl shadow border border-gray-100 p-6 space-y-6">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Tiêu đề *</label>
-          <input
-            v-model="title"
-            type="text"
-            required
-            :maxlength="LIMITS.TITLE"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            placeholder="Nhập tiêu đề sự kiện"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
-          <textarea
-            v-model="description"
-            rows="4"
-            :maxlength="LIMITS.DESCRIPTION"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            placeholder="Nhập mô tả chi tiết về sự kiện..."
-          ></textarea>
-          <!-- Bộ đếm ký tự: chỉ hiện khi sắp chạm giới hạn, tránh rối mắt. -->
-          <p
-            v-if="descriptionRemaining < 500"
-            class="text-xs text-right mt-1"
-            :class="descriptionRemaining < 100 ? 'text-red-600 font-medium' : 'text-gray-400'"
-          >
-            Còn {{ descriptionRemaining }} ký tự
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Địa điểm *</label>
-          <input
-            v-model="location"
-            type="text"
-            required
-            :maxlength="LIMITS.LOCATION"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            placeholder="Nhập địa điểm tổ chức"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Ảnh banner</label>
-          <!--
-            bannerUrl giữ kiểu string; BannerUploader dùng modelValue: string | null
-            nên quy đổi hai chiều: '' <-> null. Payload vẫn gửi bannerUrl || null.
-          -->
-          <BannerUploader
-            :model-value="bannerUrl || null"
-            @update:model-value="v => (bannerUrl = v ?? '')"
-            @uploading="v => (isUploadingBanner = v)"
-          />
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Thời gian bắt đầu *</label>
-            <input
-              v-model="startTime"
-              type="datetime-local"
-              required
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Thời gian kết thúc *</label>
-            <input
-              v-model="endTime"
-              type="datetime-local"
-              required
-              :min="startTime || undefined"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Loại vé</label>
-          <div v-if="ticketTypes.length === 0" class="text-center py-6 border border-dashed border-gray-200 rounded-lg">
-            <p class="text-gray-500 text-sm">Chưa có loại vé nào</p>
-            <button
-              type="button"
-              @click="addTicketType"
-              class="mt-2 px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-            >
-              + Thêm loại vé
-            </button>
-          </div>
-
-          <div v-else class="space-y-4">
-            <div
-              v-for="(ticket, index) in ticketTypes"
-              :key="index"
-              class="border border-gray-200 rounded-lg p-4 space-y-3"
-            >
-              <div class="flex items-center justify-between">
-                <h3 class="font-medium text-gray-900">Loại vé #{{ index + 1 }}</h3>
-                <button
-                  type="button"
-                  @click="removeTicketType(index)"
-                  class="px-2 py-1 text-sm text-red-600 hover:text-red-800 transition-colors"
-                >
-                  Xóa
-                </button>
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-2xl">{{ isEditMode ? 'Chỉnh sửa sự kiện' : 'Tạo sự kiện mới' }}</CardTitle>
+          <CardDescription>Điền thông tin, thời gian tổ chức và các loại vé cho sự kiện của bạn.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form @submit.prevent="handleSubmit" class="space-y-6">
+            <section class="space-y-4" aria-labelledby="general-heading">
+              <h2 id="general-heading" class="text-sm font-semibold">Thông tin chung</h2>
+              <div class="space-y-2">
+                <Label for="event-title">Tiêu đề *</Label>
+                <Input id="event-title" v-model="title" required :maxlength="LIMITS.TITLE" placeholder="Nhập tiêu đề sự kiện" />
               </div>
-
-              <div>
-                <label class="block text-sm text-gray-600 mb-1">Tên loại vé</label>
-                <input
-                  v-model="ticket.name"
-                  type="text"
-                  :maxlength="LIMITS.TICKET_NAME"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  placeholder="VD: VIP, Standard"
-                />
+              <div class="space-y-2">
+                <Label for="event-description">Mô tả</Label>
+                <Textarea id="event-description" v-model="description" :rows="4" :maxlength="LIMITS.DESCRIPTION" placeholder="Nhập mô tả chi tiết về sự kiện..." />
+                <!-- Bộ đếm ký tự: chỉ hiện khi sắp chạm giới hạn, tránh rối mắt. -->
+                <p v-if="descriptionRemaining < 500" class="text-right text-xs" :class="descriptionRemaining < 100 ? 'text-destructive font-medium' : 'text-muted-foreground'">Còn {{ descriptionRemaining }} ký tự</p>
               </div>
-
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-sm text-gray-600 mb-1">Giá (VNĐ)</label>
-                  <input
-                    v-model.number="ticket.price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    :max="LIMITS.PRICE"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
+              <div class="space-y-2">
+                <Label for="event-location">Địa điểm *</Label>
+                <Input id="event-location" v-model="location" required :maxlength="LIMITS.LOCATION" placeholder="Nhập địa điểm tổ chức" />
+              </div>
+            </section>
+            <Separator />
+            <section class="space-y-4" aria-labelledby="banner-heading">
+              <h2 id="banner-heading" class="text-sm font-semibold">Ảnh banner</h2>
+              <!-- bannerUrl giữ kiểu string; quy đổi chuỗi rỗng sang null cho BannerUploader. -->
+              <BannerUploader :model-value="bannerUrl || null" @update:model-value="v => (bannerUrl = v ?? '')" @uploading="v => (isUploadingBanner = v)" />
+            </section>
+            <Separator />
+            <section class="space-y-4" aria-labelledby="time-heading">
+              <h2 id="time-heading" class="text-sm font-semibold">Thời gian</h2>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="space-y-2">
+                  <Label for="event-start">Thời gian bắt đầu *</Label>
+                  <DateTimePicker id="event-start" v-model="startTime" :min-date="minimumStartTime" placeholder="Chọn thời gian bắt đầu" />
                 </div>
-                <div>
-                  <label class="block text-sm text-gray-600 mb-1">Số lượng</label>
-                  <input
-                    v-model.number="ticket.totalQuantity"
-                    type="number"
-                    min="1"
-                    :max="LIMITS.QUANTITY"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
+                <div class="space-y-2">
+                  <Label for="event-end">Thời gian kết thúc *</Label>
+                  <DateTimePicker id="event-end" v-model="endTime" :min-date="startTime || undefined" placeholder="Chọn thời gian kết thúc" />
                 </div>
               </div>
-            </div>
-
-            <button
-              type="button"
-              @click="addTicketType"
-              class="px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-            >
-              + Thêm loại vé
-            </button>
-          </div>
-        </div>
-
-        <div class="pt-4 border-t">
-          <button
-            type="submit"
-            :disabled="isLoading || isLoadingEvent || isUploadingBanner"
-            class="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
-          >
-            <span v-if="isUploadingBanner">Đang tải ảnh banner...</span>
-            <span v-else-if="isLoading">{{ isEditMode ? 'Đang cập nhật...' : 'Đang tạo...' }}</span>
-            <span v-else-if="isLoadingEvent">Đang tải dữ liệu sự kiện...</span>
-            <span v-else>{{ isEditMode ? 'Cập nhật sự kiện' : 'Tạo sự kiện' }}</span>
-          </button>
-        </div>
-      </form>
+            </section>
+            <Separator />
+            <section class="space-y-4" aria-labelledby="tickets-heading">
+              <h2 id="tickets-heading" class="text-sm font-semibold">Loại vé</h2>
+              <div v-if="ticketTypes.length === 0" class="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">Chưa có loại vé nào</div>
+              <div v-for="(ticket, index) in ticketTypes" :key="index" class="grid grid-cols-1 items-end gap-3 rounded-lg border p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <div class="space-y-2">
+                  <Label :for="`ticket-name-${index}`">Tên loại vé</Label>
+                  <Input :id="`ticket-name-${index}`" v-model="ticket.name" :maxlength="LIMITS.TICKET_NAME" placeholder="VD: Vé VIP, vé thường" />
+                </div>
+                <div class="space-y-2">
+                  <Label :for="`ticket-price-${index}`">Giá (VNĐ)</Label>
+                  <Input :id="`ticket-price-${index}`" v-model.number="ticket.price" type="number" min="0" step="0.01" :max="LIMITS.PRICE" />
+                </div>
+                <div class="space-y-2">
+                  <Label :for="`ticket-quantity-${index}`">Số lượng</Label>
+                  <Input :id="`ticket-quantity-${index}`" v-model.number="ticket.totalQuantity" type="number" min="1" :max="LIMITS.QUANTITY" />
+                </div>
+                <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 aria-hidden="true" /></Button>
+              </div>
+              <Button type="button" variant="outline" @click="addTicketType"><Plus aria-hidden="true" />Thêm loại vé</Button>
+            </section>
+            <Separator />
+            <Button type="submit" size="lg" class="w-full" :disabled="isLoading || isLoadingEvent || isUploadingBanner">
+              <span v-if="isUploadingBanner">Đang tải ảnh banner...</span>
+              <span v-else-if="isLoading">{{ isEditMode ? 'Đang cập nhật...' : 'Đang tạo...' }}</span>
+              <span v-else-if="isLoadingEvent">Đang tải dữ liệu sự kiện...</span>
+              <span v-else>{{ isEditMode ? 'Cập nhật sự kiện' : 'Tạo sự kiện' }}</span>
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>
