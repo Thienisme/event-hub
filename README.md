@@ -14,6 +14,7 @@ Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó n
 
 **Nhà tổ chức**
 - Tạo, sửa, xoá sự kiện với nhiều loại vé
+- Tải ảnh banner lên (kéo thả, xem trước; JPG/PNG/WEBP tối đa 5MB) hoặc dán URL ảnh
 - Xem thống kê sự kiện của mình
 
 **Quản trị viên**
@@ -127,7 +128,7 @@ npm run test:all   # terminal 2
 
 Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http://localhost:5055/api npm run test:all`.
 
-`npm run test:all` chạy 9 bộ test tích hợp. GitHub Actions chạy lại toàn bộ trên mỗi pull request; client mới chỉ được build, chưa có test tự động.
+`npm run test:all` chạy 10 bộ test tích hợp. GitHub Actions chạy lại toàn bộ trên mỗi pull request; client mới chỉ được build, chưa có test tự động.
 
 ## Chạy bằng Docker (production)
 
@@ -139,7 +140,7 @@ JWT_SECRET=<chuỗi-ngẫu-nhiên-ít-nhất-32-ký-tự> \
 docker compose -f docker-compose.prod.yml up --build
 ```
 
-Client ở `http://localhost:8081`, health check ở `http://localhost:8081/api/health`. Đổi cổng bằng `WEB_PORT`. File compose không chứa secret; hai biến trên là bắt buộc.
+Client ở `http://localhost:8081`, health check ở `http://localhost:8081/api/health`. Đổi cổng bằng `WEB_PORT`. Ảnh banner nằm trong volume `uploads_data`, nên build lại container không mất ảnh. File compose không chứa secret; hai biến trên là bắt buộc.
 
 ## Giới hạn hiện tại
 
@@ -148,6 +149,7 @@ Client ở `http://localhost:8081`, health check ở `http://localhost:8081/api/
 - Hạn mức 100 vé mỗi sự kiện cho mỗi tài khoản (`MAX_TICKETS_PER_USER_PER_EVENT`), nên vẫn lách được bằng nhiều tài khoản.
 - Rate limit lưu trong RAM, chưa dùng chung được khi chạy nhiều instance. Đã hỗ trợ `TRUST_PROXY` khi chạy sau reverse proxy.
 - Client chưa có test tự động; CI mới build client.
+- Ảnh banner lưu trên đĩa của server: chưa dọn ảnh không còn sự kiện nào dùng, và chưa chạy được nhiều instance server (cần chuyển sang S3/MinIO, chỉ phải sửa `server/src/utils/storage.ts`).
 
 ## Giấy phép
 
