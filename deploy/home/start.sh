@@ -2,6 +2,7 @@
 # Khởi động từ image có sẵn; Compose giữ thứ tự migration trước API.
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+check_mac_docker
 echo 'Tải image và khởi động; MySQL có thể cần thời gian tạo database...'
 compose pull
 # Tạo lại migration để áp dụng đầy đủ trước mỗi lần triển khai.

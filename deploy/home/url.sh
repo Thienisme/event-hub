@@ -2,6 +2,10 @@
 # Chỉ đọc log container tunnel hiện tại, lấy URL xuất hiện cuối cùng.
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+check_mac_docker
+if [[ "$OS_NAME" == Darwin ]]; then
+  echo 'Khi demo, chạy caffeinate -dimsu trong cửa sổ Terminal khác để chống ngủ; Ctrl+C để thôi.'
+fi
 echo 'Tìm link Quick Tunnel, chờ tối đa 60 giây...'
 deadline=$((SECONDS + 60))
 while (( SECONDS < deadline )); do
@@ -9,7 +13,7 @@ while (( SECONDS < deadline )); do
   tunnel_id=$(COMPOSE_TIMEOUT=$((deadline - SECONDS)) compose ps --all -q tunnel) || tunnel_id=''
   since=''
   if [[ -n "$tunnel_id" ]]; then
-    since=$(timeout 2s docker inspect --format '{{.State.StartedAt}}' "$tunnel_id") || since=''
+    since=$(run_with_timeout 2 docker inspect --format '{{.State.StartedAt}}' "$tunnel_id") || since=''
   fi
   (( SECONDS < deadline )) || break
   [[ -n "$since" ]] || { sleep 1; continue; }

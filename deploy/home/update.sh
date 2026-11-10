@@ -2,14 +2,25 @@
 # Timer tự kéo image; không có thay đổi thì chỉ ghi một dòng log ngoài repo.
 set -euo pipefail
 umask 077
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/eventhub"
-mkdir -p "$state_dir"
-exec 9>"$state_dir/update.lock"
-flock -n 9 || exit 0
-log() { printf '[%s] %s\n' "$(date -Is)" "$*" >> "$state_dir/update.log"; }
-# Thu log lỗi mà không in biến môi trường hay secret.
-trap 'log "Cập nhật thất bại tại dòng $LINENO; xem journalctl --user -u eventhub-update"' ERR
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
+mkdir -p "$state_dir"
+lockdir="$state_dir/update.lock.d"
+# mkdir là thao tác atomic; chỉ một lượt cập nhật lấy được khoá.
+if ! mkdir "$lockdir" 2>/dev/null; then
+  # Dùng mtime của thư mục, tương thích find BSD và GNU; thiếu mốc vẫn gỡ được.
+  if [[ -n "$(find "$lockdir" -type d -prune -mmin +30 -print 2>/dev/null)" ]]; then
+    rmdir "$lockdir" 2>/dev/null || exit 0
+    mkdir "$lockdir" 2>/dev/null || exit 0
+  else
+    exit 0
+  fi
+fi
+trap 'rmdir "$lockdir" 2>/dev/null || true' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$state_dir/update.log"; }
+# Chỉ ghi vị trí lỗi, không ghi secret.
+trap 'log "Cập nhật thất bại tại dòng $LINENO; xem log của lịch cập nhật theo README"' ERR
 # Không tự bật lại app nếu người dùng đã down/stop sau demo.
 if [[ -z "$(compose ps --status running -q server)" ]]; then
   log 'App đang dừng; bỏ qua cập nhật.'
@@ -19,7 +30,9 @@ image_ids() {
   local image
   while IFS= read -r image; do
     docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || printf 'missing:%s\n' "$image"
-  done < <(compose config --images | sort -u)
+  done <<EOF_IMAGES
+$(compose config --images | sort -u)
+EOF_IMAGES
 }
 before=$(image_ids)
 # Giữ timer im lặng nếu pull thành công và không có bản mới.

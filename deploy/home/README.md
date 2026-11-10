@@ -1,4 +1,4 @@
-# Event Hub trên máy nhà Ubuntu x86_64
+# Event Hub trên máy nhà macOS / Linux x86_64
 
 Hướng dẫn này dùng máy nhà chỉ bật khi demo, không cần mua tên miền, tài khoản Cloudflare hay mở cổng router. Các lệnh cài đặt/pull bên dưới cần Internet **khi bạn thực hiện trên máy nhà**. Không chạy script setup Oracle cũ. Mọi script ở đây tự tìm gốc repo nên gọi bằng đường dẫn tuyệt đối từ thư mục nào cũng được.
 
@@ -21,9 +21,40 @@ GitHub Actions -> GHCR <- update.sh (máy nhà tự kéo mỗi 5 phút)
 - **Quick Tunnel** cấp link `https://<ngẫu-nhiên>.trycloudflare.com`, không cần tài khoản. **Named Tunnel** dùng tài khoản Cloudflare và, để public web với hostname riêng, cần tên miền; phù hợp học bước tiếp theo.
 - **Push-based deploy**: Actions chủ động SSH vào máy đích. Job SSH giữ lại cho VPS sau này, thiếu `DEPLOY_HOST` sẽ tự bỏ qua. **Pull-based deploy**: máy nhà tự tải image từ GHCR; không cần SSH từ Internet vào nhà.
 - **Image/tag**: image đóng gói app. `latest` là nhãn có thể chuyển tới bản build mới; `sha-xxxxxxx` xác định bản build theo 7 ký tự commit. Workflow `Deploy` build `linux/amd64`; đợi build thành công trước lần chạy đầu. Đặt SHA trong env để giữ bản app cũ, nhưng migration và cấu hình không tự rollback.
-- **Volume** giữ dữ liệu ngoài container: project cố định `eventhub` tạo `eventhub_mysql_data`, `eventhub_redis_data`, `eventhub_uploads_data`. Docker quản lý chúng trên đĩa máy nhà (thường dưới `/var/lib/docker/volumes`; kiểm tra bằng `docker volume inspect eventhub_mysql_data`). `down` giữ volume; `down -v` xoá dữ liệu, tuyệt đối không dùng khi muốn giữ dữ liệu.
+- **Volume** giữ dữ liệu ngoài container: project cố định `eventhub` tạo `eventhub_mysql_data`, `eventhub_redis_data`, `eventhub_uploads_data`. Docker quản lý chúng trên đĩa máy nhà (trên Mac nằm trong máy ảo Linux; trên Linux thường dưới `/var/lib/docker/volumes`; kiểm tra bằng `docker volume inspect eventhub_mysql_data`). `down` giữ volume; `down -v` xoá dữ liệu, tuyệt đối không dùng khi muốn giữ dữ liệu.
 
-## 2. Cài Docker Engine một lần
+## 2. Cài Docker một lần
+
+### macOS (MacBook Intel)
+
+Mở **Apple menu > About This Mac**: kiểm tra chip Intel, phiên bản macOS và RAM. Cần **>= 8GB RAM**, khuyến nghị cấp 3GB cho máy ảo Docker. Các image hiện tại dùng x86_64 (Intel).
+
+**Cách A (khuyến nghị cho máy cũ): Homebrew + Colima.** Colima là máy ảo Linux nhẹ chạy Docker. Homebrew/Colima cũng có yêu cầu phiên bản macOS; máy quá cũ có thể cần nâng macOS trước. Chạy trên máy nhà có Internet:
+
+```bash
+# Cài Homebrew bằng lệnh chính thức; làm theo phần Next steps để thêm PATH.
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install colima docker docker-compose
+# Gắn Compose thành plugin để dùng lệnh docker compose.
+mkdir -p ~/.docker/cli-plugins
+ln -sfn "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+# Cấp tài nguyên cho máy ảo Linux.
+colima start --cpu 2 --memory 3 --disk 30
+# Tự bật Colima khi đăng nhập.
+brew services start colima
+docker info
+docker compose version
+```
+
+Compose cần **>= 2.24.4**. Nếu thiếu Git, chạy `git --version` và làm theo hướng dẫn cài công cụ Apple; không cần Node/npm trên Mac.
+
+**Cách B: Docker Desktop.** Tải từ [Docker Desktop cho Mac](https://docs.docker.com/desktop/setup/install/mac-install/), chọn bản Intel. Miễn phí cho cá nhân; chỉ hỗ trợ vài phiên bản macOS gần nhất nên máy quá cũ có thể không cài được → thử Cách A. Bật **Start Docker Desktop when you sign in**, vào **Settings > Resources** giới hạn RAM (khuyến nghị 3GB). Chọn một cách chạy Docker để tránh nhầm context.
+
+Sau đó làm các mục 3–9: clone, tạo `.env.home`, `start.sh`, `seed.sh`, `install-autoupdate.sh`, `url.sh` đều chạy được trên Mac bằng bash 3.2 mặc định. LaunchAgent tự cập nhật mỗi 5 phút trong phiên đăng nhập.
+
+Khi demo, mở Terminal riêng chạy `caffeinate -dimsu`; nhấn **Ctrl+C** để thôi. Hoặc vào **System Settings > Battery/Energy** (bản cũ: System Preferences > Energy Saver), cắm sạc và bật **Prevent automatic sleeping when the display is off**. Gập máy (đóng nắp) thường làm máy ngủ trừ khi dùng màn hình ngoài với điều kiện chế độ đóng nắp phù hợp.
+
+### Linux (Ubuntu x86_64)
 
 Các lệnh dưới đây theo [tài liệu Docker Engine cho Ubuntu](https://docs.docker.com/engine/install/ubuntu/). Đọc mục gỡ package xung đột nếu máy đã cài Docker/containerd từ nguồn khác. Không chạy gỡ package trên máy đang có workload mà chưa kiểm tra.
 
@@ -79,7 +110,7 @@ nano deploy/home/.env.home
 
 Điền `MYSQL_ROOT_PASSWORD`, `JWT_SECRET`, `SEED_DEMO_PASSWORD`; giữ MySQL password dạng hex vì được ghép vào URL kết nối. Hai biến đầu là toàn bộ biến bắt buộc `:?` trong compose gốc; override yêu cầu thêm mật khẩu seed. Không dùng giá trị mẫu, không commit file env, không `source` env như shell script. `TZ` có mặc định; `CORS_ORIGINS=http://localhost` là origin hợp lệ: trình duyệt gọi API cùng origin qua nginx nên không cần cập nhật theo link tunnel. Env này không thay đổi cấu hình đã build trong image client (`/api`).
 
-Trên GitHub → Actions → **Deploy** → Run workflow, đợi build thành công. Vào Packages của chủ repo, đặt **cả hai package** `event-hub-server` và `event-hub-client` thành **Public**. Repo public không tự làm package public. Nếu giữ private, chạy `docker login ghcr.io -u TEN_GITHUB` trên máy nhà rồi nhập token có `read:packages` tại prompt; không ghi token vào repo hoặc dòng lệnh. Timer dùng cùng user để đọc thông tin đăng nhập Docker.
+Trên GitHub → Actions → **Deploy** → Run workflow, đợi build thành công. Vào Packages của chủ repo, đặt **cả hai package** `event-hub-server` và `event-hub-client` thành **Public**. Repo public không tự làm package public. Nếu giữ private, chạy `docker login ghcr.io -u TEN_GITHUB` trên máy nhà rồi nhập token có `read:packages` tại prompt; không ghi token vào repo hoặc dòng lệnh. Lịch cập nhật dùng cùng user để đọc thông tin đăng nhập Docker.
 
 ## 4. Chạy lần đầu
 
@@ -87,21 +118,35 @@ Trên GitHub → Actions → **Deploy** → Run workflow, đợi build thành c�
 cd ~/event-hub
 # Kiểm tra cấu hình mà không in secret ra màn hình.
 docker compose -p eventhub -f docker-compose.prod.yml -f deploy/home/docker-compose.home.yml --env-file deploy/home/.env.home config -q
-# Tải image, chạy migration, chờ API tối đa 120s, tìm link tối đa 60s.
+# Tải image, chạy migration, chờ API khoảng 120s, tìm link khoảng 60s.
 ./deploy/home/start.sh
 # Tạo dữ liệu demo với SEED_DEMO_PASSWORD; không dùng --purge-test.
 ./deploy/home/seed.sh
-# Cài timer user để kiểm tra image mỗi 5 phút.
+# Cài LaunchAgent trên Mac hoặc systemd user timer trên Linux, mỗi 5 phút.
 ./deploy/home/install-autoupdate.sh
 ```
 
 Mở link được in, kiểm tra trang và `/api/health` rồi mới gửi người xem. Seed có thể đặt lại dữ liệu demo khi chạy lại, nên backup trước. Tài khoản demo nằm trong README gốc; mật khẩu dùng giá trị bạn đặt trong env.
 
-Các dịch vụ lâu dài kế thừa `restart: unless-stopped`, tunnel cũng có cùng chính sách: Docker bật theo hệ thống thì app tự chạy lại khi bật máy. Migration là job một lần, giữ `restart: no`. Service đã bị stop thủ công sẽ không tự bật lại; chạy `start.sh` để mở lại sau `stop.sh`.
+Các dịch vụ lâu dài kế thừa `restart: unless-stopped`, tunnel cũng có cùng chính sách: Docker sẵn sàng thì app tự chạy lại (Mac cần đăng nhập và bật Colima/Desktop). Migration là job một lần, giữ `restart: no`. Service đã bị stop thủ công sẽ không tự bật lại; chạy `start.sh` để mở lại sau `stop.sh`.
 
 ## 5. Bật auto-update và xem log
 
-Installer tạo `~/.config/systemd/user/eventhub-update.service` và `.timer`, chạy `update.sh` mỗi 5 phút, `Persistent=true` để chạy bù lịch đã lỡ khi bật máy. Bật user manager ngoài phiên đăng nhập bằng lệnh sau (cần quyền sudo):
+Trên **macOS**, installer tạo `~/Library/LaunchAgents/com.eventhub.update.plist`, `RunAtLoad=true`, `StartInterval=300`. Lịch chạy khi user đăng nhập, không chạy khi máy ngủ và không bảo đảm chạy bù. Log ở `~/Library/Application Support/eventhub/`:
+
+```bash
+# Xem log ứng dụng và lỗi của launchd.
+tail -n 20 "$HOME/Library/Application Support/eventhub/update.log"
+tail -n 20 "$HOME/Library/Application Support/eventhub/launchd.stderr.log"
+launchctl print "gui/$(id -u)/com.eventhub.update"
+# Gỡ lịch; script hỗ trợ cả macOS cũ.
+./deploy/home/install-autoupdate.sh --uninstall
+# Cách thủ công trên macOS mới:
+# launchctl bootout "gui/$(id -u)/com.eventhub.update"
+# rm "$HOME/Library/LaunchAgents/com.eventhub.update.plist"
+```
+
+Trên **Linux**, installer tạo `~/.config/systemd/user/eventhub-update.service` và `.timer`, chạy `update.sh` mỗi 5 phút, `Persistent=true` để chạy bù lịch đã lỡ khi bật máy. Bật user manager ngoài phiên đăng nhập bằng lệnh sau (cần quyền sudo):
 
 ```bash
 sudo loginctl enable-linger "$USER"
@@ -111,11 +156,13 @@ journalctl --user -u eventhub-update
 tail -n 20 ~/.local/state/eventhub/update.log
 ```
 
-Nếu đặt `XDG_STATE_HOME`, log nằm trong `$XDG_STATE_HOME/eventhub/`. Không có image mới thì script chỉ ghi một dòng log và không in gì. Script pull rồi so image ID trước/sau, kiểm tra cả container đang dùng bản cũ để thử lại khi lần cập nhật trước lỗi. Có thay đổi thì `git pull --ff-only`, pull lại theo compose mới, tạo lại migration, `up -d`, dọn image dangling. Nếu repo có thay đổi local thì cảnh báo và bỏ qua Git pull; không xoá sửa đổi của bạn. Nếu Git pull thất bại, lượt update dừng để bạn xử lý. Image mới không bảo đảm tương thích dữ liệu cũ: backup trước thay đổi lớn, không có rollback DB tự động.
+Trên Linux, nếu đặt `XDG_STATE_HOME`, log nằm trong `$XDG_STATE_HOME/eventhub/`. Không có image mới thì script chỉ ghi một dòng log và không in gì. Script pull rồi so image ID trước/sau, kiểm tra cả container đang dùng bản cũ để thử lại khi lần cập nhật trước lỗi. Có thay đổi thì `git pull --ff-only`, pull lại theo compose mới, tạo lại migration, `up -d`, dọn image dangling. Nếu repo có thay đổi local thì cảnh báo và bỏ qua Git pull; không xoá sửa đổi của bạn. Nếu Git pull thất bại, lượt update dừng để bạn xử lý. Image mới không bảo đảm tương thích dữ liệu cũ: backup trước thay đổi lớn, không có rollback DB tự động.
+
+Khoá thư mục chống chạy chồng được tự gỡ khi thoát; khoá quá 30 phút được coi là cũ. Không chạy cập nhật dài hơn 30 phút đồng thời với lịch tự động.
 
 Script không tự bật app nếu server đã dừng; timer có thể để nguyên sau demo. Nếu chỉ dừng tunnel, timer giữ trạng thái dừng trong lượt không có image mới; khi có update, `up -d` có thể bật lại tunnel. Muốn giữ web tắt chắc chắn, dừng cả app hoặc tắt timer.
 
-Gỡ timer:
+Gỡ trên cả hai hệ: `./deploy/home/install-autoupdate.sh --uninstall`. Các lệnh thủ công sau chỉ cho Linux:
 
 ```bash
 systemctl --user disable --now eventhub-update.timer
@@ -133,7 +180,7 @@ systemctl --user daemon-reload
 3. Giữ máy có Internet và không ngủ. Ubuntu: **Settings > Power > Automatic Suspend > Off**; chỉnh hành vi đóng nắp nếu dùng laptop.
 4. Kết thúc: chạy `~/event-hub/deploy/home/stop.sh` để dừng app, giữ dữ liệu trong volume.
 
-Tuỳ chọn chặn ngủ ở mức hệ thống (ảnh hưởng mọi user), rồi khôi phục bằng `unmask`:
+Trên Mac dùng `caffeinate -dimsu` như mục 2. Riêng Linux, tuỳ chọn chặn ngủ ở mức hệ thống (ảnh hưởng mọi user), rồi khôi phục bằng `unmask`:
 
 ```bash
 # Chặn các kiểu ngủ trong thời gian demo.
@@ -150,13 +197,13 @@ cd ~/event-hub
 dc() { docker compose -p eventhub -f docker-compose.prod.yml -f deploy/home/docker-compose.home.yml --env-file deploy/home/.env.home "$@"; }
 dc ps -a
 # Chỉ tắt public web; container khác vẫn chạy. Tắt timer để update không bật lại tunnel.
-systemctl --user stop eventhub-update.timer
+./deploy/home/install-autoupdate.sh --uninstall
 dc stop tunnel
 # Mở lại tunnel và lấy link.
 dc up -d tunnel
 ./deploy/home/url.sh
 # Bật lại lịch cập nhật khi cần.
-systemctl --user start eventhub-update.timer
+./deploy/home/install-autoupdate.sh
 ```
 
 ## 7. Giới hạn và bảo mật
@@ -176,7 +223,11 @@ Dùng hàm `dc` ở mục 6 trước các lệnh dưới đây:
 - **Pull denied / manifest unknown**: kiểm tra package public, login đúng user, Actions đã build thành công và tag tồn tại. Image app là AMD64, không dùng trên máy ARM.
 - **Máy ngủ/tắt mạng**: tunnel rớt; đánh thức máy, chờ kết nối lại rồi lấy link và gửi lại nếu đổi.
 - **Đổi IP nhà**: không phải sửa DNS/router; cloudflared kết nối outbound lại. **Đổi máy**: clone/cài Docker lại, chuyển env an toàn và restore volume/backup; dữ liệu không đi theo tài khoản GitHub.
-- **Timer không chạy**: kiểm tra `systemctl --user status eventhub-update.timer`, journal, linger và quyền nhóm docker. Repo có sửa đổi local sẽ không tự lấy scripts mới.
+- **Mac: `docker: command not found`**: làm theo Homebrew Next steps để thêm PATH; Intel thường dùng `/usr/local/bin` (`brew --prefix` để kiểm tra).
+- **Mac: `Cannot connect to the Docker daemon`**: chạy `colima start --cpu 2 --memory 3` hoặc mở Docker Desktop.
+- **Mac: MySQL bị kill / Colima thiếu RAM**: `colima stop`, rồi `colima start --cpu 2 --memory 4` nếu máy còn đủ RAM.
+- **Mac: launchd không thấy docker**: kiểm tra PATH trong plist có `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin`, cài lại lịch và xem `launchd.stderr.log`. Homebrew ở vị trí tuỳ chỉnh cần thêm đường dẫn tương ứng vào plist.
+- **Linux: timer không chạy**: kiểm tra `systemctl --user status eventhub-update.timer`, journal, linger và quyền nhóm docker. Repo có sửa đổi local sẽ không tự lấy scripts mới.
 - **Đổi MYSQL_ROOT_PASSWORD nhưng DB không nhận**: env chỉ tạo mật khẩu ở lần khởi tạo DB; đổi mật khẩu DB đang có cần quy trình riêng, không xoá volume để chữa lỗi.
 
 ## 9. Backup trước thay đổi quan trọng
