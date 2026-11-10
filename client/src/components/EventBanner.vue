@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { resolveMediaUrl } from '../utils/media';
 
 const props = defineProps<{
   src?: string | null;
   alt: string;
 }>();
+
+/**
+ * bannerUrl có thể là đường dẫn tương đối "/uploads/..." -> ghép origin của
+ * API để <img> tải được ảnh; URL tuyệt đối thì giữ nguyên.
+ */
+const resolvedSrc = computed(() => resolveMediaUrl(props.src));
 
 /**
  * Dữ liệu seed đang trỏ tới https://example.com/banner.jpg -> HTTP 404.
@@ -29,8 +36,8 @@ watch(
 <template>
   <div class="w-full h-full overflow-hidden">
     <img
-      v-if="src && !broken"
-      :src="src"
+      v-if="resolvedSrc && !broken"
+      :src="resolvedSrc"
       :alt="alt"
       class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
       @error="broken = true"
