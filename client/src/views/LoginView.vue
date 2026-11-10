@@ -53,7 +53,10 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
+  <div class="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-12">
+    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-gray-500 hover:text-indigo-600">
+      ← Về trang chủ
+    </router-link>
     <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
       <div>
         <h2 class="text-center text-3xl font-extrabold text-gray-900">
