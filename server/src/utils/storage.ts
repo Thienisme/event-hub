@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { mkdirSync } from 'fs';
 import { writeFile } from 'fs/promises';
 import path from 'path';
+import sharp from 'sharp';
 import { AppError } from './errors';
 
 /**
@@ -77,8 +78,22 @@ export const saveImage = async (buf: Buffer): Promise<string> => {
     throw new AppError('Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP!', 400);
   }
 
-  const fileName = `${randomUUID()}.${kind.ext}`;
+  // Giải mã rồi encode lại để loại phần dữ liệu polyglot và bỏ EXIF/GPS cùng metadata.
+  // Giới hạn pixel chống ảnh khổng lồ/pixel bomb dù file nén nhỏ; chỉ lấy frame đầu.
+  // Áp dụng hướng EXIF trước khi bỏ metadata, thu nhỏ ảnh để giảm dung lượng lưu trữ.
+  let image: Buffer;
+  try {
+    image = await sharp(buf, { limitInputPixels: 40_000_000, failOn: 'error' })
+      .rotate()
+      .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer();
+  } catch {
+    throw new AppError('File ảnh bị hỏng hoặc quá lớn để xử lý!', 400);
+  }
+
+  const fileName = `${randomUUID()}.webp`;
   // flag 'wx': không bao giờ ghi đè file đã có.
-  await writeFile(path.join(UPLOAD_DIR, fileName), buf, { flag: 'wx' });
+  await writeFile(path.join(UPLOAD_DIR, fileName), image, { flag: 'wx' });
   return `${UPLOAD_URL_PREFIX}${fileName}`;
 };

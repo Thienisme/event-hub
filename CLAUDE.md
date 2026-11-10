@@ -77,7 +77,7 @@ Luồng request ở server: `routes/` gắn middleware theo thứ tự `authenti
 
 ### Tải ảnh (`utils/storage.ts`, `controllers/upload.controller.ts`)
 
-- `POST /api/uploads` (ORGANIZER/ADMIN, field `file`) giữ file trong RAM, nhận diện ảnh bằng **magic bytes** (không tin mimetype/đuôi file), rồi ghi vào `UPLOAD_DIR` với tên UUID. Trả về đường dẫn **tương đối** `/uploads/<uuid>.<ext>`; client ghép origin API qua `resolveMediaUrl` (`client/src/utils/media.ts`). Không lưu host vào database.
+- `POST /api/uploads` (ORGANIZER/ADMIN, field `file`) giữ file trong RAM, nhận diện ảnh bằng **magic bytes** (không tin mimetype/đuôi file), rồi giải mã và encode lại bằng sharp thành WEBP (quality 82), áp dụng hướng EXIF, bỏ metadata/EXIF/GPS và dữ liệu polyglot. Giới hạn đầu vào 40 triệu pixel để chống pixel bomb, thu nhỏ tối đa 1920×1920, chỉ lấy frame đầu. Lỗi giải mã trả 400. Ghi vào `UPLOAD_DIR` với tên UUID và đuôi `.webp`; đường dẫn ảnh cũ `.jpg|.png|.webp` vẫn hợp lệ. Trả về đường dẫn **tương đối** `/uploads/<uuid>.webp`; client ghép origin API qua `resolveMediaUrl` (`client/src/utils/media.ts`). Không lưu host vào database.
 - `bannerUrl` chỉ nhận URL http(s) hoặc đúng dạng `UPLOADED_IMAGE_PATH`. Đổi giới hạn 5MB thì sửa cả `MAX_IMAGE_BYTES`, `client_max_body_size` trong `client/nginx.conf` và `MAX_BANNER_BYTES` ở client.
 - Production cần volume cho `UPLOAD_DIR` (`uploads_data` trong `docker-compose.prod.yml`).
 

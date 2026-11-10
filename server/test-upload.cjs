@@ -11,6 +11,7 @@ const http = require('http');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const sharp = require('sharp');
 
 const prisma = new PrismaClient();
 const API = process.env.BASE_URL || 'http://localhost:5000/api';
@@ -34,15 +35,13 @@ const password = 'MatKhauDaiHon8KyTu';
 const users = [];
 const eventIds = [];
 const uploadedFiles = [];
-const UPLOAD_PATH = /^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp)$/;
+const UPLOAD_PATH = /^\/uploads\/[0-9a-f-]{36}\.webp$/;
 
 // Ảnh PNG 1x1 hợp lệ.
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64'
 );
-const JPG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0]);
-const WEBP_HEADER = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 ')]);
 
 async function createUser(tag, role) {
   const email = `upload-${tag}-${stamp}@test.local`;
@@ -122,22 +121,25 @@ async function testValidUpload(organizer) {
   const res = await upload(organizer, file(PNG));
   check('PNG hợp lệ -> 201', res.status === 201, `nhận ${res.status} ${JSON.stringify(res.body)}`);
   const url = res.body && res.body.url;
-  check('url là đường dẫn tương đối /uploads/<uuid>.png', UPLOAD_PATH.test(url || '') && url.endsWith('.png'), url);
+  check('url là đường dẫn tương đối /uploads/<uuid>.webp', UPLOAD_PATH.test(url || '') && url.endsWith('.webp'), url);
 
-  const jpg = await upload(organizer, file(JPG_HEADER, 'a.jpg', 'image/jpeg'));
-  check('JPG -> 201, đuôi .jpg', jpg.status === 201 && /\.jpg$/.test(jpg.body.url), `nhận ${jpg.status}`);
-  const webp = await upload(organizer, file(WEBP_HEADER, 'a.webp', 'image/webp'));
-  check('WEBP -> 201, đuôi .webp', webp.status === 201 && /\.webp$/.test(webp.body.url), `nhận ${webp.status}`);
+  const jpgImage = await sharp({ create: { width: 200, height: 200, channels: 3, background: '#6699cc' } }).jpeg().toBuffer();
+  const webpImage = await sharp(PNG).webp().toBuffer();
+  const jpg = await upload(organizer, file(jpgImage, 'a.jpg', 'image/jpeg'));
+  check('JPG -> 201, đuôi .webp', jpg.status === 201 && /\.webp$/.test(jpg.body && jpg.body.url), `nhận ${jpg.status}`);
+  const webp = await upload(organizer, file(webpImage, 'a.webp', 'image/webp'));
+  check('WEBP -> 201, đuôi .webp', webp.status === 201 && /\.webp$/.test(webp.body && webp.body.url), `nhận ${webp.status}`);
 
-  // Đuôi file theo NỘI DUNG, không theo tên client gửi.
+  // Mọi ảnh hợp lệ đều được encode lại thành WEBP, không theo tên client gửi.
   const misnamed = await upload(organizer, file(PNG, 'anh.jpg', 'image/jpeg'));
-  check('PNG đặt tên .jpg -> lưu thành .png', misnamed.status === 201 && /\.png$/.test(misnamed.body.url), misnamed.body && misnamed.body.url);
+  check('PNG đặt tên .jpg -> lưu thành .webp', misnamed.status === 201 && /\.webp$/.test(misnamed.body && misnamed.body.url), misnamed.body && misnamed.body.url);
 
   if (!url) return null;
   const served = await fetch(`${ORIGIN}${url}`);
   const bytes = Buffer.from(await served.arrayBuffer());
-  check('GET ảnh -> 200, đúng nội dung', served.status === 200 && bytes.equals(PNG), `nhận ${served.status}`);
-  check('Content-Type image/png', served.headers.get('content-type') === 'image/png', served.headers.get('content-type'));
+  const metadata = await sharp(bytes).metadata();
+  check('GET ảnh -> 200, định dạng WEBP', served.status === 200 && metadata.format === 'webp', `nhận ${served.status}`);
+  check('Content-Type image/webp', served.headers.get('content-type') === 'image/webp', served.headers.get('content-type'));
   check(
     'Cross-Origin-Resource-Policy: cross-origin (client khác cổng vẫn hiện ảnh)',
     served.headers.get('cross-origin-resource-policy') === 'cross-origin',
@@ -191,6 +193,51 @@ async function testRejected(organizer) {
   );
 }
 
+async function testReencoding(organizer) {
+  console.log(`\n${D}Giải mã và encode lại ảnh${X}`);
+  const broken = await upload(organizer, file(Buffer.from([0xff, 0xd8, 0xff]), 'hong.jpg', 'image/jpeg'));
+  check('JPEG chỉ có 3 byte -> 400', broken.status === 400, `nhận ${broken.status}`);
+
+  const jpg = await sharp({ create: { width: 200, height: 200, channels: 3, background: '#6699cc' } }).jpeg().toBuffer();
+  const truncated = await upload(organizer, file(jpg.subarray(0, Math.floor(jpg.length * 0.6)), 'cat-cut.jpg', 'image/jpeg'));
+  check('JPEG cắt cụt -> 400', truncated.status === 400, `nhận ${truncated.status}`);
+
+  const polyglot = await upload(organizer, file(Buffer.concat([PNG, Buffer.from('<html><script>alert(1)</script></html>')])));
+  let polyglotSafe = polyglot.status === 400;
+  if (polyglot.status === 201 && polyglot.body && polyglot.body.url) {
+    const res = await fetch(`${ORIGIN}${polyglot.body.url}`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    polyglotSafe = res.status === 200 && !bytes.includes(Buffer.from('<script>'));
+    check('polyglot được lưu với đuôi .webp', UPLOAD_PATH.test(polyglot.body.url));
+  }
+  check('polyglot bị từ chối hoặc loại bỏ script', polyglotSafe, `nhận ${polyglot.status}`);
+
+  const secret = 'EXIF-BI-MAT-123';
+  const exifImage = await sharp(jpg).jpeg().withMetadata({ exif: { IFD0: { Copyright: secret } } }).toBuffer();
+  const exif = await upload(organizer, file(exifImage, 'exif.jpg', 'image/jpeg'));
+  check('JPEG có EXIF -> 201, đuôi .webp', exif.status === 201 && UPLOAD_PATH.test(exif.body && exif.body.url), `nhận ${exif.status}`);
+  if (exif.status === 201 && exif.body && exif.body.url) {
+    const res = await fetch(`${ORIGIN}${exif.body.url}`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const metadata = await sharp(bytes).metadata();
+    check('đã xoá EXIF và chuỗi bí mật', res.status === 200 && metadata.format === 'webp' && metadata.exif === undefined && !bytes.includes(Buffer.from(secret)));
+  }
+
+  const largeImage = await sharp({ create: { width: 4000, height: 2000, channels: 3, background: '#6699cc' } }).png().toBuffer();
+  const resized = await upload(organizer, file(largeImage));
+  check('ảnh 4000x2000 -> 201, đuôi .webp', resized.status === 201 && UPLOAD_PATH.test(resized.body && resized.body.url), `nhận ${resized.status}`);
+  if (resized.status === 201 && resized.body && resized.body.url) {
+    const res = await fetch(`${ORIGIN}${resized.body.url}`);
+    const metadata = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+    check('ảnh thu nhỏ đúng 1920x960', res.status === 200 && metadata.format === 'webp' && metadata.width === 1920 && metadata.height === 960);
+  }
+
+  const bombImage = await sharp({ create: { width: 8000, height: 8000, channels: 3, background: '#6699cc' } }).png().toBuffer();
+  check('file pixel bomb nén nhỏ hơn 5MB', bombImage.length < 5 * 1024 * 1024);
+  const bomb = await upload(organizer, file(bombImage));
+  check('pixel bomb 64M pixel -> 400', bomb.status === 400, `nhận ${bomb.status}`);
+}
+
 async function testBannerUrl(organizer, uploadedUrl) {
   console.log(`\n${D}bannerUrl của sự kiện${X}`);
   if (uploadedUrl) {
@@ -233,6 +280,9 @@ async function main() {
   await testPermissions(customer);
   const url = await testValidUpload(organizer);
   await testRejected(organizer);
+  // Tổng 17 lượt upload của organizer, dưới hạn mức 20 lượt/10 phút.
+  // Toàn bộ kịch bản tối đa 36 request HTTP, kể cả tải lại ảnh.
+  await testReencoding(organizer);
   await testBannerUrl(organizer, url);
 
   await cleanup();
