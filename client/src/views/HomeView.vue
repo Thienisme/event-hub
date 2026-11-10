@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const router = useRouter();
 const eventStore = useEventStore();
@@ -16,6 +17,7 @@ const authStore = useAuthStore();
 
 const searchQuery = ref('');
 const currentPage = ref(1);
+const status = ref<'upcoming' | 'ended'>('upcoming');
 const limit = ref(8);
 const totalPages = ref(1);
 const errorMessage = ref('');
@@ -44,6 +46,7 @@ const loadEvents = async () => {
         page: currentPage.value,
         limit: limit.value,
         search: searchQuery.value,
+        status: status.value,
       },
       controller.signal
     );
@@ -71,6 +74,16 @@ const handleSearchInput = () => {
     currentPage.value = 1; // Reset về trang 1 khi tìm kiếm
     loadEvents();
   }, 400);
+};
+
+// Đổi tab giữ từ khoá tìm kiếm và tải lại từ trang đầu.
+const changeStatus = (value: string | number) => {
+  const nextStatus = value === 'ended' ? 'ended' : 'upcoming';
+  if (nextStatus === status.value) return;
+  clearTimeout(searchTimer);
+  status.value = nextStatus;
+  currentPage.value = 1;
+  loadEvents();
 };
 
 // Chuyển trang
@@ -114,6 +127,12 @@ onUnmounted(() => {
 
       <section aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded">
         <h2 class="mb-5 text-xl font-semibold tracking-tight">{{ searchQuery ? 'Kết quả tìm kiếm' : 'Sự kiện dành cho bạn' }}</h2>
+        <Tabs :model-value="status" @update:model-value="changeStatus" class="mb-5">
+          <TabsList aria-label="Trạng thái sự kiện">
+            <TabsTrigger value="upcoming">Sắp diễn ra</TabsTrigger>
+            <TabsTrigger value="ended">Đã kết thúc</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div v-if="eventStore.loading || !loaded" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="status" aria-label="Đang tải sự kiện">
           <Card v-for="n in 8" :key="n" aria-hidden="true" class="gap-0 rounded-2xl border py-0 shadow-sm ring-0">
             <Skeleton class="aspect-video w-full rounded-none" />
@@ -131,7 +150,7 @@ onUnmounted(() => {
         </Card>
         <Card v-else-if="eventStore.events.length === 0" class="items-center rounded-2xl border px-5 py-14 text-center shadow-sm ring-0">
           <div class="rounded-2xl bg-primary/10 p-4"><CalendarSearch class="size-10 text-primary" aria-hidden="true" /></div>
-          <div><h3 class="text-lg font-semibold tracking-tight">Không tìm thấy sự kiện phù hợp</h3><p class="mt-2 text-sm text-muted-foreground">Thử từ khóa khác hoặc quay lại sau để khám phá sự kiện mới.</p></div>
+          <div><h3 class="text-lg font-semibold tracking-tight">{{ status === 'ended' ? 'Chưa có sự kiện nào đã kết thúc' : 'Không tìm thấy sự kiện phù hợp' }}</h3><p class="mt-2 text-sm text-muted-foreground">Thử từ khóa khác hoặc quay lại sau để khám phá sự kiện mới.</p></div>
           <Button v-if="searchQuery" variant="outline" @click="searchQuery = ''; handleSearchInput()">Xoá tìm kiếm</Button>
         </Card>
         <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

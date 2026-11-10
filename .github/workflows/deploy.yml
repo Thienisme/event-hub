@@ -1,0 +1,89 @@
+# CD build ARM native rồi triển khai qua SSH; CI kiểm thử nằm ở ci.yml.
+name: Deploy ARM64
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Chỉ một workflow deploy chạy tại một thời điểm, không huỷ SSH đang chạy.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      deploy_enabled: ${{ steps.gate.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+      # Secrets không dùng trực tiếp trong if; chuyển qua env rồi xuất cờ boolean.
+      - id: gate
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        if: env.DEPLOY_HOST != ''
+        run: echo "enabled=true" >> "$GITHUB_OUTPUT"
+      - id: meta
+        run: echo "tag=sha-${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+      # Buildx chạy native linux/arm64, không cần QEMU.
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Cache tách scope để hai image không ghi đè cache nhau.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/thienisme/event-hub-server:latest
+            ghcr.io/thienisme/event-hub-server:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=server-arm64
+          cache-to: type=gha,mode=max,scope=server-arm64
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          platforms: linux/arm64
+          push: true
+          build-args: VITE_API_BASE_URL=/api
+          tags: |
+            ghcr.io/thienisme/event-hub-client:latest
+            ghcr.io/thienisme/event-hub-client:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=client-arm64
+          cache-to: type=gha,mode=max,scope=client-arm64
+
+  # Cờ được tạo bằng if/env ở build; thiếu host thì bỏ qua cả job.
+  deploy:
+    needs: build
+    if: needs.build.outputs.deploy_enabled == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      IMAGE_TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      # ssh-keyscan đáp ứng known_hosts; xác minh fingerprint ngoài luồng khi setup.
+      - name: SSH triển khai image vừa build
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          trap 'rm -f ~/.ssh/deploy_key' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$DEPLOY_HOST" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd ~/event-hub && IMAGE_TAG='$IMAGE_TAG' bash deploy/deploy.sh"

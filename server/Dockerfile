@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1
 
-# Prisma cần OpenSSL để chạy schema engine (migrate/generate). Dùng Debian slim
+# Prisma cần OpenSSL để chạy schema engine (migrate/generate). fonts-dejavu-core để sharp
+# vẽ được chữ khi seed demo phải tự sinh poster (image slim không có font nào). Dùng Debian slim
 # thay vì Alpine để engine chọn đúng bản build cho glibc/OpenSSL 3.
 FROM node:20-slim AS base
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && apt-get install -y --no-install-recommends openssl ca-certificates fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Giai đoạn 1: cài dependency (gồm dev) và sinh Prisma Client.
@@ -32,6 +33,10 @@ COPY package.json package-lock.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY prisma ./prisma
+# Mã nguồn TypeScript + tsconfig cho các script chạy bằng ts-node (npm run seed, seed:demo).
+# API vẫn chạy từ dist/; phần này chỉ thêm vài trăm KB vào image.
+COPY tsconfig.json ./
+COPY src ./src
 # Thư mục ảnh tải lên; docker-compose.prod.yml gắn volume vào đây để không mất ảnh khi build lại.
 RUN mkdir -p /app/uploads
 ENV UPLOAD_DIR=/app/uploads

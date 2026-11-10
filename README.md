@@ -132,6 +132,8 @@ Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http:/
 
 ## Chạy bằng Docker (production)
 
+Triển khai Oracle ARM64, HTTPS và CD: [hướng dẫn từng bước](deploy/README.md).
+
 `docker-compose.prod.yml` build image cho server và client, chạy migration một lần rồi mới khởi động API. MySQL và Redis không publish ra host; client phục vụ bằng nginx và chuyển `/api` sang server.
 
 ```bash
@@ -141,6 +143,28 @@ docker compose -f docker-compose.prod.yml up --build
 ```
 
 Client ở `http://localhost:8081`, health check ở `http://localhost:8081/api/health`. Đổi cổng bằng `WEB_PORT`. Ảnh banner nằm trong volume `uploads_data`, nên build lại container không mất ảnh. File compose không chứa secret; hai biến trên là bắt buộc.
+
+## Dữ liệu demo
+
+Để chạy app trong buổi demo, hãy tạo dữ liệu mẫu sẵn sàng:
+
+```bash
+cd server
+npm run seed:demo
+```
+
+Script tạo 3 tài khoản demo, 12 sự kiện và một số đơn hàng đã thanh toán. Chạy lại được (an toàn trên database dev), mỗi lần sẽ đặt lại sự kiện của 2 organizer demo.
+
+```bash
+npm run seed:demo -- --purge-test --yes
+```
+
+Cờ `--purge-test` là chế độ riêng, chỉ dọn dữ liệu test cũ rồi thoát (không seed), nên chạy nó trước rồi mới `npm run seed:demo`. Nó xoá: sự kiện có tiêu đề bắt đầu bằng `E2E `, `DIAG `, `UI Check `, `Final Review `, `Tong tien vua cham bien`, `Gia toi bien`, `LIFECYCLE`, `UPLOAD TEST`, `Live Concert 17`, `Đêm nhạc Trịnh 17`, `test1` (kèm đơn hàng, vé đang giữ của sự kiện khác được trả về kho), và tài khoản email kết thúc `@test.local` (trừ khi họ đang organizer sự kiện còn lại). Chỉ dùng trên database dev, bị từ chối khi `NODE_ENV=production`. Chạy không có `--yes` chỉ in danh sách sẽ xóa.
+
+Tài khoản demo (mật khẩu mặc định `demo12345`, tuỳ chỉnh qua `SEED_DEMO_PASSWORD`):
+- `organizer@eventhub.demo` – ORGANIZER, "Saigon Live Events"
+- `organizer2@eventhub.demo` – ORGANIZER, "Hanoi Creative Hub"
+- `khach@eventhub.demo` – CUSTOMER, "Nguyễn Minh Anh"
 
 ## Giới hạn hiện tại
 

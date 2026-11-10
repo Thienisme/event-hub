@@ -1,0 +1,18 @@
+# DOMAIN là hostname. Khi mở 80/443, Caddy tự xin/gia hạn chứng chỉ Let's Encrypt.
+{$DOMAIN} {
+    # Nén để giảm băng thông.
+    encode zstd gzip
+    # Chừa phần multipart cho ảnh 5MB, tương ứng giới hạn nginx.
+    request_body {
+        max_size 6MB
+    }
+    # HSTS chỉ gửi qua site HTTPS; tránh đoán MIME và lộ thông tin server.
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+    # nginx phục vụ Vue và chuyển /api sang Node.
+    reverse_proxy client:80
+}
