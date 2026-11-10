@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { RefreshCw, ScrollText, Users, CalendarDays, ShoppingCart, Wallet, Inbox } from '@lucide/vue';
+
+import OrderStatusBadge from '@/components/OrderStatusBadge.vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import apiClient from '../api/axios';
@@ -27,20 +34,6 @@ const stats = ref<AdminStats | null>(null);
 const loading = ref(false);
 const loaded = ref(false);
 const errorMessage = ref('');
-
-const statusLabel: Record<string, string> = {
-  PENDING: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  CANCELLED: 'Đã huỷ',
-  EXPIRED: 'Hết hạn',
-};
-
-const statusClass: Record<string, string> = {
-  PENDING: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  CONFIRMED: 'bg-green-50 text-green-700 border-green-200',
-  CANCELLED: 'bg-red-50 text-red-600 border-red-200',
-  EXPIRED: 'bg-gray-100 text-gray-600 border-gray-200',
-};
 
 let inFlight: AbortController | undefined;
 
@@ -72,37 +65,34 @@ onUnmounted(() => inFlight?.abort());
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto space-y-6">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Tổng quan hệ thống</h1>
-          <p class="mt-1 text-sm text-gray-500">Số liệu toàn bộ nền tảng</p>
+          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Tổng quan hệ thống</h1>
+          <p class="mt-1 text-sm text-muted-foreground">Số liệu toàn bộ nền tảng</p>
         </div>
 
-        <div class="flex items-center gap-3">
-          <button
+        <div class="flex flex-wrap items-center gap-3">
+          <Button
             type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             @click="router.push({ name: 'AdminAuditLogs' })"
-          >
-            Nhật ký
-          </button>
-          <button
+           variant="outline" size="sm">
+            <ScrollText class="size-4" aria-hidden="true" /> Nhật ký
+          </Button>
+          <Button
             type="button"
-            class="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             @click="router.push({ name: 'AdminUsers' })"
-          >
-            Quản lý người dùng →
-          </button>
-          <button
+           variant="outline" size="sm">
+            <Users class="size-4" aria-hidden="true" /> Quản lý người dùng
+          </Button>
+          <Button
             type="button"
             :disabled="loading"
-            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
             @click="loadStats"
-          >
-            {{ loading ? 'Đang tải...' : 'Làm mới' }}
-          </button>
+           variant="default" size="sm">
+            <RefreshCw class="size-4" :class="{ 'animate-spin': loading }" aria-hidden="true" /> {{ loading ? 'Đang tải...' : 'Làm mới' }}
+          </Button>
         </div>
       </div>
 
@@ -114,97 +104,110 @@ onUnmounted(() => inFlight?.abort());
         @retry="loadStats"
       >
         <template #skeleton>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div v-for="n in 4" :key="n" class="bg-white border border-gray-100 rounded-xl p-5">
-              <div class="h-3 w-20 bg-gray-200 rounded animate-pulse"></div>
-              <div class="mt-3 h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
-            </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card v-for="n in 4" :key="n" class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
+              <Skeleton class="h-3 w-20 bg-muted rounded animate-pulse" />
+              <Skeleton class="mt-3 h-8 w-16 bg-muted rounded animate-pulse" />
+            </Card>
           </div>
         </template>
 
         <div class="space-y-6">
           <!-- Thẻ số liệu -->
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-white border border-gray-100 rounded-xl p-5">
-              <p class="text-xs text-gray-500">Người dùng</p>
-              <p class="mt-2 text-3xl font-extrabold text-gray-900">{{ stats?.users ?? 0 }}</p>
-              <p class="mt-1 text-xs text-gray-400">
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Người dùng</p><span class="rounded-full bg-primary/10 p-2 text-primary"><Users class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-foreground">{{ stats?.users ?? 0 }}</p>
+              <p class="mt-1 text-xs text-muted-foreground">
                 +{{ stats?.organizers ?? 0 }} ban tổ chức
               </p>
-            </div>
+            </Card>
 
-            <div class="bg-white border border-gray-100 rounded-xl p-5">
-              <p class="text-xs text-gray-500">Sự kiện</p>
-              <p class="mt-2 text-3xl font-extrabold text-indigo-600">{{ stats?.events ?? 0 }}</p>
-              <p class="mt-1 text-xs text-gray-400">đang có trên nền tảng</p>
-            </div>
+            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Sự kiện</p><span class="rounded-full bg-info/10 p-2 text-info"><CalendarDays class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-primary">{{ stats?.events ?? 0 }}</p>
+              <p class="mt-1 text-xs text-muted-foreground">đang có trên nền tảng</p>
+            </Card>
 
-            <div class="bg-white border border-gray-100 rounded-xl p-5">
-              <p class="text-xs text-gray-500">Đơn hàng</p>
-              <p class="mt-2 text-3xl font-extrabold text-gray-900">{{ stats?.orders ?? 0 }}</p>
-              <p class="mt-1 text-xs text-gray-400">
+            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Đơn hàng</p><span class="rounded-full bg-warning/10 p-2 text-warning"><ShoppingCart class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-foreground">{{ stats?.orders ?? 0 }}</p>
+              <p class="mt-1 text-xs text-muted-foreground">
                 {{ stats?.confirmedOrders ?? 0 }} đã xác nhận
               </p>
-            </div>
+            </Card>
 
-            <div class="bg-white border border-gray-100 rounded-xl p-5">
-              <p class="text-xs text-gray-500">Doanh thu</p>
-              <p class="mt-2 text-3xl font-extrabold text-green-600">
+            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Doanh thu</p><span class="rounded-full bg-success/10 p-2 text-success"><Wallet class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-success">
                 {{ formatPrice(stats?.revenue ?? 0) }}
               </p>
-              <p class="mt-1 text-xs text-gray-400">từ đơn đã xác nhận</p>
-            </div>
+              <p class="mt-1 text-xs text-muted-foreground">từ đơn đã xác nhận</p>
+            </Card>
           </div>
 
           <!-- Đơn hàng gần đây -->
-          <div class="bg-white border border-gray-100 rounded-xl overflow-hidden">
-            <header class="px-5 py-4 border-b border-gray-100">
-              <h2 class="text-lg font-bold text-gray-900">Đơn hàng gần đây</h2>
+          <Card class="bg-card border border-border rounded-2xl gap-0 py-0 shadow-sm overflow-hidden">
+            <header class="px-5 py-4 border-b border-border">
+              <h2 class="text-lg font-semibold text-foreground">Đơn hàng gần đây</h2>
             </header>
 
-            <div v-if="!stats?.recentOrders?.length" class="px-5 py-12 text-center text-sm text-gray-500">
-              Chưa có đơn hàng nào.
+            <div v-if="!stats?.recentOrders?.length" class="px-5 py-12 text-center text-sm text-muted-foreground">
+              <Inbox class="mx-auto mb-3 size-10 text-muted-foreground" aria-hidden="true" />Chưa có đơn hàng nào.
             </div>
 
-            <div v-else class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                  <tr>
-                    <th class="px-5 py-3 font-semibold">Mã đơn</th>
-                    <th class="px-5 py-3 font-semibold">Khách hàng</th>
-                    <th class="px-5 py-3 font-semibold">Số tiền</th>
-                    <th class="px-5 py-3 font-semibold">Trạng thái</th>
-                    <th class="px-5 py-3 font-semibold">Thời điểm</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="order in stats.recentOrders" :key="order.id" class="hover:bg-gray-50/70">
-                    <td class="px-5 py-3 font-mono text-xs font-semibold text-gray-900">
+            <div v-else><div class="grid gap-3 p-4 md:hidden"><article v-for="order in stats.recentOrders" :key="order.id" class="rounded-xl border bg-card p-4 shadow-sm space-y-3 break-all">
+                    <div>
                       #{{ order.id.slice(0, 8).toUpperCase() }}
-                    </td>
-                    <td class="px-5 py-3">
-                      <p class="font-medium text-gray-900">{{ order.user.fullName }}</p>
-                      <p class="text-xs text-gray-500">{{ order.user.email }}</p>
-                    </td>
-                    <td class="px-5 py-3 font-medium text-gray-900">
+                    </div>
+                    <div>
+                      <p class="font-medium text-foreground">{{ order.user.fullName }}</p>
+                      <p class="text-xs text-muted-foreground">{{ order.user.email }}</p>
+                    </div>
+                    <div>
                       {{ formatPrice(order.totalAmount) }}
-                    </td>
-                    <td class="px-5 py-3">
-                      <span
-                        class="px-2.5 py-1 text-xs font-semibold rounded-full border"
-                        :class="statusClass[order.status]"
-                      >
-                        {{ statusLabel[order.status] }}
-                      </span>
-                    </td>
-                    <td class="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    </div>
+                    <div>
+                      <OrderStatusBadge :status="order.status" />
+                    </div>
+                    <div>
                       {{ formatDateTime(order.createdAt) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+                  </article></div><div class="hidden md:block">
+              <Table class="w-full table-fixed text-sm [&_td]:whitespace-normal [&_td]:break-words [&_th]:whitespace-normal">
+                <TableHeader class="bg-surface text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <TableRow>
+                    <TableHead class="px-5 py-3 font-semibold">Mã đơn</TableHead>
+                    <TableHead class="px-5 py-3 font-semibold">Khách hàng</TableHead>
+                    <TableHead class="px-5 py-3 font-semibold">Số tiền</TableHead>
+                    <TableHead class="px-5 py-3 font-semibold">Trạng thái</TableHead>
+                    <TableHead class="px-5 py-3 font-semibold">Thời điểm</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody class="divide-y divide-border">
+                  <TableRow v-for="order in stats.recentOrders" :key="order.id" class="hover:bg-surface/70">
+                    <TableCell class="px-5 py-3 font-mono text-xs font-semibold text-foreground">
+                      #{{ order.id.slice(0, 8).toUpperCase() }}
+                    </TableCell>
+                    <TableCell class="px-5 py-3">
+                      <p class="font-medium text-foreground">{{ order.user.fullName }}</p>
+                      <p class="text-xs text-muted-foreground">{{ order.user.email }}</p>
+                    </TableCell>
+                    <TableCell class="px-5 py-3 font-medium tabular-nums text-foreground">
+                      {{ formatPrice(order.totalAmount) }}
+                    </TableCell>
+                    <TableCell class="px-5 py-3">
+                      <OrderStatusBadge :status="order.status" />
+                    </TableCell>
+                    <TableCell class="px-5 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {{ formatDateTime(order.createdAt) }}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
-          </div>
+            </div>
+          </Card>
         </div>
       </DataState>
     </div>

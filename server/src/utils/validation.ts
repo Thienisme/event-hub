@@ -1,4 +1,16 @@
 import { z } from 'zod';
+import { UPLOADED_IMAGE_PATH } from './storage';
+
+/** URL banner hợp lệ: http(s) tuyệt đối, hoặc đường dẫn ảnh đã tải lên server. */
+const isValidBannerUrl = (value: string): boolean => {
+  if (UPLOADED_IMAGE_PATH.test(value)) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Schema validation cho đăng ký người dùng.
@@ -113,10 +125,13 @@ export const createEventSchema = z.object({
     .trim()
     .min(1, 'Địa điểm không được để trống!')
     .max(LIMITS.LOCATION, `Địa điểm không được vượt quá ${LIMITS.LOCATION} ký tự!`),
+  // Nhận URL http(s) tuyệt đối (ảnh ở nơi khác) hoặc đường dẫn ảnh do chính
+  // server sinh ra khi tải lên (`/uploads/<uuid>.<ext>`). Không dùng `.url()`
+  // trần vì nó chấp nhận cả `javascript:`, `data:`...
   bannerUrl: z
     .string()
-    .url('URL banner không hợp lệ!')
     .max(LIMITS.BANNER_URL, `URL banner không được vượt quá ${LIMITS.BANNER_URL} ký tự!`)
+    .refine(isValidBannerUrl, 'URL banner không hợp lệ!')
     .optional()
     .nullable(),
   startTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian bắt đầu không hợp lệ!'),

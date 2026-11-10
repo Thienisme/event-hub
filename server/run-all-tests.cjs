@@ -31,6 +31,7 @@ const SUITES = [
   ['test:cors', 'test-cors.cjs'],
   ['test:regressions', 'test-regressions.cjs'],
   ['test:lifecycle', 'test-order-lifecycle.cjs'],
+  ['test:upload', 'test-upload.cjs'],
 ];
 
 const G = '\u001b[32m';
@@ -44,6 +45,9 @@ function run(script) {
     child.on('close', (code) => resolve(code ?? 1));
   });
 }
+
+/** Số request tối thiểu cần còn lại trước khi chạy một bộ test. */
+const MIN_QUOTA_PER_SUITE = 60;
 
 /** Hỏi server còn bao nhiêu hạn mức request, và cửa sổ reset sau bao lâu. */
 async function rateLimitState() {
@@ -63,7 +67,9 @@ async function waitForQuota() {
   const state = await rateLimitState();
   if (!state) return;
 
-  if (state.remaining > 0) return;
+  // Chờ cả khi CÒN ÍT chứ không chỉ khi về 0: bộ test kế tiếp có thể cần vài
+  // chục request (test:upload ~45), chạy giữa chừng thì nhận 429 và fail oan.
+  if (state.remaining >= MIN_QUOTA_PER_SUITE) return;
 
   // `RateLimit-Reset` là số giây còn lại của cửa sổ hiện tại.
   const waitMs = Math.min(Math.max(state.reset, 1), 70) * 1000;

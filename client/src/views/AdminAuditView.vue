@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { ArrowLeft } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+
 import { onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAdminStore } from '../stores/admin';
@@ -16,16 +23,7 @@ const ACTION_LABEL: Record<string, string> = {
   'user.unlocked': 'Mở khoá tài khoản',
 };
 
-const ACTION_CLASS: Record<string, string> = {
-  'user.role.updated': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  'user.locked': 'bg-red-50 text-red-600 border-red-200',
-  'user.unlocked': 'bg-green-50 text-green-700 border-green-200',
-};
-
 const actionLabel = (log: AdminAuditLog) => ACTION_LABEL[log.action] ?? log.action;
-
-const actionClass = (log: AdminAuditLog) =>
-  ACTION_CLASS[log.action] ?? 'bg-gray-100 text-gray-600 border-gray-200';
 
 const ROLE_LABEL: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -85,28 +83,27 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto space-y-6">
-      <!-- Header -->
+      <!-- Đầu trang -->
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Nhật ký quản trị</h1>
-          <p class="mt-1 text-sm text-gray-500">
+          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Nhật ký quản trị</h1>
+          <p class="mt-1 text-sm text-muted-foreground">
             Mọi thao tác đổi vai trò, khoá và mở khoá tài khoản đều được ghi lại
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
-          class="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           @click="router.push({ name: 'AdminDashboard' })"
-        >
-          ← Về tổng quan
-        </button>
+         variant="outline" size="sm">
+          <ArrowLeft class="size-4" aria-hidden="true" /> Về tổng quan
+        </Button>
       </div>
 
       <!-- Bảng -->
-      <div class="bg-white border border-gray-100 rounded-xl overflow-hidden">
+      <Card class="bg-card border border-border rounded-2xl gap-0 py-0 shadow-sm overflow-hidden">
         <DataState
           :loading="adminStore.auditLoading"
           :loaded="adminStore.auditLoaded"
@@ -117,91 +114,102 @@ onUnmounted(() => {
           @retry="adminStore.reloadAuditLogs()"
         >
           <template #skeleton>
-            <div class="divide-y divide-gray-100">
+            <div class="divide-y divide-border">
               <div v-for="n in 6" :key="n" class="px-5 py-4 flex items-center gap-4">
-                <div class="h-3 w-32 bg-gray-200 rounded animate-pulse"></div>
+                <Skeleton class="h-3 w-32 bg-muted rounded animate-pulse" />
                 <div class="flex-1 space-y-2">
-                  <div class="h-3 w-1/3 bg-gray-200 rounded animate-pulse"></div>
-                  <div class="h-3 w-1/4 bg-gray-200 rounded animate-pulse"></div>
+                  <Skeleton class="h-3 w-1/3 bg-muted rounded animate-pulse" />
+                  <Skeleton class="h-3 w-1/4 bg-muted rounded animate-pulse" />
                 </div>
-                <div class="h-3 w-24 bg-gray-200 rounded animate-pulse"></div>
+                <Skeleton class="h-3 w-24 bg-muted rounded animate-pulse" />
               </div>
             </div>
           </template>
 
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th class="px-5 py-3 font-semibold">Thao tác</th>
-                  <th class="px-5 py-3 font-semibold">Chi tiết</th>
-                  <th class="px-5 py-3 font-semibold">Người thực hiện</th>
-                  <th class="px-5 py-3 font-semibold">Thời điểm</th>
-                </tr>
-              </thead>
+          <div class="md:hidden grid gap-3 p-4"><article v-for="log in adminStore.auditLogs" :key="log.id" class="rounded-xl border bg-card p-4 shadow-sm space-y-3 min-w-0">
+                  <div class="min-w-0 break-words">
+                    <Badge variant="outline">{{ actionLabel(log) }}</Badge>
+                  </div>
 
-              <tbody class="divide-y divide-gray-100">
-                <tr v-for="log in adminStore.auditLogs" :key="log.id" class="hover:bg-gray-50/70 transition-colors">
-                  <td class="px-5 py-4">
-                    <span
-                      class="px-2.5 py-1 text-xs font-semibold rounded-full border whitespace-nowrap"
-                      :class="actionClass(log)"
-                    >
-                      {{ actionLabel(log) }}
-                    </span>
-                  </td>
+                  <div class="min-w-0 break-all"><p class="text-xs text-muted-foreground">Đối tượng</p>{{ log.metadata?.email || log.targetId || '—' }}</div><div class="min-w-0 break-words"><p class="max-w-full break-all" :title="describe(log)">
+                    {{ describe(log) || '—' }}</p>
+                  </div>
 
-                  <td class="px-5 py-4 text-gray-700">
-                    {{ describe(log) || '—' }}
-                  </td>
+                  <div class="min-w-0 break-words">
+                    <p class="text-xs text-muted-foreground md:hidden">Người thực hiện</p><p class="font-medium text-foreground break-all">{{ actorName(log) }}</p>
+                    <p class="text-xs text-muted-foreground break-all">{{ actorEmail(log) }}</p>
+                  </div>
 
-                  <td class="px-5 py-4">
-                    <p class="font-medium text-gray-900">{{ actorName(log) }}</p>
-                    <p class="text-xs text-gray-500">{{ actorEmail(log) }}</p>
-                  </td>
-
-                  <td class="px-5 py-4 text-xs text-gray-500 whitespace-nowrap">
+                  <div class="min-w-0 break-words">
                     {{ formatDateTime(log.createdAt) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </div>
+                </article></div>
+          <div class="hidden md:block min-w-0">
+            <Table class="w-full table-fixed text-sm [&_td]:whitespace-normal [&_td]:break-words [&_th]:whitespace-normal">
+              <TableHeader class="bg-surface text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <TableRow>
+                  <TableHead class="px-5 py-3 font-semibold">Thao tác</TableHead>
+                  <TableHead class="px-5 py-3 font-semibold">Đối tượng</TableHead><TableHead class="px-5 py-3 font-semibold">Chi tiết</TableHead>
+                  <TableHead class="px-5 py-3 font-semibold">Người thực hiện</TableHead>
+                  <TableHead class="px-5 py-3 font-semibold">Thời điểm</TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody class="divide-y divide-border">
+                <TableRow v-for="log in adminStore.auditLogs" :key="log.id" class="hover:bg-surface/70 transition-colors">
+                  <TableCell class="px-5 py-4">
+                    <Badge variant="outline">{{ actionLabel(log) }}</Badge>
+                  </TableCell>
+
+                  <TableCell class="px-5 py-4 break-all">{{ log.metadata?.email || log.targetId || '—' }}</TableCell><TableCell class="px-5 py-4 text-foreground"><p class="max-w-64 truncate" :title="describe(log)">
+                    {{ describe(log) || '—' }}</p>
+                  </TableCell>
+
+                  <TableCell class="px-5 py-4">
+                    <p class="text-xs text-muted-foreground md:hidden">Người thực hiện</p><p class="font-medium text-foreground break-all">{{ actorName(log) }}</p>
+                    <p class="text-xs text-muted-foreground break-all">{{ actorEmail(log) }}</p>
+                  </TableCell>
+
+                  <TableCell class="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                    {{ formatDateTime(log.createdAt) }}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </div>
         </DataState>
-      </div>
+      </Card>
 
       <!-- Phân trang -->
       <div
         v-if="adminStore.auditTotalPages > 1 && adminStore.auditLogs.length > 0"
-        class="flex items-center justify-between gap-3"
+        class="flex flex-wrap items-center justify-between gap-3"
       >
-        <p class="text-sm text-gray-500">
-          Tổng <strong class="text-gray-900">{{ adminStore.auditTotal }}</strong> thao tác
+        <p class="text-sm text-muted-foreground">
+          Tổng <strong class="text-foreground">{{ adminStore.auditTotal }}</strong> thao tác
         </p>
 
         <div class="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             :disabled="adminStore.auditPage === 1"
-            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="changePage(adminStore.auditPage - 1)"
-          >
+           variant="outline" size="sm">
             Trước
-          </button>
+          </Button>
 
-          <span class="text-sm text-gray-600 px-3">
-            Trang <strong class="text-gray-900">{{ adminStore.auditPage }}</strong>
+          <span class="text-sm text-muted-foreground px-3">
+            Trang <strong class="text-foreground">{{ adminStore.auditPage }}</strong>
             / {{ adminStore.auditTotalPages }}
           </span>
 
-          <button
+          <Button
             type="button"
             :disabled="adminStore.auditPage === adminStore.auditTotalPages"
-            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="changePage(adminStore.auditPage + 1)"
-          >
+           variant="outline" size="sm">
             Sau
-          </button>
+          </Button>
         </div>
       </div>
     </div>

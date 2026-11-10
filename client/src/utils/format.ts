@@ -143,3 +143,33 @@ export const fromAppDateTimeInput = (value: string): string => {
 
   return new Date(result).toISOString();
 };
+
+/** Khoảng thời gian gọn theo múi giờ nghiệp vụ. */
+export const formatEventDateShort = (start: string, end: string): string => {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return '—';
+
+  const parts = (date: Date): Record<string, string> =>
+    Object.fromEntries(appPartsFormatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const first = parts(startDate);
+  const last = parts(endDate);
+  const currentYear = parts(new Date()).year;
+  const day = (value: Record<string, string>) =>
+    `${value.day}/${value.month}${value.year !== currentYear ? `/${value.year}` : ''}`;
+  const time = (value: Record<string, string>) => `${value.hour}:${value.minute}`;
+  const sameDay = first.year === last.year && first.month === last.month && first.day === last.day;
+  if (sameDay) {
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: APP_TIMEZONE, weekday: 'short' }).format(startDate);
+    const weekdays: Record<string, string> = { Mon: 'T2', Tue: 'T3', Wed: 'T4', Thu: 'T5', Fri: 'T6', Sat: 'T7', Sun: 'CN' };
+    return `${weekdays[weekday]}, ${day(first)} · ${time(first)} – ${time(last)}`;
+  }
+  return `${day(first)} ${time(first)} – ${day(last)} ${time(last)}`;
+};
+
+/** Phân loại theo instant, không phụ thuộc múi giờ thiết bị. */
+export const getEventPhase = (start: string, end: string, now = new Date()): 'upcoming' | 'ongoing' | 'ended' => {
+  if (now.getTime() >= new Date(end).getTime()) return 'ended';
+  if (now.getTime() >= new Date(start).getTime()) return 'ongoing';
+  return 'upcoming';
+};

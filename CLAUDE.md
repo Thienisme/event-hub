@@ -75,6 +75,12 @@ Luồng request ở server: `routes/` gắn middleware theo thứ tự `authenti
 - Chỉ message của `AppError` được trả nguyên văn cho client. Lỗi Prisma đã biết được `mapPrismaError` chuyển thành 400 hoặc 409.
 - `app.ts` phải giữ `import 'dotenv/config'` ở dòng import đầu tiên, vì nhiều module đọc `process.env` ngay khi được nạp.
 
+### Tải ảnh (`utils/storage.ts`, `controllers/upload.controller.ts`)
+
+- `POST /api/uploads` (ORGANIZER/ADMIN, field `file`) giữ file trong RAM, nhận diện ảnh bằng **magic bytes** (không tin mimetype/đuôi file), rồi giải mã và encode lại bằng sharp thành WEBP (quality 82), áp dụng hướng EXIF, bỏ metadata/EXIF/GPS và dữ liệu polyglot. Giới hạn đầu vào 40 triệu pixel để chống pixel bomb, thu nhỏ tối đa 1920×1920, chỉ lấy frame đầu. Lỗi giải mã trả 400. Ghi vào `UPLOAD_DIR` với tên UUID và đuôi `.webp`; đường dẫn ảnh cũ `.jpg|.png|.webp` vẫn hợp lệ. Trả về đường dẫn **tương đối** `/uploads/<uuid>.webp`; client ghép origin API qua `resolveMediaUrl` (`client/src/utils/media.ts`). Không lưu host vào database.
+- `bannerUrl` chỉ nhận URL http(s) hoặc đúng dạng `UPLOADED_IMAGE_PATH`. Đổi giới hạn 5MB thì sửa cả `MAX_IMAGE_BYTES`, `client_max_body_size` trong `client/nginx.conf` và `MAX_BANNER_BYTES` ở client.
+- Production cần volume cho `UPLOAD_DIR` (`uploads_data` trong `docker-compose.prod.yml`).
+
 ### Validation
 
 Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ dài cột trong `schema.prisma`; đổi một bên thì đổi cả bên kia. `CHECK` constraint không biểu diễn được trong Prisma schema, nên phải viết tay trong migration SQL.

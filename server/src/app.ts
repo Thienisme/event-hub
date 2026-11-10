@@ -15,6 +15,8 @@ import eventRoutes from './routes/event.routes';
 import orderRoutes from './routes/order.routes';
 import adminRoutes from './routes/admin.routes';
 import organizerRoutes from './routes/organizer.routes';
+import uploadRoutes from './routes/upload.routes';
+import { UPLOAD_DIR, ensureUploadDir } from './utils/storage';
 import { startExpireOrdersJob } from './jobs/expireOrders.job';
 import { errorMiddleware, logUnexpectedError } from './utils/errors';
 import { parseAllowedOrigins } from './utils/cors';
@@ -59,6 +61,27 @@ app.use(
 );
 app.use(express.json());
 
+// Ảnh đã tải lên. Tên file là UUID do server sinh nên không đổi nội dung,
+// cho cache dài hạn.
+// - CORP cross-origin: helmet mặc định đặt same-origin, khiến client dev
+//   (khác cổng với API) không hiển thị được ảnh.
+// - CSP chặn mọi script: lỡ có file lạ lọt vào thư mục thì trình duyệt cũng
+//   không chạy được gì trên domain của mình.
+ensureUploadDir();
+app.use(
+  '/uploads',
+  express.static(UPLOAD_DIR, {
+    index: false,
+    dotfiles: 'deny',
+    maxAge: '30d',
+    immutable: true,
+    setHeaders(res) {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    },
+  })
+);
+
 // Áp dụng rate limiter chung cho toàn bộ API
 app.use('/api/', apiRateLimiter);
 
@@ -69,6 +92,7 @@ app.use('/api/orders', orderRoutes);
 // Quản trị (chỉ ADMIN) và quản lý sự kiện của bản thân (ORGANIZER/ADMIN).
 app.use('/api/admin', adminRoutes);
 app.use('/api/organizer', organizerRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 // Health Check
 app.get('/api/health', async (req: Request, res: Response) => {

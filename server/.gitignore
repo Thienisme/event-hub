@@ -38,3 +38,6 @@ prisma/*.db-journal
 .claude/
 .cursor/
 .devin/
+
+# Ảnh người dùng tải lên (UPLOAD_DIR mặc định)
+uploads/

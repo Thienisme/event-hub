@@ -4,7 +4,11 @@ import { useRouter } from 'vue-router';
 import { useEventStore } from '../stores/event';
 import { useAuthStore } from '../stores/auth';
 import EventCard from '../components/EventCard.vue';
-import DataState from '../components/DataState.vue';
+import { Search, CalendarSearch, CircleAlert, Plus } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const router = useRouter();
 const eventStore = useEventStore();
@@ -90,101 +94,56 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-7xl mx-auto space-y-8">
-      
-      <!-- Header & Search Bar -->
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Sự kiện nổi bật
-          </h1>
-          <p class="mt-1 text-sm text-gray-500">
-            Khám phá và đặt vé cho các sự kiện hot nhất ngay hôm nay
-          </p>
-        </div>
-
-        <div class="flex items-center gap-4">
-          <!-- Nút tạo sự kiện (chỉ organizer/admin) -->
-          <button
-            v-if="authStore.isOrganizer"
-            @click="router.push({ name: 'CreateEvent' })"
-            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-          >
-            + Tạo sự kiện
-          </button>
-
-          <!-- Ô Tìm kiếm -->
-          <div class="relative w-full md:w-80">
-            <input
-              v-model="searchQuery"
-              @input="handleSearchInput"
-              type="text"
-              placeholder="Tìm theo tên sự kiện, địa điểm..."
-              class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition-all"
-            />
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+  <div class="min-h-screen bg-surface px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <div class="mx-auto max-w-7xl space-y-8">
+      <section class="relative isolate overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-violet-500/10 px-5 py-10 sm:px-10 sm:py-14">
+        <div aria-hidden="true" class="pointer-events-none absolute -right-16 -top-20 -z-10 size-72 rounded-full bg-primary/10 blur-3xl"></div>
+        <div class="flex flex-col items-start justify-between gap-6 lg:flex-row">
+          <div class="w-full min-w-0 max-w-2xl">
+            <p class="mb-3 text-sm font-semibold text-primary">Trải nghiệm mới đang chờ bạn</p>
+            <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">Khám phá sự kiện hấp dẫn</h1>
+            <p class="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">Tìm cảm hứng, kết nối cộng đồng và đặt vé cho những khoảnh khắc đáng nhớ.</p>
+            <div class="relative mt-7">
+              <Search class="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input v-model="searchQuery" @input="handleSearchInput" type="search" aria-label="Tìm kiếm sự kiện" placeholder="Tìm tên sự kiện, địa điểm…" class="h-14 rounded-xl bg-card pl-12 pr-4 text-base shadow-sm" />
             </div>
           </div>
+          <Button v-if="authStore.isOrganizer" @click="router.push({ name: 'CreateEvent' })" class="shrink-0 rounded-xl"><Plus aria-hidden="true" />Tạo sự kiện</Button>
         </div>
-      </div>
+      </section>
 
-      <!-- State: đang tải / lỗi / rỗng / có dữ liệu — dùng chung component DataState -->
-      <DataState
-        :loading="eventStore.loading"
-        :loaded="loaded"
-        :error="errorMessage"
-        :empty="eventStore.events.length === 0"
-        empty-title="Không tìm thấy sự kiện nào"
-        empty-description="Thử thay đổi từ khóa tìm kiếm của bạn xem sao."
-        @retry="loadEvents"
-      >
-        <template #skeleton>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div v-for="n in 8" :key="n" class="bg-white rounded-xl h-80 animate-pulse border border-gray-100 p-4">
-              <div class="bg-gray-200 h-40 rounded-lg mb-4"></div>
-              <div class="bg-gray-200 h-4 rounded w-3/4 mb-2"></div>
-              <div class="bg-gray-200 h-4 rounded w-1/2"></div>
+      <section aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded">
+        <h2 class="mb-5 text-xl font-semibold tracking-tight">{{ searchQuery ? 'Kết quả tìm kiếm' : 'Sự kiện dành cho bạn' }}</h2>
+        <div v-if="eventStore.loading || !loaded" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="status" aria-label="Đang tải sự kiện">
+          <Card v-for="n in 8" :key="n" aria-hidden="true" class="gap-0 rounded-2xl border py-0 shadow-sm ring-0">
+            <Skeleton class="aspect-video w-full rounded-none" />
+            <div class="space-y-3 p-4">
+              <Skeleton class="h-5 w-full" /><Skeleton class="h-5 w-2/3" />
+              <Skeleton class="h-4 w-full" /><Skeleton class="h-4 w-3/4" />
+              <div class="flex items-center justify-between border-t pt-4"><Skeleton class="h-8 w-24" /><Skeleton class="h-8 w-16" /></div>
             </div>
-          </div>
-        </template>
-
-        <!-- State: Grid Sự kiện -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <EventCard
-            v-for="event in eventStore.events"
-            :key="event.id"
-            :event="event"
-          />
+          </Card>
         </div>
-      </DataState>
+        <Card v-else-if="errorMessage" role="alert" class="items-center rounded-2xl border px-5 py-14 text-center shadow-sm ring-0">
+          <CircleAlert class="size-12 text-danger" aria-hidden="true" />
+          <div><h3 class="text-lg font-semibold tracking-tight">Không tải được dữ liệu</h3><p class="mt-2 break-words text-sm text-muted-foreground">{{ errorMessage }}</p></div>
+          <Button @click="loadEvents">Thử lại</Button>
+        </Card>
+        <Card v-else-if="eventStore.events.length === 0" class="items-center rounded-2xl border px-5 py-14 text-center shadow-sm ring-0">
+          <div class="rounded-2xl bg-primary/10 p-4"><CalendarSearch class="size-10 text-primary" aria-hidden="true" /></div>
+          <div><h3 class="text-lg font-semibold tracking-tight">Không tìm thấy sự kiện phù hợp</h3><p class="mt-2 text-sm text-muted-foreground">Thử từ khóa khác hoặc quay lại sau để khám phá sự kiện mới.</p></div>
+          <Button v-if="searchQuery" variant="outline" @click="searchQuery = ''; handleSearchInput()">Xoá tìm kiếm</Button>
+        </Card>
+        <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <EventCard v-for="event in eventStore.events" :key="event.id" :event="event" />
+        </div>
+      </section>
 
-      <!-- Pagination -->
-      <div v-if="totalPages > 1" class="flex items-center justify-center gap-2 pt-6">
-        <button
-          @click="changePage(currentPage - 1)"
-          :disabled="currentPage === 1"
-          class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Trước
-        </button>
-
-        <span class="text-sm text-gray-600 px-3">
-          Trang <strong class="text-gray-900">{{ currentPage }}</strong> / {{ totalPages }}
-        </span>
-
-        <button
-          @click="changePage(currentPage + 1)"
-          :disabled="currentPage === totalPages"
-          class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Sau
-        </button>
-      </div>
-
+      <nav v-if="totalPages > 1" aria-label="Phân trang sự kiện" class="flex items-center justify-center gap-2 pt-2 sm:gap-4">
+        <Button variant="outline" @click="changePage(currentPage - 1)" :disabled="currentPage === 1">Trước</Button>
+        <span class="text-sm text-muted-foreground tabular-nums">Trang <strong class="font-semibold text-foreground">{{ currentPage }}</strong> / {{ totalPages }}</span>
+        <Button variant="outline" @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages">Sau</Button>
+      </nav>
     </div>
   </div>
 </template>

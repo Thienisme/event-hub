@@ -32,5 +32,8 @@ COPY package.json package-lock.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY prisma ./prisma
+# Thư mục ảnh tải lên; docker-compose.prod.yml gắn volume vào đây để không mất ảnh khi build lại.
+RUN mkdir -p /app/uploads
+ENV UPLOAD_DIR=/app/uploads
 EXPOSE 5000
 CMD ["node", "dist/app.js"]
