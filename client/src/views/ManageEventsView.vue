@@ -175,7 +175,7 @@ onUnmounted(() => {
               class="group gap-0 rounded-2xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
             >
               <div class="flex flex-col sm:flex-row sm:items-start gap-4">
-                <div class="aspect-video w-full overflow-hidden rounded-xl sm:w-40 lg:w-48 shrink-0"><EventBanner :src="(event as ManagedEvent & { bannerUrl?: string | null }).bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
+                <div class="aspect-video w-full overflow-hidden rounded-xl sm:w-40 lg:w-48 shrink-0"><EventBanner :src="event.bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
                   <h3 class="font-semibold tracking-tight text-foreground break-words">
                     <router-link
                       :to="{ name: 'EventDetail', params: { id: event.id } }"

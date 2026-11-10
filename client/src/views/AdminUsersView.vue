@@ -222,7 +222,7 @@ watch(
                   class="rounded-xl border bg-card p-4 shadow-sm space-y-3 min-w-0"
                 >
                   <div class="min-w-0 break-words">
-                    <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-3">
                       <Avatar size="lg"><AvatarFallback class="bg-primary/10 text-primary">{{ user.fullName.slice(0, 2).toUpperCase() }}</AvatarFallback></Avatar>
                       <div class="min-w-0">
                         <p class="font-medium text-foreground break-all">
@@ -238,8 +238,10 @@ watch(
                   </div>
 
                   <div class="min-w-0 break-words">
-                    <Badge :variant="roleVariant[user.role]" class="mb-2">{{ ROLE_OPTIONS.find(option => option.value === user.role)?.label }}</Badge>
+                    <!-- Không tự đổi vai trò của chính mình: chỉ hiện badge. -->
+                    <Badge v-if="isSelf(user)" :variant="roleVariant[user.role]">{{ ROLE_OPTIONS.find(option => option.value === user.role)?.label }}</Badge>
                     <NativeSelect
+                      v-else
                       :model-value="user.role"
                       :disabled="adminStore.updatingId === user.id || isSelf(user)"
                       class="w-full max-w-44" size="sm"
@@ -295,7 +297,7 @@ watch(
                   class="hover:bg-surface/70 transition-colors"
                 >
                   <TableCell class="px-5 py-4">
-                    <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-3">
                       <Avatar size="lg"><AvatarFallback class="bg-primary/10 text-primary">{{ user.fullName.slice(0, 2).toUpperCase() }}</AvatarFallback></Avatar>
                       <div class="min-w-0">
                         <p class="font-medium text-foreground truncate">
@@ -311,8 +313,10 @@ watch(
                   </TableCell>
 
                   <TableCell class="px-5 py-4">
-                    <Badge :variant="roleVariant[user.role]" class="mb-2">{{ ROLE_OPTIONS.find(option => option.value === user.role)?.label }}</Badge>
+                    <!-- Không tự đổi vai trò của chính mình: chỉ hiện badge. -->
+                    <Badge v-if="isSelf(user)" :variant="roleVariant[user.role]">{{ ROLE_OPTIONS.find(option => option.value === user.role)?.label }}</Badge>
                     <NativeSelect
+                      v-else
                       :model-value="user.role"
                       :disabled="adminStore.updatingId === user.id || isSelf(user)"
                       class="w-full max-w-44" size="sm"

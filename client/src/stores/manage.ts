@@ -14,6 +14,7 @@ export interface ManagedEvent {
   id: string;
   title: string;
   location: string;
+  bannerUrl?: string | null;
   startTime: string;
   endTime: string;
   createdAt: string;
