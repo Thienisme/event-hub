@@ -4,6 +4,7 @@ import { writeFile } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 import { AppError } from './errors';
+import prisma from './prisma';
 
 /**
  * Lưu file người dùng tải lên (hiện chỉ có ảnh banner sự kiện).
@@ -18,6 +19,8 @@ import { AppError } from './errors';
  */
 
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads'));
+
+export const STORAGE_DRIVER = process.env.STORAGE_DRIVER === 'db' ? 'db' : 'disk';
 
 export const UPLOAD_URL_PREFIX = '/uploads/';
 
@@ -57,11 +60,11 @@ export const detectImageType = (buf: Buffer): ImageKind | null => {
 
 /** Tạo thư mục upload lúc khởi động để lỗi quyền ghi lộ ra ngay, không đợi lần upload đầu. */
 export const ensureUploadDir = (): void => {
-  mkdirSync(UPLOAD_DIR, { recursive: true });
+  if (STORAGE_DRIVER === 'disk') mkdirSync(UPLOAD_DIR, { recursive: true });
 };
 
 /**
- * Kiểm tra rồi ghi ảnh xuống đĩa, trả về đường dẫn công khai.
+ * Kiểm tra rồi lưu ảnh, trả về đường dẫn công khai.
  * Tên file là UUID do server sinh: không dùng tên gốc của người dùng
  * (tránh path traversal, ký tự lạ, trùng tên ghi đè ảnh người khác).
  */
@@ -93,7 +96,23 @@ export const saveImage = async (buf: Buffer): Promise<string> => {
   }
 
   const fileName = `${randomUUID()}.webp`;
-  // flag 'wx': không bao giờ ghi đè file đã có.
-  await writeFile(path.join(UPLOAD_DIR, fileName), image, { flag: 'wx' });
+  if (STORAGE_DRIVER === 'db') {
+    // Database giữ ảnh qua các lần deploy trên ổ đĩa tạm của Render.
+    await prisma.storedFile.create({
+      data: { name: fileName, mime: 'image/webp', size: image.length, data: image },
+    });
+  } else {
+    // flag 'wx': không bao giờ ghi đè file đã có.
+    await writeFile(path.join(UPLOAD_DIR, fileName), image, { flag: 'wx' });
+  }
   return `${UPLOAD_URL_PREFIX}${fileName}`;
+};
+
+/** Chặn tên lạ trước khi truy vấn để chỉ phục vụ ảnh do server đặt tên. */
+export const readStoredImage = async (name: string): Promise<{ mime: string; data: Buffer } | null> => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(webp|png|jpg)$/.test(name)) return null;
+  return prisma.storedFile.findUnique({
+    where: { name },
+    select: { mime: true, data: true },
+  });
 };
