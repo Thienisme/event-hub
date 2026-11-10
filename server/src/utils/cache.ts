@@ -72,9 +72,12 @@ export function listCacheKey(
   version: string,
   page: number,
   limit: number,
-  search: string
+  search: string,
+  status: 'upcoming' | 'ended'
 ): string {
-  return `events:list:v${version}:page=${page}:limit=${limit}:search=${search}`;
+  // Cache TTL 60s nên sự kiện vừa kết thúc có thể còn ở tab "Sắp diễn ra"
+  // tối đa 60s, chấp nhận được.
+  return `events:list:v${version}:page=${page}:limit=${limit}:status=${status}:search=${search}`;
 }
 
 export function detailCacheKey(eventId: string): string {

@@ -108,26 +108,28 @@ export const getEvents = async (req: Request, res: Response) => {
 
     // Khoá cache có kèm version: khi version tăng, mọi key cũ trở nên vô hình.
     const version = await getListVersion();
-    const cacheKey = listCacheKey(version, page, limit, search);
+    const status = req.query.status === 'ended' ? 'ended' : 'upcoming';
+    const cacheKey = listCacheKey(version, page, limit, search, status);
 
     // cacheGetOrLoad lo cả ba việc: đọc cache, chống stampede, và cho biết dữ liệu
     // đến từ đâu ('cache' | 'database') — vừa để FE biết, vừa để đo hit rate.
     const { value: result, source } = await cacheGetOrLoad(cacheKey, async () => {
-      const whereCondition = search
-        ? {
-            OR: [
-              { title: { contains: search } },
-              { location: { contains: search } },
-            ],
-          }
-        : {};
+      const now = new Date();
+      const whereCondition: Prisma.EventWhereInput = {
+        AND: [
+          { endTime: status === 'ended' ? { lt: now } : { gte: now } },
+          ...(search
+            ? [{ OR: [{ title: { contains: search } }, { location: { contains: search } }] }]
+            : []),
+        ],
+      };
 
       const [events, total] = await Promise.all([
         prisma.event.findMany({
           where: whereCondition,
           skip,
           take: limit,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ startTime: status === 'ended' ? 'desc' : 'asc' }, { id: 'asc' }],
           include: {
             organizer: { select: PUBLIC_ORGANIZER_SELECT },
             ticketTypes: true,

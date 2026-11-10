@@ -73,12 +73,12 @@ export const useEventStore = defineStore('event', () => {
   // `signal` (tuỳ chọn) cho phép view huỷ request cũ khi user gõ tiếp / đổi trang,
   // tránh response về muộn ghi đè kết quả mới (race condition).
   async function fetchEvents(
-    params = { page: 1, limit: 10, search: '' },
+    params: { page: number; limit: number; search: string; status?: 'upcoming' | 'ended' } = { page: 1, limit: 10, search: '' },
     signal?: AbortSignal
   ): Promise<EventListResponse> {
     beginRequest();
     try {
-      const response = await apiClient.get<EventListResponse>('/events', { params, signal });
+      const response = await apiClient.get<EventListResponse>('/events', { params: { ...params, status: params.status ?? 'upcoming' }, signal });
       events.value = response.data.data;
       return response.data;
     } finally {
