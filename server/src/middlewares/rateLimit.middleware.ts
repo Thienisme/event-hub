@@ -28,6 +28,22 @@ export const adminRateLimiter = rateLimit({
 });
 
 /**
+ * Rate limiter cho tải ảnh lên, khoá theo tài khoản (chạy sau `authenticate`).
+ *
+ * Ảnh nằm trên đĩa server và chưa có job dọn ảnh không dùng tới, nên đây là
+ * chốt chặn chính để một tài khoản không lấp đầy ổ đĩa: tối đa 20 ảnh / 10 phút,
+ * tức khoảng 100MB trong trường hợp xấu nhất.
+ */
+export const uploadRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 phút
+  max: 20,
+  keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
+  message: { message: 'Bạn tải ảnh lên quá nhiều. Vui lòng thử lại sau vài phút.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
  * Rate limiter cho đặt vé.
  *
  * Thiết kế linh hoạt theo thực tế nền tảng vé thực tế:
