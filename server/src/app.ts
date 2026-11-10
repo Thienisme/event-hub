@@ -8,6 +8,7 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import path from 'path';
 import helmet from 'helmet';
 import prisma from './utils/prisma';
 import authRoutes from './routes/auth.routes';
@@ -16,7 +17,7 @@ import orderRoutes from './routes/order.routes';
 import adminRoutes from './routes/admin.routes';
 import organizerRoutes from './routes/organizer.routes';
 import uploadRoutes from './routes/upload.routes';
-import { UPLOAD_DIR, ensureUploadDir } from './utils/storage';
+import { UPLOAD_DIR, STORAGE_DRIVER, ensureUploadDir, readStoredImage } from './utils/storage';
 import { startExpireOrdersJob } from './jobs/expireOrders.job';
 import { errorMiddleware, logUnexpectedError } from './utils/errors';
 import { parseAllowedOrigins } from './utils/cors';
@@ -36,8 +37,18 @@ if (process.env.TRUST_PROXY) {
 }
 
 // Thêm các header bảo mật cơ bản (X-Content-Type-Options, X-Frame-Options,
-// Strict-Transport-Security...). API trả JSON nên không cần cấu hình CSP riêng.
-app.use(helmet());
+// Strict-Transport-Security...). CSP giao diện được bật theo thư mục phục vụ.
+const clientDir = process.env.SERVE_CLIENT_DIR ? path.resolve(process.env.SERVE_CLIENT_DIR) : null;
+// Cho phép banner HTTPS và Google Fonts khi Node phục vụ giao diện.
+app.use(helmet(clientDir ? {
+  contentSecurityPolicy: { directives: {
+    imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+    fontSrc: ["'self'", 'https:', 'data:'],
+    styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
+    scriptSrc: ["'self'"],
+    connectSrc: ["'self'"],
+  } },
+} : {}));
 
 // CORS: chỉ cho phép origin của frontend (khai báo qua CORS_ORIGINS, phân tách bằng dấu phẩy).
 // - Không có Origin (curl, k6, server-to-server) -> cho qua.
@@ -67,20 +78,41 @@ app.use(express.json());
 //   (khác cổng với API) không hiển thị được ảnh.
 // - CSP chặn mọi script: lỡ có file lạ lọt vào thư mục thì trình duyệt cũng
 //   không chạy được gì trên domain của mình.
-ensureUploadDir();
-app.use(
-  '/uploads',
-  express.static(UPLOAD_DIR, {
-    index: false,
-    dotfiles: 'deny',
-    maxAge: '30d',
-    immutable: true,
-    setHeaders(res) {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
-    },
-  })
-);
+if (STORAGE_DRIVER === 'db') {
+  app.get('/uploads/:name', async (req, res, next) => {
+    try {
+      const image = await readStoredImage(req.params.name);
+      if (!image) { res.sendStatus(404); return; }
+      res.set({
+        'Content-Type': image.mime,
+        'Cache-Control': 'public, max-age=2592000, immutable',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.send(image.data);
+    } catch (error) {
+      // Express 4 cần chuyển lỗi async vào middleware bằng tay.
+      next(error);
+    }
+  });
+} else {
+  ensureUploadDir();
+  app.use(
+    '/uploads',
+    express.static(UPLOAD_DIR, {
+      index: false,
+      dotfiles: 'deny',
+      maxAge: '30d',
+      immutable: true,
+      setHeaders(res) {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      },
+    })
+  );
+
+}
 
 // Áp dụng rate limiter chung cho toàn bộ API
 app.use('/api/', apiRateLimiter);
@@ -112,6 +144,25 @@ app.get('/api/health', async (req: Request, res: Response) => {
     });
   }
 });
+
+if (clientDir) {
+  app.use(express.static(clientDir, {
+    setHeaders(res, filePath) {
+      if (path.basename(filePath) === 'index.html') res.setHeader('Cache-Control', 'no-cache');
+      else if (path.relative(clientDir, filePath).split(path.sep)[0] === 'assets') {
+        // Vite đổi hash khi nội dung đổi nên có thể cache lâu.
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
+  app.get('*', (req, res, next) => {
+    if (/^\/(api|uploads)(\/|$)/i.test(req.path)) { next(); return; }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(clientDir, 'index.html'), (error) => {
+      if (error) next(error);
+    });
+  });
+}
 
 // Phải đứng sau mọi route: Express chỉ chuyển lỗi tới middleware khai báo sau đó.
 app.use(errorMiddleware);

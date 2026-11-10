@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 import Redlock from 'redlock';
 
+const REDIS_URL = process.env.REDIS_URL;
 const REDIS_HOST = process.env.REDIS_HOST || '127.0.0.1';
 const REDIS_PORT = Number(process.env.REDIS_PORT) || 6379;
 
@@ -8,10 +9,9 @@ const REDIS_PORT = Number(process.env.REDIS_PORT) || 6379;
  * Client cho REDLOCK. Cần KIÊN NHẪN: không lấy được lock là chuyện bình thường
  * khi tải cao, nên phải chờ kết nối lại rồi thử tiếp (hành vi mặc định của ioredis).
  */
-export const redisClient = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-});
+const redisOptions = { host: REDIS_HOST, port: REDIS_PORT };
+// URL hỗ trợ cả xác thực và TLS của Render Key Value.
+export const redisClient = REDIS_URL ? new Redis(REDIS_URL, {}) : new Redis(redisOptions);
 
 redisClient.on('connect', () => {
   console.log('✅ Redis Client connected');
@@ -33,9 +33,7 @@ redisClient.on('error', (err) => {
  * thì `GET /api/events` đã TREO 63,09 GIÂY rồi mới trả 500 — tức cache trở thành
  * điểm chết duy nhất của cả hệ thống, đúng thứ mà nó sinh ra để tránh.
  */
-export const cacheClient = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
+const cacheOptions = {
 
   // Redis chết -> báo lỗi ngay, không xếp lệnh vào hàng đợi chờ kết nối lại.
   enableOfflineQueue: false,
@@ -46,7 +44,10 @@ export const cacheClient = new Redis({
   // Chặn trên cho mỗi lệnh. Redis đang chậm bất thường thì bỏ luôn và đi đọc
   // database. Đặt cao hơn nhiều so với độ trễ thật (~0,1 ms) để không cắt oan.
   commandTimeout: 200,
-});
+};
+export const cacheClient = REDIS_URL
+  ? new Redis(REDIS_URL, cacheOptions)
+  : new Redis({ ...redisOptions, ...cacheOptions });
 
 // Lỗi Redis của cache được xử lý bằng fail-open (xem utils/cache.ts), nên ở đây
 // chỉ log để biết chuyện gì đang xảy ra — và log có tiết chế, vì client này có

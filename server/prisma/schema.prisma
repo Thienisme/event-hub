@@ -139,3 +139,14 @@ model Ticket {
 
   @@map("tickets")
 }
+
+// Lưu ảnh trong database vì ổ đĩa của Render free không bền vững.
+model StoredFile {
+  name      String   @id @db.VarChar(64)
+  mime      String   @db.VarChar(32)
+  size      Int
+  data      Bytes    @db.MediumBlob
+  createdAt DateTime @default(now())
+
+  @@map("stored_files")
+}

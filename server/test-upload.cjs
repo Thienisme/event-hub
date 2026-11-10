@@ -269,6 +269,8 @@ async function testBannerUrl(organizer, uploadedUrl) {
 async function cleanup() {
   for (const id of eventIds) await prisma.event.delete({ where: { id } }).catch(() => {});
   await prisma.user.deleteMany({ where: { id: { in: users } } }).catch(() => {});
+  // Dọn cả hai nơi để cùng bộ test dùng được với mọi driver.
+  await prisma.storedFile.deleteMany({ where: { name: { in: uploadedFiles } } });
   for (const name of uploadedFiles) fs.rmSync(path.join(UPLOAD_DIR, name), { force: true });
 }
 
