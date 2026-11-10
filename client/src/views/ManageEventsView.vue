@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import EventBanner from '@/components/EventBanner.vue';
+import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2 } from '@lucide/vue';
+
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useManageStore } from '../stores/manage';
@@ -78,69 +85,66 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto space-y-6">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Sự kiện của tôi</h1>
-          <p class="mt-1 text-sm text-gray-500">Quản lý các sự kiện bạn đang phụ trách</p>
+          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Sự kiện của tôi</h1>
+          <p class="mt-1 text-sm text-muted-foreground">Quản lý các sự kiện bạn đang phụ trách</p>
         </div>
 
-        <button
+        <Button
           type="button"
-          class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
           @click="router.push({ name: 'CreateEvent' })"
-        >
-          + Tạo sự kiện
-        </button>
+         variant="default" size="sm">
+          <Plus class="size-4" aria-hidden="true" /> Tạo sự kiện
+        </Button>
       </div>
 
       <!-- Thẻ thống kê -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white border border-gray-100 rounded-xl p-4">
-          <p class="text-xs text-gray-500">Sự kiện</p>
-          <p class="mt-1 text-2xl font-extrabold text-gray-900">{{ manageStore.stats?.events ?? '—' }}</p>
-        </div>
-        <div class="bg-white border border-gray-100 rounded-xl p-4">
-          <p class="text-xs text-gray-500">Sắp diễn ra</p>
-          <p class="mt-1 text-2xl font-extrabold text-indigo-600">
+        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+          <p class="text-xs text-muted-foreground">Sự kiện</p>
+          <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-foreground">{{ manageStore.stats?.events ?? '—' }}</p>
+        </Card>
+        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+          <p class="text-xs text-muted-foreground">Sắp diễn ra</p>
+          <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-primary">
             {{ manageStore.stats?.upcomingEvents ?? '—' }}
           </p>
-        </div>
-        <div class="bg-white border border-gray-100 rounded-xl p-4">
-          <p class="text-xs text-gray-500">Vé đã bán</p>
-          <p class="mt-1 text-2xl font-extrabold text-green-600">
+        </Card>
+        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+          <p class="text-xs text-muted-foreground">Vé đã bán</p>
+          <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-success">
             {{ manageStore.stats?.soldTickets ?? '—' }}
           </p>
-        </div>
-        <div class="bg-white border border-gray-100 rounded-xl p-4">
-          <p class="text-xs text-gray-500">Doanh thu</p>
-          <p class="mt-1 text-2xl font-extrabold text-gray-900">
+        </Card>
+        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+          <p class="text-xs text-muted-foreground">Doanh thu</p>
+          <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-foreground">
             {{ formatPrice(manageStore.stats?.revenue ?? 0) }}
           </p>
-        </div>
+        </Card>
       </div>
 
       <!-- Tìm kiếm -->
-      <div class="bg-white border border-gray-100 rounded-xl p-4">
+      <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
         <div class="relative">
-          <input
+          <Input
             v-model="searchInput"
             type="text"
             placeholder="Tìm theo tên sự kiện, địa điểm..."
-            class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+            class="w-full pl-10" aria-label="Tìm kiếm"
             @input="handleSearchInput"
           />
           <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <Search class="size-4 text-muted-foreground" aria-hidden="true" />
           </div>
         </div>
-      </div>
+      </Card>
 
       <!-- Danh sách -->
-      <div class="bg-white border border-gray-100 rounded-xl overflow-hidden">
+      <div>
         <DataState
           :loading="manageStore.loading"
           :loaded="manageStore.loaded"
@@ -153,85 +157,73 @@ onUnmounted(() => {
           @empty-action="router.push({ name: 'CreateEvent' })"
         >
           <template #skeleton>
-            <div class="divide-y divide-gray-100">
+            <div class="divide-y divide-border">
               <div v-for="n in 4" :key="n" class="px-5 py-5 flex items-center gap-4">
                 <div class="flex-1 space-y-2">
-                  <div class="h-4 w-1/2 bg-gray-200 rounded animate-pulse"></div>
-                  <div class="h-3 w-1/4 bg-gray-200 rounded animate-pulse"></div>
+                  <Skeleton class="h-4 w-1/2 bg-muted rounded animate-pulse" />
+                  <Skeleton class="h-3 w-1/4 bg-muted rounded animate-pulse" />
                 </div>
-                <div class="h-8 w-24 bg-gray-200 rounded-lg animate-pulse"></div>
+                <Skeleton class="h-8 w-24 bg-muted rounded-lg animate-pulse" />
               </div>
             </div>
           </template>
 
-          <div class="divide-y divide-gray-100">
-            <article
+          <div class="space-y-4">
+            <Card
               v-for="event in manageStore.events"
               :key="event.id"
-              class="p-5 hover:bg-gray-50/70 transition-colors"
+              class="group gap-0 rounded-2xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
             >
-              <div class="flex flex-col lg:flex-row lg:items-center gap-4">
-                <div class="flex-1 min-w-0">
-                  <h3 class="font-bold text-gray-900 truncate">
+              <div class="flex flex-col sm:flex-row sm:items-start gap-4">
+                <div class="aspect-video w-full overflow-hidden rounded-xl sm:w-40 lg:w-48 shrink-0"><EventBanner :src="(event as ManagedEvent & { bannerUrl?: string | null }).bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
+                  <h3 class="font-semibold tracking-tight text-foreground break-words">
                     <router-link
                       :to="{ name: 'EventDetail', params: { id: event.id } }"
-                      class="hover:text-indigo-600 transition-colors"
+                      class="hover:text-primary transition-colors"
                     >
                       {{ event.title }}
                     </router-link>
                   </h3>
 
-                  <p class="mt-1 text-sm text-gray-500 flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span class="inline-flex items-center gap-1">
-                      <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                  <p class="mt-1 text-sm text-muted-foreground break-all flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span class="inline-flex min-w-0 items-start gap-1 break-words">
+                      <CalendarDays class="size-4 shrink-0" aria-hidden="true" />
                       {{ formatDateTime(event.startTime) }}
                     </span>
-                    <span class="inline-flex items-center gap-1">
-                      <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
+                    <span class="inline-flex min-w-0 items-start gap-1 break-words">
+                      <MapPin class="size-4 shrink-0" aria-hidden="true" />
                       {{ event.location }}
                     </span>
                   </p>
 
-                  <p class="mt-2 text-xs text-gray-500">
-                    <strong class="text-gray-700">{{ soldTickets(event) }}</strong>
+                  <p class="mt-2 text-xs tabular-nums text-muted-foreground">
+                    <strong class="text-foreground">{{ soldTickets(event) }}</strong>
                     /
                     {{ totalTickets(event) }} vé đã bán
-                    <span v-if="event.ticketTypes.length === 0" class="ml-2 text-gray-400">
+                    <span v-if="event.ticketTypes.length === 0" class="ml-2 text-muted-foreground">
                       (chưa mở bán loại vé nào)
                     </span>
                   </p>
                 </div>
 
-                <div class="flex items-center gap-2 shrink-0">
-                  <router-link
+                <div class="flex flex-wrap items-center gap-2 shrink-0 sm:flex-col lg:flex-row">
+                  <Button as-child size="sm" variant="outline"><router-link
                     :to="{ name: 'EventDetail', params: { id: event.id } }"
-                    class="px-3 py-2 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Xem
-                  </router-link>
+                    ><Eye class="size-4" aria-hidden="true" />Xem</router-link></Button>
 
-                  <router-link
+                  <Button as-child size="sm" variant="outline"><router-link
                     :to="{ name: 'EditEvent', params: { id: event.id } }"
-                    class="px-3 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-                  >
-                    Sửa
-                  </router-link>
+                    ><Pencil class="size-4" aria-hidden="true" />Sửa</router-link></Button>
 
-                  <button
+                  <Button
                     type="button"
-                    class="px-3 py-2 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
                     @click="pendingDelete = event"
-                  >
-                    Xoá
-                  </button>
+                   variant="outline" size="sm">
+                    <Trash2 class="size-4" aria-hidden="true" /> Xoá
+                  </Button>
                 </div>
               </div>
-            </article>
+            </Card>
           </div>
         </DataState>
       </div>
@@ -239,35 +231,33 @@ onUnmounted(() => {
       <!-- Phân trang -->
       <div
         v-if="manageStore.totalPages > 1 && manageStore.events.length > 0"
-        class="flex items-center justify-between gap-3"
+        class="flex flex-wrap items-center justify-between gap-3"
       >
-        <p class="text-sm text-gray-500">
-          Tổng <strong class="text-gray-900">{{ manageStore.total }}</strong> sự kiện
+        <p class="text-sm text-muted-foreground">
+          Tổng <strong class="text-foreground">{{ manageStore.total }}</strong> sự kiện
         </p>
 
         <div class="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             :disabled="manageStore.page === 1"
-            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="changePage(manageStore.page - 1)"
-          >
+           variant="outline" size="sm">
             Trước
-          </button>
+          </Button>
 
-          <span class="text-sm text-gray-600 px-3">
-            Trang <strong class="text-gray-900">{{ manageStore.page }}</strong>
+          <span class="text-sm text-muted-foreground px-3">
+            Trang <strong class="text-foreground">{{ manageStore.page }}</strong>
             / {{ manageStore.totalPages }}
           </span>
 
-          <button
+          <Button
             type="button"
             :disabled="manageStore.page === manageStore.totalPages"
-            class="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="changePage(manageStore.page + 1)"
-          >
+           variant="outline" size="sm">
             Sau
-          </button>
+          </Button>
         </div>
       </div>
     </div>
