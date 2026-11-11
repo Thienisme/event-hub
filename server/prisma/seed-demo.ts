@@ -7,7 +7,9 @@ import { randomBytes } from 'crypto';
 import { saveImage } from '../src/utils/storage';
 import { buildExpiresAt } from '../src/config/order';
 
-const prisma = new PrismaClient();
+// Seed thường chạy từ máy cá nhân tới database ở vùng khác (ví dụ TiDB Singapore), mỗi câu lệnh
+// mất 50-100ms đi về, nên giao dịch nhiều câu dễ vượt mức mặc định 5 giây của Prisma.
+const prisma = new PrismaClient({ transactionOptions: { maxWait: 15_000, timeout: 60_000 } });
 
 const PASSWORD = process.env.SEED_DEMO_PASSWORD || 'demo12345';
 

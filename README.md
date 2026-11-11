@@ -132,7 +132,7 @@ Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http:/
 
 ## Chạy bằng Docker (production)
 
-Triển khai Oracle ARM64, HTTPS và CD: [hướng dẫn từng bước](deploy/README.md).
+**Demo đang chạy:** https://eventhub-v3xy.onrender.com (Render + TiDB Cloud, miễn phí). Hướng dẫn deploy: [deploy/cloud/README.md](deploy/cloud/README.md); bảng tổng hợp môi trường, biến và bí mật: [deploy/ENVIRONMENTS.md](deploy/ENVIRONMENTS.md). Phương án VPS (Oracle ARM64, Caddy HTTPS): [deploy/README.md](deploy/README.md).
 
 `docker-compose.prod.yml` build image cho server và client, chạy migration một lần rồi mới khởi động API. MySQL và Redis không publish ra host; client phục vụ bằng nginx và chuyển `/api` sang server.
 
