@@ -326,6 +326,9 @@ const copyOrderId = async (id: string) => {
                 <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                   <div v-for="(ticket, index) in order.tickets" :key="ticket.id" class="flex min-w-0 flex-col items-center rounded-xl border bg-card p-3">
                     <p class="mb-2 text-xs font-medium">Vé {{ index + 1 }}</p>
+                    <Badge variant="outline" class="mb-3 h-auto max-w-full whitespace-normal py-1 text-center leading-snug" :class="ticket.checkedInAt ? 'border-success/30 bg-success/10 text-success' : 'text-muted-foreground'">
+                      {{ ticket.checkedInAt ? `Đã check-in lúc ${formatDateTime(ticket.checkedInAt)}` : 'Chưa check-in' }}
+                    </Badge>
                     <QrCodeImage v-if="ticket.qrCode" :value="ticket.qrCode" :size="132" />
                     <p v-else class="py-6 text-center text-xs text-muted-foreground">Chưa có mã QR</p>
                     <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
