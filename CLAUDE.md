@@ -95,4 +95,4 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 
 ## Tài liệu
 
-`PROJECT_NOTES.md` giải thích lý do thiết kế và các bug đã gặp, `TRICK.md` là tài liệu ôn phỏng vấn. Cả hai có thể đã lệch so với code, kể cả số dòng được trích dẫn, nên hãy lấy code làm chuẩn.
+`docs/DEVOPS-HOC-TAP.md` là sổ tay học CI/CD và deploy (kèm các sự cố đã gặp). `PROJECT_NOTES.md` giải thích lý do thiết kế và các bug đã gặp, `TRICK.md` là tài liệu ôn phỏng vấn. Cả hai có thể đã lệch so với code, kể cả số dòng được trích dẫn, nên hãy lấy code làm chuẩn.
