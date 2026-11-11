@@ -90,7 +90,26 @@ npm run seed:demo   # 3 tài khoản demo + 12 sự kiện có ảnh
 Không đặt `SEED_ADMIN_PASSWORD` thì admin có mật khẩu mặc định `admin12345`, rất nguy hiểm trên web public.
 Không chạy `npm run test:all` hay `--purge-test` vào database `eventhub`: test ghi dữ liệu thật.
 
-## 6. Khi có sự cố
+## 6. Backup & khôi phục
+
+Backup trước migration lớn, seed hoặc sửa dữ liệu bằng tay; lên lịch backup định kỳ theo mức dữ liệu chấp nhận mất. Máy cần Python 3, MySQL client/mysqldump 8.0, gzip và CA bundle Ubuntu. Script luôn xác minh TLS với TiDB Cloud Starter (cổng mặc định 4000).
+
+Từ gốc repo, dùng file env tự tạo chứa `DATABASE_URL='mysql://USER:PASS@HOST:4000/eventhub?sslaccept=strict'`. URL-encode mật khẩu; script chỉ đọc DATABASE_URL, không thực thi file env. Mặc định đọc `server/.env.render.local`; có thể đổi bằng `--env-file <đường dẫn>` (đường dẫn tương đối tính từ gốc repo).
+
+```bash
+bash deploy/cloud/backup-db.sh
+bash deploy/cloud/backup-db.sh --database eventhub_verify --keep 10
+# Thay timestamp bằng file vừa tạo; đường dẫn backup tương đối tính từ nơi gọi.
+bash deploy/cloud/restore-db.sh backups/eventhub-YYYYmmdd-HHMMSS.sql.gz --database eventhub_verify
+```
+
+Backup nằm trong `backups/`, giữ mặc định 10 bản mới nhất mỗi database (`--keep N`). Dump dùng hex cho ảnh BLOB. Restore sẽ tạo database nếu thiếu và **DROP TABLE IF EXISTS sẽ ghi đè bảng trùng tên**; bảng chỉ có ở đích không tự bị xoá. Chỉ dùng dump đáng tin cậy do script này tạo, không chứa lệnh chuyển database. Kiểm tra số dòng được in và thử ứng dụng trên database kiểm chứng; **chưa thử restore = chưa có backup**.
+
+Restore vào tên database trong DATABASE_URL được coi là production: bắt buộc thêm `--i-know-this-overwrites-production` và gõ lại đúng tên database; `--yes` chỉ bỏ câu hỏi y/N cho đích khác. Script tự backup production trước khi nạp; backup thất bại sẽ dừng restore. Nên dừng thao tác ghi của ứng dụng khi khôi phục; restore lỗi có thể để lại dữ liệu mới nạp một phần.
+
+Áp dụng **3-2-1**: 3 bản dữ liệu, trên 2 loại phương tiện, ít nhất 1 bản ngoài máy/chỗ lưu chính. Giới hạn 10 bản local không thay thế chính sách này. File backup chứa dữ liệu người dùng: **không commit, không gửi đi**; chỉ lưu bản ngoài máy ở nơi được quản lý an toàn, kiểm soát truy cập và mã hoá.
+
+## 7. Khi có sự cố
 
 | Triệu chứng | Xem ở đâu | Nguyên nhân hay gặp |
 |---|---|---|
@@ -99,7 +118,7 @@ Không chạy `npm run test:all` hay `--purge-test` vào database `eventhub`: te
 | Không có sự kiện nào | `/api/events` | Chưa seed (mục 5) |
 | Migration lỗi | Logs, ngay sau dòng `Applying migration` | Câu SQL TiDB chưa hỗ trợ |
 
-## 7. Phương án đã cân nhắc và bỏ
+## 8. Phương án đã cân nhắc và bỏ
 
 | Phương án | Lý do bỏ |
 |---|---|
