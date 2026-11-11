@@ -120,7 +120,7 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 - `token` lưu ở `localStorage`, `user` chỉ nằm trong RAM. Router guard của route cần role phải chờ `authStore.ensureProfile()`.
 - Prisma `Decimal` được serialize thành chuỗi, phải chuyển sang số trước khi tính toán.
 - `confirmOrder`/`cancelOrder` chỉ trả `tickets` trần, nên store ghép lại `ticketType` cũ theo ticket id.
-- Trang soát vé (`/my-events/:id/check-in`) quét QR bằng `vue-qrcode-reader`. Camera chỉ chạy trên HTTPS hoặc localhost; luôn giữ ô nhập mã tay dự phòng.
+- Trang soát vé (`/my-events/:id/check-in`) quét QR bằng `vue-qrcode-reader`. Camera chỉ chạy trên HTTPS hoặc localhost; luôn giữ ô nhập mã tay dự phòng. File WASM của bộ giải mã được tự phục vụ qua `setZXingModuleOverrides` (mặc định nó tải từ CDN), và CSP ở `app.ts` cần `'wasm-unsafe-eval'` trong `script-src`.
 
 ## Deploy
 

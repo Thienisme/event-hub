@@ -2,7 +2,8 @@
 import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { isAxiosError } from 'axios';
-import { QrcodeStream } from 'vue-qrcode-reader';
+import { QrcodeStream, setZXingModuleOverrides } from 'vue-qrcode-reader';
+import zxingWasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
 import { ArrowLeft, Camera, ScanLine } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,6 +11,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import apiClient from '@/api/axios';
 import { formatDateTime } from '@/utils/format';
+
+// Bộ giải mã QR (zxing-wasm) mặc định tải file .wasm từ CDN jsDelivr. Tự phục vụ
+// file đó cùng origin: CSP chỉ cho `connect-src 'self'`, và máy soát vé ở cổng
+// không nên phụ thuộc một CDN bên ngoài.
+setZXingModuleOverrides({
+  locateFile: (path: string, prefix: string) => (path.endsWith('.wasm') ? zxingWasmUrl : prefix + path),
+});
 
 type Result = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVENT' | 'NOT_CONFIRMED';
 interface CheckInResponse {
