@@ -30,3 +30,5 @@ Thumbs.db
 # Temporary
 *.tmp
 tmp/
+# Backup chứa dữ liệu người dùng
+backups/
