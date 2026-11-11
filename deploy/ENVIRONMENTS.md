@@ -70,18 +70,19 @@ bước SSH tự bỏ qua khi chưa có secret `DEPLOY_HOST`.
 ## 5. Seed dữ liệu lên production
 
 Render Shell là tính năng trả phí, nên seed chạy từ máy cá nhân, trỏ thẳng vào TiDB. Tạo file `server/.env.render.local`
-(đã được gitignore):
+(đã được gitignore). Mỗi dòng dạng `TÊN='giá trị'`: **không có dấu cách quanh dấu `=`** (bash hiểu `TÊN= giá trị` là gán rỗng rồi chạy `giá trị` như một lệnh, và seed sẽ âm thầm ghi vào database dev).
 
 ```
-DATABASE_URL=<giống hệt giá trị trên Render>
-STORAGE_DRIVER=db
-SEED_ADMIN_PASSWORD=<mật khẩu admin mạnh>
-SEED_DEMO_PASSWORD=<giống giá trị trên Render>
+DATABASE_URL='<giống hệt giá trị trên Render>'
+STORAGE_DRIVER='db'
+SEED_ADMIN_PASSWORD='<mật khẩu admin mạnh>'
+SEED_DEMO_PASSWORD='<mật khẩu tài khoản demo>'
 ```
 
 ```bash
 cd server
 set -a; . ./.env.render.local; set +a
+echo "$DATABASE_URL" | sed -E 's#^[a-z]+://[^@]*@##'   # phải ra gateway01...tidbcloud.com:4000/eventhub...; rỗng là file sai
 npm run seed        # tài khoản admin@test.com với SEED_ADMIN_PASSWORD
 npm run seed:demo   # 3 tài khoản demo + 12 sự kiện có ảnh
 ```
