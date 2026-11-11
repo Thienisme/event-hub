@@ -123,4 +123,4 @@ Bảng đầy đủ các môi trường ở `deploy/ENVIRONMENTS.md`, các bư�
 - Render ngủ sau 15 phút không có request: `.github/workflows/keepalive.yml` ping `/api/health` mỗi 10 phút.
 - **TiDB có thể tắt `CHECK` constraint**, nên lớp chống bán quá số vé ở database có thể không có tác dụng. Chạy test trên TiDB trước khi khẳng định.
 - Backup và khôi phục: `deploy/cloud/backup-db.sh`, `deploy/cloud/restore-db.sh`. Chúng đọc `server/.env.render.local` mà không `source` file đó.
-- `deploy/*.sh`, `deploy/Caddyfile`, `deploy/docker-compose.deploy.yml` và `.github/workflows/deploy.yml` thuộc hướng VPS ARM64 trước đây, **không dùng cho Render**.
+- `deploy/*.sh`, `deploy/Caddyfile`, `deploy/docker-compose.deploy.yml` và `.github/workflows/deploy.yml` thuộc hướng VPS ARM64 trước đây, **không dùng cho Render**; `deploy.yml` chỉ chạy khi bấm tay.
