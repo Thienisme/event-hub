@@ -7,7 +7,7 @@ import type { Order, OrderStatus, OrderTicket } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { formatPrice, formatDateTime } from '../utils/format';
-import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle } from '@lucide/vue';
+import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle, QrCode, ChevronDown } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -225,6 +225,11 @@ const groupTickets = (order: Order): TicketLine[] => {
 
   return Array.from(grouped.values());
 };
+// API chưa trả endTime, chỉ tự mở khi chắc chắn sự kiện chưa bắt đầu.
+const expandedOrders = ref<Record<string, boolean>>({});
+const defaultExpandedId = computed(() => orderStore.orders.find(order => order.status === 'CONFIRMED' && new Date(order.tickets[0]?.ticketType?.event?.startTime ?? '').getTime() > now.value)?.id);
+const isQrExpanded = (id: string) => expandedOrders.value[id] ?? id === defaultExpandedId.value;
+const toggleQr = (id: string) => { expandedOrders.value[id] = !isQrExpanded(id); };
 const activeTab = ref('all');
 const matchesTab = (order: Order, tab: string) => {
   const status = displayStatus(order);
@@ -266,7 +271,7 @@ const copyOrderId = async (id: string) => {
             {{ tab.label }} <Badge variant="secondary" class="px-1.5 tabular-nums">{{ tab.count }}</Badge>
           </TabsTrigger>
         </TabsList>
-        <p class="text-xs text-muted-foreground">Số đếm và bộ lọc áp dụng cho các đơn trên trang hiện tại.</p>
+        <p v-if="orderStore.pagination.totalPages > 1" class="text-xs text-muted-foreground">Số đếm tính trên các đơn của trang này.</p>
         <TabsContent :value="activeTab" class="min-w-0 space-y-5">
           <div v-if="orderStore.loading || !loaded" role="status" aria-label="Đang tải vé" class="space-y-5">
             <Card v-for="n in 3" :key="n" class="shadow-none ring-0 border border-border bg-background gap-5 rounded-lg border-l-4 border-l-muted-foreground p-5">
@@ -321,6 +326,8 @@ const copyOrderId = async (id: string) => {
                 </template>
               </div>
               <section v-if="order.status === 'CONFIRMED'" class="border-t bg-surface/60 p-5 sm:p-6">
+                <Button variant="outline" :aria-expanded="isQrExpanded(order.id)" :aria-controls="`order-tickets-${order.id}`" @click="toggleQr(order.id)"><QrCode aria-hidden="true" />Xem {{ order.tickets.length }} vé<ChevronDown :class="{ 'rotate-180': isQrExpanded(order.id) }" aria-hidden="true" /></Button>
+                <div v-show="isQrExpanded(order.id)" :id="`order-tickets-${order.id}`" class="mt-4">
                 <h3 class="font-semibold">Mã QR vào cổng</h3>
                 <p class="mt-1 text-xs leading-relaxed text-muted-foreground">Xuất trình mã này khi soát vé. Mỗi vé có một mã riêng.</p>
                 <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -333,6 +340,7 @@ const copyOrderId = async (id: string) => {
                     <p v-else class="py-6 text-center text-xs text-muted-foreground">Chưa có mã QR</p>
                     <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
                   </div>
+                </div>
                 </div>
               </section>
             </Card>

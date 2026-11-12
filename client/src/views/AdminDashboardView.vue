@@ -117,9 +117,9 @@ onUnmounted(() => inFlight?.abort());
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
               <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Người dùng</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><Users class="size-5" aria-hidden="true" /></span></div>
-              <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">{{ stats?.users ?? 0 }}</p>
+              <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">{{ (stats?.users ?? 0) + (stats?.organizers ?? 0) }}</p>
               <p class="mt-1 text-xs text-muted-foreground">
-                +{{ stats?.organizers ?? 0 }} ban tổ chức
+                {{ stats?.users ?? 0 }} khách hàng · {{ stats?.organizers ?? 0 }} ban tổ chức
               </p>
             </Card>
 

@@ -38,74 +38,34 @@ const handleRegister = async () => {
     isLoading.value = false;
   }
 };
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center bg-surface px-4 py-12">
-    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-muted-foreground hover:text-foreground">
-      ← Về trang chủ
-    </router-link>
-    <div class="max-w-md w-full space-y-8 bg-background p-8 rounded-lg border border-border">
-      <div>
-        <h2 class="text-center text-3xl font-extrabold text-foreground">
-          Tạo tài khoản <span class="text-foreground">EventHub</span>
-        </h2>
-        <p class="mt-2 text-center text-sm text-muted-foreground">
-          Đã có tài khoản?
-          <router-link to="/login" class="font-medium text-foreground underline-offset-4 hover:underline">
-            Đăng nhập
-          </router-link>
-        </p>
-      </div>
-
-      <AppAlert :message="errorMessage" type="error" class="mb-4" />
-
-      <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-muted-foreground">Họ và tên</label>
-            <input
-              v-model="fullName"
-              type="text"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
-              placeholder="Nguyễn Văn A"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-muted-foreground">Email</label>
-            <input
-              v-model="email"
-              type="email"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-muted-foreground">Mật khẩu</label>
-            <input
-              v-model="password"
-              type="password"
-              required
-              minlength="8"
-              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
-              placeholder="•••••••• (tối thiểu 8 ký tự)"
-            />
-          </div>
+  <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-sm">
+      <router-link :to="{ name: 'Home' }" class="mb-6 inline-block text-sm text-muted-foreground hover:text-foreground">← Về trang chủ</router-link>
+      <h1 class="text-2xl font-bold tracking-tight">Tạo tài khoản EventHub</h1>
+      <p class="mt-2 text-sm text-muted-foreground">Mua vé và quản lý sự kiện chỉ với một tài khoản.</p>
+      <AppAlert :message="errorMessage" type="error" class="mt-4" />
+      <form class="mt-8 space-y-4" @submit.prevent="handleRegister">
+        <div class="space-y-2">
+          <Label for="full-name">Họ và tên</Label>
+          <Input id="full-name" v-model="fullName" type="text" required class="h-10 bg-background shadow-none" placeholder="Nguyễn Văn A" autocomplete="name" />
         </div>
-
-        <Button
-          type="submit"
-          class="w-full"
-          :disabled="isLoading"
-        >
-          <span v-if="isLoading">Đang tạo tài khoản...</span>
-          <span v-else>Đăng ký</span>
-        </Button>
+        <div class="space-y-2">
+          <Label for="email">Email</Label>
+          <Input id="email" v-model="email" type="email" required class="h-10 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="space-y-2">
+          <Label for="password">Mật khẩu</Label>
+          <Input id="password" v-model="password" type="password" required class="h-10 bg-background shadow-none" minlength="8" autocomplete="new-password" placeholder="••••••••" aria-describedby="password-hint" />
+        </div>
+        <p id="password-hint" class="text-xs text-muted-foreground">Mật khẩu có ít nhất 8 ký tự.</p>
+        <Button type="submit" class="w-full h-10" :disabled="isLoading">{{ isLoading ? 'Đang tạo tài khoản...' : 'Đăng ký' }}</Button>
       </form>
+      <p class="mt-6 text-center text-sm text-muted-foreground">Đã có tài khoản? <router-link to="/login" class="font-medium text-foreground underline-offset-4 hover:underline">Đăng nhập</router-link></p>
     </div>
   </div>
 </template>

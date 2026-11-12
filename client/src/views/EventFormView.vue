@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Plus, Trash2 } from '@lucide/vue';
+import { ArrowLeft, Plus, Trash2 } from '@lucide/vue';
 import DateTimePicker from '@/components/DateTimePicker.vue';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { EVENT_CATEGORIES, type EventCategory } from '@/utils/categories';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -289,17 +289,17 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-surface pb-16">
-    <div class="mx-auto max-w-4xl px-4 py-8">
-      <div class="mb-4 flex justify-end">
-        <Button variant="ghost" @click="router.push({ name: 'Home' })">Quay lại</Button>
+    <div class="mx-auto max-w-3xl px-4 py-8">
+      <div class="mb-4 flex justify-start">
+        <Button variant="ghost" class="px-0 text-sm text-muted-foreground hover:text-foreground" @click="router.push({ name: 'Home' })"><ArrowLeft class="size-4" aria-hidden="true" />Quay lại</Button>
       </div>
       <AppAlert :message="errorMessage" type="error" class="mb-4" />
       <AppAlert :message="successMessage" type="success" class="mb-4" />
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-2xl">{{ isEditMode ? 'Chỉnh sửa sự kiện' : 'Tạo sự kiện mới' }}</CardTitle>
-          <CardDescription>Điền thông tin, thời gian tổ chức và các loại vé cho sự kiện của bạn.</CardDescription>
-        </CardHeader>
+      <div class="mb-8">
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">{{ isEditMode ? 'Chỉnh sửa sự kiện' : 'Tạo sự kiện mới' }}</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Điền thông tin, thời gian tổ chức và các loại vé cho sự kiện của bạn.</p>
+      </div>
+      <Card class="rounded-lg border border-border bg-background shadow-none ring-0">
         <CardContent>
           <form @submit.prevent="handleSubmit" class="space-y-6">
             <section class="space-y-4" aria-labelledby="general-heading">

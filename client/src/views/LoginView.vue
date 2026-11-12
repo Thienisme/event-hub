@@ -53,69 +53,33 @@ const handleLogin = async () => {
     isLoading.value = false;
   }
 };
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center bg-surface px-4 py-12">
-    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-muted-foreground hover:text-foreground">
-      ← Về trang chủ
-    </router-link>
-    <div class="max-w-md w-full space-y-8 bg-background p-8 rounded-lg border border-border">
-      <div>
-        <h2 class="text-center text-3xl font-extrabold text-foreground">
-          Đăng nhập <span class="text-foreground">EventHub</span>
-        </h2>
-        <p class="mt-2 text-center text-sm text-muted-foreground">
-          Chưa có tài khoản?
-          <router-link to="/register" class="font-medium text-foreground underline-offset-4 hover:underline">
-            Đăng ký ngay
-          </router-link>
-        </p>
-      </div>
-
-      <AppAlert :message="successMessage" type="success" class="mb-4" />
-      <AppAlert :message="errorMessage" type="error" class="mb-4" />
-
-      <router-link to="/forgot-password" class="block text-sm text-foreground underline-offset-4 hover:underline">Quên mật khẩu?</router-link>
-
-      <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
-        <div class="space-y-4">
-          <div>
-            <label for="email" class="block text-sm font-medium text-muted-foreground">Email</label>
-            <input
-              id="email"
-              v-model="email"
-              type="email"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label for="password" class="block text-sm font-medium text-muted-foreground">Mật khẩu</label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
-              placeholder="••••••••"
-            />
-          </div>
+  <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-sm">
+      <router-link :to="{ name: 'Home' }" class="mb-6 inline-block text-sm text-muted-foreground hover:text-foreground">← Về trang chủ</router-link>
+      <h1 class="text-2xl font-bold tracking-tight">Đăng nhập EventHub</h1>
+      <p class="mt-2 text-sm text-muted-foreground">Chào mừng trở lại. Đăng nhập để tiếp tục.</p>
+      <AppAlert :message="successMessage" type="success" class="mt-4" />
+      <AppAlert :message="errorMessage" type="error" class="mt-4" />
+      <form class="mt-8 space-y-4" @submit.prevent="handleLogin">
+        <div class="space-y-2">
+          <Label for="email">Email</Label>
+          <Input id="email" v-model="email" type="email" required class="h-10 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
         </div>
-
-        <div>
-          <Button
-            type="submit"
-            class="w-full"
-            :disabled="isLoading"
-          >
-            <span v-if="isLoading">Đang xử lý...</span>
-            <span v-else>Đăng nhập</span>
-          </Button>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <Label for="password">Mật khẩu</Label>
+            <router-link to="/forgot-password" class="text-sm text-muted-foreground hover:text-foreground">Quên mật khẩu?</router-link>
+          </div>
+          <Input id="password" v-model="password" type="password" required autocomplete="current-password" placeholder="••••••••" class="h-10 bg-background shadow-none" />
         </div>
+        <Button type="submit" class="w-full h-10" :disabled="isLoading">{{ isLoading ? 'Đang xử lý...' : 'Đăng nhập' }}</Button>
       </form>
+      <p class="mt-6 text-center text-sm text-muted-foreground">Chưa có tài khoản? <router-link to="/register" class="font-medium text-foreground underline-offset-4 hover:underline">Đăng ký</router-link></p>
     </div>
   </div>
 </template>

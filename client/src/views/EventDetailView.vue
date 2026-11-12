@@ -6,11 +6,12 @@ import type { EventItem, TicketType } from '../stores/event';
 import { useOrderStore } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import apiClient from '../api/axios';
-import { formatPrice, formatDateTime, getEventPhase } from '../utils/format';
+import { formatPrice, formatDateTime, getEventPhase, toAppDateTimeInput } from '../utils/format';
+import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, CalendarCheck, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,6 +59,37 @@ const isEnded = computed(
 const eventPhase = computed(() => event.value ? getEventPhase(event.value.startTime, event.value.endTime) : 'upcoming');
 const phaseLabel = computed(() => ({ upcoming: 'Sắp diễn ra', ongoing: 'Đang diễn ra', ended: 'Đã kết thúc' })[eventPhase.value]);
 const organizerInitials = computed(() => event.value?.organizer?.fullName?.trim().split(/\s+/).slice(-2).map((word) => word[0]).join('').toLocaleUpperCase('vi-VN') || 'BTC');
+
+const ticketSection = ref<HTMLElement | null>(null);
+const ticketSectionVisible = ref(true);
+let ticketObserver: IntersectionObserver | undefined;
+watch(ticketSection, (element) => {
+  ticketObserver?.disconnect();
+  ticketSectionVisible.value = true;
+  if (!element) return;
+  ticketObserver = new IntersectionObserver(([entry]) => { ticketSectionVisible.value = entry?.isIntersecting ?? false; });
+  ticketObserver.observe(element);
+}, { flush: 'post' });
+const saleableTickets = computed(() => (event.value?.ticketTypes ?? []).filter(ticket => ticket.availableQuantity > 0 && !saleLabel(ticket)));
+const lowestPrice = computed(() => Math.min(...saleableTickets.value.map(ticket => Number(ticket.price))));
+const scrollToTickets = () => ticketSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const eventDates = computed(() => {
+  const start = toAppDateTimeInput(event.value?.startTime);
+  const end = toAppDateTimeInput(event.value?.endTime);
+  const dateLabel = (value: string) => {
+    const date = value.slice(0, 10);
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    return `${weekday === 0 ? 'Chủ nhật' : `Thứ ${weekday + 1}`}, ${date.split('-').reverse().join('/')}`;
+  };
+  return {
+    banner: start.slice(0, 10).split('-').reverse().join(' · '),
+    lines: start.slice(0, 10) === end.slice(0, 10)
+      ? [dateLabel(start), `${start.slice(11)} – ${end.slice(11)}`]
+      : [`Từ ${start.slice(11)} ${dateLabel(start)}`, `Đến ${end.slice(11)} ${dateLabel(end)}`],
+  };
+});
+const soldQuantity = (ticket: TicketType) => Math.max(0, ticket.totalQuantity - ticket.availableQuantity);
+const soldPercent = (ticket: TicketType) => ticket.totalQuantity > 0 ? Math.min(100, soldQuantity(ticket) / ticket.totalQuantity * 100) : 0;
 
 /** Số lượng vé user chọn cho từng loại vé, key = ticketTypeId */
 const quantities = ref<Record<string, number>>({});
@@ -123,6 +155,7 @@ watch(
 onUnmounted(() => {
   eventAbort?.abort();
   clearInterval(saleTimer);
+  ticketObserver?.disconnect();
 });
 
 /**
@@ -221,7 +254,7 @@ const handleDelete = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-surface pb-16 text-foreground">
+  <div class="min-h-screen bg-surface pb-24 lg:pb-0 text-foreground">
     <div v-if="isLoading" class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6" role="status" aria-label="Đang tải thông tin sự kiện">
       <span class="sr-only">Đang tải thông tin sự kiện...</span>
       <Skeleton class="h-5 w-44" />
@@ -250,9 +283,13 @@ const handleDelete = async () => {
       <Button variant="link" class="mb-5 h-auto px-0 text-muted-foreground hover:text-primary" @click="router.push({ name: 'Home' })">
         <ArrowLeft />Quay lại danh sách
       </Button>
-      <div class="aspect-video overflow-hidden rounded-lg border bg-muted lg:aspect-[21/9]">
-        <EventBanner :src="event.bannerUrl" :alt="event.title" />
-      </div>
+      <EventBanner :src="event.bannerUrl" :alt="event.title" class="rounded-lg [&>img]:aspect-video lg:[&>img]:aspect-[21/9]">
+        <template #placeholder>
+          <div class="flex aspect-[3/1] items-end rounded-lg bg-primary p-6 text-primary-foreground sm:aspect-[4/1] sm:p-10">
+            <div class="space-y-2"><p class="text-xs font-semibold uppercase tracking-widest text-primary-foreground/70">{{ categoryLabel(event.category ?? 'OTHER') }}</p><p class="text-2xl font-extrabold tabular-nums sm:text-4xl">{{ eventDates.banner }}</p></div>
+          </div>
+        </template>
+      </EventBanner>
 
       <div class="mt-8 flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div class="min-w-0 space-y-3">
@@ -269,13 +306,9 @@ const handleDelete = async () => {
       <div class="mt-8 grid min-w-0 items-start gap-8 lg:grid-cols-3">
         <div class="min-w-0 space-y-8 lg:col-span-2">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
+            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5 sm:col-span-2">
               <CalendarDays class="mt-1 size-5 shrink-0 text-primary" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Bắt đầu</p><p class="mt-1 break-words font-medium">{{ formatDateTime(event.startTime) }}</p></div>
-            </div>
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
-              <CalendarCheck class="mt-1 size-5 shrink-0 text-primary" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Kết thúc</p><p class="mt-1 break-words font-medium">{{ formatDateTime(event.endTime) }}</p></div>
+              <div class="min-w-0"><p class="text-sm text-muted-foreground">Thời gian</p><p v-for="line in eventDates.lines" :key="line" class="mt-1 break-words font-medium tabular-nums">{{ line }}</p></div>
             </div>
             <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
               <MapPin class="mt-1 size-5 shrink-0 text-primary" />
@@ -293,7 +326,7 @@ const handleDelete = async () => {
           <EventActions :event="event" class="mt-6" />
         </div>
 
-        <aside class="min-w-0 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
+        <aside id="ticket-selection" ref="ticketSection" class="min-w-0 scroll-mt-20 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
           <Card class="shadow-none ring-0 border border-border bg-background gap-0 overflow-hidden rounded-lg py-0">
             <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-primary" />Chọn loại vé</CardTitle></CardHeader>
             <CardContent class="space-y-4 p-5 sm:p-6">
@@ -303,8 +336,11 @@ const handleDelete = async () => {
               <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50 opacity-60': ticket.availableQuantity <= 0 }">
                 <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p></div>
                 <div>
-                  <p class="text-xs tabular-nums text-muted-foreground" :class="ticket.availableQuantity <= 0 ? 'text-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'text-warning' : ''">Còn {{ ticket.availableQuantity }} / {{ ticket.totalQuantity }} vé</p>
-                  <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" aria-hidden="true"><div class="h-full rounded-md" :class="ticket.availableQuantity <= 0 ? 'bg-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-warning' : 'bg-primary'" :style="{ width: `${ticket.availableQuantity <= 0 ? 100 : Math.min(100, Math.max(0, ticket.availableQuantity / (ticket.totalQuantity || 1) * 100))}%` }" /></div>
+                  <div class="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+                    <span>Đã bán {{ soldQuantity(ticket) }} / {{ ticket.totalQuantity }}</span>
+                    <span :class="ticket.availableQuantity > 0 && ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'text-brand font-medium' : ''">{{ ticket.availableQuantity <= 0 ? 'Hết vé' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? `Chỉ còn ${ticket.availableQuantity} vé` : `Còn ${ticket.availableQuantity}` }}</span>
+                  </div>
+                  <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" role="progressbar" :aria-valuenow="soldQuantity(ticket)" :aria-valuemax="ticket.totalQuantity" :aria-valuemin="0" :aria-label="`Số vé đã bán loại ${ticket.name}`"><div class="h-full rounded-md" :class="ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-brand' : 'bg-foreground'" :style="{ width: `${soldPercent(ticket)}%` }" /></div>
                 </div>
                 <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
                 <div class="flex flex-wrap items-center gap-3">
@@ -322,6 +358,12 @@ const handleDelete = async () => {
           </Card>
           <p class="mt-4 flex items-start justify-center gap-2 px-2 text-center text-xs leading-relaxed text-muted-foreground"><Clock class="mt-0.5 size-4 shrink-0" />Vé được giữ chỗ 10 phút để thanh toán</p>
         </aside>
+      </div>
+    </div>
+    <div v-if="event && !isLoading && !loadError && !isEnded && saleableTickets.length && !ticketSectionVisible" class="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
+        <p class="text-sm text-muted-foreground">Từ <span class="text-brand font-semibold tabular-nums">{{ lowestPrice === 0 ? 'Miễn phí' : formatPrice(lowestPrice) }}</span></p>
+        <Button class="bg-brand text-brand-foreground hover:bg-brand/90" aria-controls="ticket-selection" @click="scrollToTickets">Chọn vé</Button>
       </div>
     </div>
   </div>

@@ -2,7 +2,8 @@
 import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import apiClient from '@/api/axios';
-import AppAlert from '@/components/AppAlert.vue';
+import { Button } from '@/components/ui/button';
+import { Loader2, CircleCheck, CircleAlert } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
 const route = useRoute();
 const auth = useAuthStore();
@@ -23,13 +24,16 @@ watch(() => route.query.token, async (token) => {
 }, { immediate: true });
 </script>
 <template>
-  <div class="max-w-md mx-auto px-4 py-12">
-    <div class="border border-border rounded-lg bg-background p-6 space-y-6">
-      <h1 class="text-3xl font-extrabold tracking-tight">Xác minh email</h1>
-      <AppAlert :message="error" type="error" />
-      <p v-if="message" role="status" class="text-sm text-muted-foreground">{{ message }}</p>
-      
-      <router-link to="/login" class="block text-sm text-foreground underline-offset-4 hover:underline">Về trang đăng nhập</router-link>
+  <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-sm">
+      <div role="status" aria-live="polite">
+        <CircleAlert v-if="error" class="mb-4 size-6 text-danger" aria-hidden="true" />
+        <Loader2 v-else-if="message === 'Đang xác minh email...'" class="mb-4 size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+        <CircleCheck v-else class="mb-4 size-6 text-success" aria-hidden="true" />
+        <h1 class="text-2xl font-bold tracking-tight">Xác minh email</h1>
+        <p class="mt-2 break-words text-sm text-muted-foreground">{{ error || message }}</p>
+      </div>
+      <Button as-child class="mt-8 w-full h-10"><router-link to="/login">Về trang đăng nhập</router-link></Button>
     </div>
   </div>
 </template>

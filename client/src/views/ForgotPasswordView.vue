@@ -17,15 +17,30 @@ async function submit() {
   } catch (err: any) { error.value = err.response?.data?.message || 'Không thể xử lý yêu cầu. Vui lòng thử lại.'; }
   finally { busy.value = false; }
 }
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { MailCheck } from '@lucide/vue';
 </script>
 <template>
-  <div class="max-w-md mx-auto px-4 py-12">
-    <div class="border border-border rounded-lg bg-background p-6 space-y-6">
-      <h1 class="text-3xl font-extrabold tracking-tight">Quên mật khẩu</h1>
-      <AppAlert :message="error" type="error" />
-      <p v-if="message" role="status" class="text-sm text-muted-foreground">{{ message }}</p>
-      <form @submit.prevent="submit" class="space-y-4"><div class="space-y-2"><label for="email" class="block text-sm font-medium">Email</label><input id="email" v-model="email" type="email" required autocomplete="email" class="w-full border border-input rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" /></div><Button type="submit" :disabled="busy">{{ busy ? "Đang xử lý..." : "Gửi liên kết" }}</Button></form>
-      <router-link to="/login" class="block text-sm text-foreground underline-offset-4 hover:underline">Về trang đăng nhập</router-link>
+  <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-sm">
+      <h1 class="text-2xl font-bold tracking-tight">Quên mật khẩu</h1>
+      <p class="mt-2 text-sm text-muted-foreground">Nhập email của tài khoản. Chúng tôi sẽ gửi liên kết đặt lại mật khẩu, có hiệu lực 30 phút.</p>
+      <AppAlert :message="error" type="error" class="mt-4" />
+      <div v-if="message" role="status" class="mt-8 space-y-4">
+        <MailCheck class="size-6 text-success" aria-hidden="true" />
+        <p class="break-words text-sm">{{ message }}</p>
+        <p class="text-sm text-muted-foreground">Không thấy thư? Kiểm tra mục Spam.</p>
+        <Button type="button" variant="outline" class="w-full h-10 shadow-none" :disabled="busy" @click="submit">{{ busy ? 'Đang xử lý...' : 'Gửi lại' }}</Button>
+      </div>
+      <form v-else @submit.prevent="submit" class="mt-8 space-y-4">
+        <div class="space-y-2">
+          <Label for="email">Email</Label>
+          <Input id="email" v-model="email" type="email" required class="h-10 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <Button type="submit" class="w-full h-10" :disabled="busy">{{ busy ? 'Đang xử lý...' : 'Gửi liên kết' }}</Button>
+      </form>
+      <p class="mt-6 text-center text-sm text-muted-foreground"><router-link to="/login" class="font-medium text-foreground underline-offset-4 hover:underline">← Về trang đăng nhập</router-link></p>
     </div>
   </div>
 </template>
