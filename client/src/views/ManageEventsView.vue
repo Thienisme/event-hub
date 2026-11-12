@@ -86,10 +86,10 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+    <div class="max-w-6xl mx-auto space-y-6">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Sự kiện của tôi</h1>
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">Sự kiện của tôi</h1>
           <p class="mt-1 text-sm text-muted-foreground">Quản lý các sự kiện bạn đang phụ trách</p>
         </div>
 
@@ -103,23 +103,23 @@ onUnmounted(() => {
 
       <!-- Thẻ thống kê -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Sự kiện</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-foreground">{{ manageStore.stats?.events ?? '—' }}</p>
         </Card>
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Sắp diễn ra</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-primary">
             {{ manageStore.stats?.upcomingEvents ?? '—' }}
           </p>
         </Card>
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Vé đã bán</p>
-          <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-success">
+          <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-foreground">
             {{ manageStore.stats?.soldTickets ?? '—' }}
           </p>
         </Card>
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Doanh thu</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-foreground">
             {{ formatPrice(manageStore.stats?.revenue ?? 0) }}
@@ -128,7 +128,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Tìm kiếm -->
-      <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+      <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
         <div class="relative">
           <Input
             v-model="searchInput"
@@ -172,10 +172,10 @@ onUnmounted(() => {
             <Card
               v-for="event in manageStore.events"
               :key="event.id"
-              class="group gap-0 rounded-2xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+              class="shadow-none ring-0 border border-border bg-background group gap-0 rounded-lg p-4 transition-colors"
             >
               <div class="flex flex-col sm:flex-row sm:items-start gap-4">
-                <div class="aspect-video w-full overflow-hidden rounded-xl sm:w-40 lg:w-48 shrink-0"><EventBanner :src="event.bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
+                <div class="aspect-video w-full overflow-hidden rounded-lg sm:w-40 lg:w-48 shrink-0"><EventBanner :src="event.bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
                   <h3 class="font-semibold tracking-tight text-foreground break-words">
                     <router-link
                       :to="{ name: 'EventDetail', params: { id: event.id } }"

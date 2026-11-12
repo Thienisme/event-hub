@@ -146,17 +146,16 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-surface px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-    <div class="mx-auto max-w-7xl space-y-8">
-      <section class="relative isolate overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-violet-500/10 px-5 py-10 sm:px-10 sm:py-14">
-        <div aria-hidden="true" class="pointer-events-none absolute -right-16 -top-20 -z-10 size-72 rounded-full bg-primary/10 blur-3xl"></div>
+    <div class="mx-auto max-w-6xl space-y-8">
+      <section class="relative isolate overflow-hidden rounded-lg border bg-background px-5 py-10 sm:px-10 sm:py-14">
         <div class="flex flex-col items-start justify-between gap-6 lg:flex-row">
           <div class="w-full min-w-0 max-w-2xl">
-            <p class="mb-3 text-sm font-semibold text-primary">Trải nghiệm mới đang chờ bạn</p>
-            <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">Khám phá sự kiện hấp dẫn</h1>
+            <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Trải nghiệm mới đang chờ bạn</p>
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Khám phá sự kiện hấp dẫn</h1>
             <p class="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">Tìm cảm hứng, kết nối cộng đồng và đặt vé cho những khoảnh khắc đáng nhớ.</p>
             <div class="relative mt-7">
               <Search class="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input v-model="searchQuery" @update:model-value="handleSearchInput" type="search" aria-label="Tìm kiếm sự kiện" placeholder="Tìm tên sự kiện, địa điểm…" class="h-14 rounded-xl bg-card pl-12 pr-4 text-base shadow-sm" />
+              <Input v-model="searchQuery" @update:model-value="handleSearchInput" type="search" aria-label="Tìm kiếm sự kiện" placeholder="Tìm tên sự kiện, địa điểm…" class="h-14 rounded-md bg-background pl-12 pr-4 text-base" />
             </div>
             <div class="mt-4">
               <Button variant="outline" class="sm:hidden" :aria-expanded="filtersOpen" aria-controls="event-filters" @click="filtersOpen = !filtersOpen">{{ filtersOpen ? 'Thu gọn bộ lọc' : 'Mở bộ lọc' }}</Button>
@@ -165,14 +164,14 @@ onUnmounted(() => {
                   <div class="space-y-2">
                     <Label for="filter-category">Danh mục</Label>
                     <Select :model-value="filters.category || 'all'" @update:model-value="value => { filters.category = String(value) === 'all' ? '' : String(value); handleSearchInput(); }">
-                      <SelectTrigger id="filter-category" class="w-full bg-card"><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="filter-category" class="w-full bg-background"><SelectValue /></SelectTrigger>
                       <SelectContent><SelectItem value="all">Tất cả danh mục</SelectItem><SelectItem v-for="item in EVENT_CATEGORIES" :key="item.value" :value="item.value">{{ item.label }}</SelectItem></SelectContent>
                     </Select>
                   </div>
                   <div class="space-y-2">
                     <Label for="filter-location">Thành phố / địa điểm</Label>
                     <Select :model-value="filters.location || 'all'" @update:model-value="value => { filters.location = String(value) === 'all' ? '' : String(value); handleSearchInput(); }">
-                      <SelectTrigger id="filter-location" class="w-full bg-card"><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="filter-location" class="w-full bg-background"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Tất cả</SelectItem>
                         <SelectItem v-for="city in ['Hà Nội', 'TP.HCM', 'Đà Nẵng']" :key="city" :value="city">{{ city }}</SelectItem>
@@ -180,16 +179,16 @@ onUnmounted(() => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div class="min-w-0 space-y-2"><Label for="filter-from">Từ ngày</Label><Input id="filter-from" v-model="filters.from" type="date" class="min-w-0 bg-card" @update:model-value="handleSearchInput" /></div>
-                  <div class="min-w-0 space-y-2"><Label for="filter-to">Đến ngày</Label><Input id="filter-to" v-model="filters.to" type="date" class="min-w-0 bg-card" @update:model-value="handleSearchInput" /></div>
-                  <div class="space-y-2"><Label for="filter-min-price">Giá thấp nhất (VNĐ)</Label><Input id="filter-min-price" v-model="filters.minPrice" type="number" min="0" placeholder="Không giới hạn" class="bg-card" @update:model-value="handleSearchInput" /></div>
-                  <div class="space-y-2"><Label for="filter-max-price">Giá cao nhất (VNĐ)</Label><Input id="filter-max-price" v-model="filters.maxPrice" type="number" min="0" placeholder="Không giới hạn" class="bg-card" @update:model-value="handleSearchInput" /></div>
+                  <div class="min-w-0 space-y-2"><Label for="filter-from">Từ ngày</Label><Input id="filter-from" v-model="filters.from" type="date" class="min-w-0 bg-background" @update:model-value="handleSearchInput" /></div>
+                  <div class="min-w-0 space-y-2"><Label for="filter-to">Đến ngày</Label><Input id="filter-to" v-model="filters.to" type="date" class="min-w-0 bg-background" @update:model-value="handleSearchInput" /></div>
+                  <div class="space-y-2"><Label for="filter-min-price">Giá thấp nhất (VNĐ)</Label><Input id="filter-min-price" v-model="filters.minPrice" type="number" min="0" placeholder="Không giới hạn" class="bg-background" @update:model-value="handleSearchInput" /></div>
+                  <div class="space-y-2"><Label for="filter-max-price">Giá cao nhất (VNĐ)</Label><Input id="filter-max-price" v-model="filters.maxPrice" type="number" min="0" placeholder="Không giới hạn" class="bg-background" @update:model-value="handleSearchInput" /></div>
                 </div>
                 <Button variant="outline" @click="clearFilters">Xoá bộ lọc</Button>
               </div>
             </div>
           </div>
-          <Button v-if="authStore.isOrganizer" @click="router.push({ name: 'CreateEvent' })" class="shrink-0 rounded-xl"><Plus aria-hidden="true" />Tạo sự kiện</Button>
+          <Button v-if="authStore.isOrganizer" @click="router.push({ name: 'CreateEvent' })" class="shrink-0 rounded-md"><Plus aria-hidden="true" />Tạo sự kiện</Button>
         </div>
       </section>
 
@@ -202,7 +201,7 @@ onUnmounted(() => {
           </TabsList>
         </Tabs>
         <div v-if="eventStore.loading || !loaded" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="status" aria-label="Đang tải sự kiện">
-          <Card v-for="n in 8" :key="n" aria-hidden="true" class="gap-0 rounded-2xl border py-0 shadow-sm ring-0">
+          <Card v-for="n in 8" :key="n" aria-hidden="true" class="shadow-none ring-0 border border-border bg-background gap-0 rounded-lg py-0">
             <Skeleton class="aspect-video w-full rounded-none" />
             <div class="space-y-3 p-4">
               <Skeleton class="h-5 w-full" /><Skeleton class="h-5 w-2/3" />
@@ -211,13 +210,13 @@ onUnmounted(() => {
             </div>
           </Card>
         </div>
-        <Card v-else-if="errorMessage" role="alert" class="items-center rounded-2xl border px-5 py-14 text-center shadow-sm ring-0">
+        <Card v-else-if="errorMessage" role="alert" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg px-5 py-14 text-center">
           <CircleAlert class="size-12 text-danger" aria-hidden="true" />
           <div><h3 class="text-lg font-semibold tracking-tight">Không tải được dữ liệu</h3><p class="mt-2 break-words text-sm text-muted-foreground">{{ errorMessage }}</p></div>
           <Button @click="loadEvents">Thử lại</Button>
         </Card>
-        <Card v-else-if="eventStore.events.length === 0" class="items-center rounded-2xl border px-5 py-14 text-center shadow-sm ring-0">
-          <div class="rounded-2xl bg-primary/10 p-4"><CalendarSearch class="size-10 text-primary" aria-hidden="true" /></div>
+        <Card v-else-if="eventStore.events.length === 0" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg px-5 py-14 text-center">
+          <div class="rounded-lg bg-primary/10 p-4"><CalendarSearch class="size-10 text-primary" aria-hidden="true" /></div>
           <div><h3 class="text-lg font-semibold tracking-tight">{{ status === 'ended' ? 'Chưa có sự kiện nào đã kết thúc' : 'Không tìm thấy sự kiện phù hợp' }}</h3><p class="mt-2 text-sm text-muted-foreground">Thử từ khóa khác hoặc quay lại sau để khám phá sự kiện mới.</p></div>
           <Button v-if="searchQuery" variant="outline" @click="searchQuery = ''; handleSearchInput()">Xoá tìm kiếm</Button>
         </Card>

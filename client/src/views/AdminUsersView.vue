@@ -101,11 +101,11 @@ watch(
 
 <template>
   <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+    <div class="max-w-6xl mx-auto space-y-6">
       <!-- Đầu trang -->
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Quản trị người dùng</h1>
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">Quản trị người dùng</h1>
           <p class="mt-1 text-sm text-muted-foreground">
             Phân quyền, khoá và mở khoá tài khoản
           </p>
@@ -129,25 +129,25 @@ watch(
 
       <!-- Thẻ thống kê nhanh -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Tổng tài khoản</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-foreground">
             {{ adminStore.stats?.total ?? '—' }}
           </p>
         </Card>
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Đang hoạt động</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-success">
             {{ adminStore.stats?.active ?? '—' }}
           </p>
         </Card>
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Bị khoá</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-danger">
             {{ adminStore.stats?.locked ?? '—' }}
           </p>
         </Card>
-        <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4">
+        <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4">
           <p class="text-xs text-muted-foreground">Quản trị viên</p>
           <p class="mt-1 break-words text-xl sm:text-2xl font-semibold tabular-nums text-primary">
             {{ adminStore.stats?.byRole?.ADMIN ?? '—' }}
@@ -156,7 +156,7 @@ watch(
       </div>
 
       <!-- Bộ lọc -->
-      <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+      <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-4 flex flex-col lg:flex-row lg:items-center gap-3">
         <div class="relative flex-1">
           <Input
             v-model="searchInput"
@@ -193,7 +193,7 @@ watch(
       </Card>
 
       <!-- Bảng -->
-      <Card class="bg-card border border-border rounded-2xl gap-0 py-0 shadow-sm overflow-hidden">
+      <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 py-0 overflow-hidden">
         <DataState
           :loading="adminStore.loading"
           :loaded="adminStore.loaded"
@@ -219,7 +219,7 @@ watch(
           <div class="md:hidden grid gap-3 p-4"><article
                   v-for="user in adminStore.users"
                   :key="user.id"
-                  class="rounded-xl border bg-card p-4 shadow-sm space-y-3 min-w-0"
+                  class="rounded-lg border bg-background p-4 space-y-3 min-w-0"
                 >
                   <div class="min-w-0 break-words">
                     <div class="flex items-center gap-3">
