@@ -40,6 +40,8 @@ export interface UserState {
    * hơn tài khoản nên phải chụp lại thông tin này tại thời điểm ghi.
    */
   email: string;
+  /** Phiên bản token hiện tại. Token mang `tv` khác số này đã bị thu hồi. */
+  tokenVersion: number;
 }
 
 /**
@@ -63,13 +65,14 @@ export async function getUserState(userId: string): Promise<UserState | null> {
     if (raw) {
       const parsed = JSON.parse(raw) as UserState;
       // Cache bị hỏng (nhầm với dữ liệu khác) -> coi như trượt, đọc DB lại.
-      // Bắt buộc phải có `email`: entry cache từ phiên bản cũ không có trường
-      // này, coi như trượt để tự lành sau khi deploy.
+      // Bắt buộc phải có `email` và `tokenVersion`: entry cache từ phiên bản cũ
+      // không có các trường này, coi như trượt để tự lành sau khi deploy.
       if (
         parsed &&
         typeof parsed.role === 'string' &&
         typeof parsed.isActive === 'boolean' &&
-        typeof parsed.email === 'string'
+        typeof parsed.email === 'string' &&
+        typeof parsed.tokenVersion === 'number'
       ) {
         return parsed;
       }
@@ -80,12 +83,17 @@ export async function getUserState(userId: string): Promise<UserState | null> {
 
   const row = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, isActive: true, email: true },
+    select: { role: true, isActive: true, email: true, tokenVersion: true },
   });
 
   if (!row) return null;
 
-  const state: UserState = { role: row.role, isActive: row.isActive, email: row.email };
+  const state: UserState = {
+    role: row.role,
+    isActive: row.isActive,
+    email: row.email,
+    tokenVersion: row.tokenVersion,
+  };
 
   try {
     await cacheClient.set(key, JSON.stringify(state), 'EX', USER_STATE_TTL_SECONDS);

@@ -13,6 +13,7 @@ export interface User {
   fullName: string;
   email: string;
   role: UserRole;
+  createdAt?: string;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -63,6 +64,22 @@ export const useAuthStore = defineStore('auth', () => {
     return profileRequest;
   }
 
+  async function updateProfile(fullName: string) {
+    const response = await apiClient.patch<{ message: string; user: User }>('/auth/me', { fullName });
+    user.value = response.data.user;
+    return response.data;
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const response = await apiClient.post<{ message: string; token: string }>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    token.value = response.data.token;
+    localStorage.setItem('token', response.data.token);
+    return response.data;
+  }
+
   // Đăng xuất
   function logout() {
     user.value = null;
@@ -77,6 +94,8 @@ export const useAuthStore = defineStore('auth', () => {
     isOrganizer,
     isAdmin,
     login,
+    updateProfile,
+    changePassword,
     fetchProfile,
     ensureProfile,
     logout,

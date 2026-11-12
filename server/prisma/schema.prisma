@@ -30,6 +30,9 @@ model User {
   isActive  Boolean  @default(true)
   // Mốc thay đổi role. Dùng để biết token đã cấp còn hợp lệ hay không.
   roleChangedAt DateTime?
+  // Phiên bản token. JWT mang theo `tv` lúc cấp; đổi mật khẩu thì tăng số này
+  // nên mọi token cấp trước đó mất hiệu lực ngay (authenticate so sánh hai số).
+  tokenVersion Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -19,6 +19,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Đăng nhập, phân quyền | `server/src/middlewares/auth.middleware.ts`, `server/src/utils/userState.ts` |
+| Hồ sơ, đổi mật khẩu | `server/src/controllers/auth.controller.ts`, `client/src/views/ProfileView.vue` |
 | Quản trị | `server/src/controllers/admin.controller.ts` |
 | Cache, Redis | `server/src/utils/cache.ts`, `server/src/config/redis.ts` |
 | Validation, giới hạn dữ liệu | `server/src/utils/validation.ts`, `server/prisma/schema.prisma` |
@@ -88,6 +89,8 @@ Luồng request: `routes/` gắn middleware theo thứ tự `authenticate` → `
 ### Xác thực và phân quyền
 
 - `authenticate` gán `req.user.currentRole` từ database (qua cache). **Kiểm tra quyền bằng `currentRole`, không dùng `role` trong JWT** vì token sống 1 ngày.
+- **Thu hồi token bằng `users.tokenVersion`:** JWT mang `tv` lúc cấp (thiếu thì coi là 0), `authenticate` trả 403 nếu `tv` khác `tokenVersion` trong `getUserState`. Đổi mật khẩu (`POST /api/auth/change-password`) tăng `tokenVersion` bằng `updateMany` có điều kiện số cũ, gọi `invalidateUserState` và trả token mới. Cấp token mới chỉ qua `signAccessToken` để luôn có `tv`. Message 403 này phải chứa chữ "token" để client coi là hết phiên.
+- Sai mật khẩu hiện tại trả **400, không phải 401**: client coi mọi 401 là hết phiên và đăng xuất.
 - Đổi quyền admin khoá các dòng admin bằng `FOR UPDATE`, đếm kết quả trong JS (không dùng `count()`), và chạy qua `runWithDeadlockRetry`.
 
 ### Xử lý lỗi

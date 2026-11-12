@@ -1,8 +1,18 @@
 import { Router, Request, Response } from 'express';
-import { register, login } from '../controllers/auth.controller';
+import { register, login, updateProfile, changePassword } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
-import { validateBody, registerSchema, loginSchema } from '../utils/validation';
-import { authRateLimiter, registerRateLimiter } from '../middlewares/rateLimit.middleware';
+import {
+  validateBody,
+  registerSchema,
+  loginSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+} from '../utils/validation';
+import {
+  authRateLimiter,
+  registerRateLimiter,
+  passwordChangeRateLimiter,
+} from '../middlewares/rateLimit.middleware';
 import prisma from '../utils/prisma';
 import { handleControllerError } from '../utils/errors';
 
@@ -43,5 +53,15 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
     return handleControllerError(res, 'auth.me', error);
   }
 });
+
+router.patch('/me', authenticate, validateBody(updateProfileSchema), updateProfile);
+// Chống dò mật khẩu cũ bằng token bị lộ: 5 lần sai mỗi phút cho mỗi tài khoản.
+router.post(
+  '/change-password',
+  authenticate,
+  passwordChangeRateLimiter,
+  validateBody(changePasswordSchema),
+  changePassword
+);
 
 export default router;

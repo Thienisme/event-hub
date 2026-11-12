@@ -32,6 +32,7 @@ const SUITES = [
   ['test:regressions', 'test-regressions.cjs'],
   ['test:lifecycle', 'test-order-lifecycle.cjs'],
   ['test:upload', 'test-upload.cjs'],
+  ['test:profile', 'test-profile.cjs'],
 ];
 
 const G = '\u001b[32m';

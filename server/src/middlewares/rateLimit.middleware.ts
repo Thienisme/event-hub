@@ -106,3 +106,17 @@ export const registerRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+/**
+ * Rate limiter cho đổi mật khẩu. Chạy SAU `authenticate` nên khoá theo tài khoản:
+ * người cầm token bị lộ không dò được mật khẩu cũ. Chỉ đếm lần thất bại.
+ */
+export const passwordChangeRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
+  message: { message: 'Nhập sai mật khẩu quá nhiều lần. Vui lòng thử lại sau 1 phút!' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
