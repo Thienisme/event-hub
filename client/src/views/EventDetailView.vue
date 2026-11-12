@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/auth';
 import apiClient from '../api/axios';
 import { formatPrice, formatDateTime, getEventPhase } from '../utils/format';
 import AppAlert from '../components/AppAlert.vue';
+import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
 import { ArrowLeft, CalendarDays, CalendarCheck, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
@@ -289,6 +290,7 @@ const handleDelete = async () => {
             <h2 class="text-xl font-semibold tracking-tight">Giới thiệu</h2>
             <p class="mt-4 whitespace-pre-line break-words leading-relaxed text-muted-foreground">{{ event.description?.trim() ? event.description : 'Ban tổ chức chưa thêm mô tả' }}</p>
           </section>
+          <EventActions :event="event" class="mt-6" />
         </div>
 
         <aside class="min-w-0 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
