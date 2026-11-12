@@ -30,6 +30,7 @@ const SUITES = [
   ['test:validation', 'test-validation.cjs'],
   ['test:cors', 'test-cors.cjs'],
   ['test:regressions', 'test-regressions.cjs'],
+  ['test:filters', 'test-event-filters.cjs'],
   ['test:lifecycle', 'test-order-lifecycle.cjs'],
   ['test:upload', 'test-upload.cjs'],
 ];

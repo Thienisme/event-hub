@@ -6,6 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { EVENT_CATEGORIES, type EventCategory } from '@/utils/categories';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -71,6 +73,7 @@ const LIMITS = {
   MAX_ORDER_AMOUNT: 9_999_999_999.99,
 } as const;
 
+const category = ref<EventCategory>('OTHER');
 const title = ref('');
 const description = ref('');
 const location = ref('');
@@ -94,6 +97,7 @@ let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Xoá sạch form trước khi nạp sự kiện khác, tránh để lại dữ liệu cũ. */
 const resetForm = () => {
+  category.value = 'OTHER';
   title.value = '';
   description.value = '';
   location.value = '';
@@ -110,6 +114,7 @@ const loadEventForEdit = async (id: string) => {
   try {
     const event = await eventStore.fetchEventById(id);
     if (event) {
+      category.value = event.category || 'OTHER';
       title.value = event.title;
       description.value = event.description || '';
       location.value = event.location;
@@ -187,7 +192,7 @@ const removeTicketType = (index: number) => {
 };
 
 const handleSubmit = async () => {
-  if (!title.value || !location.value || !startTime.value || !endTime.value) {
+  if (!category.value || !title.value || !location.value || !startTime.value || !endTime.value) {
     errorMessage.value = 'Vui lòng nhập đầy đủ các trường bắt buộc!';
     return;
   }
@@ -218,6 +223,7 @@ const handleSubmit = async () => {
   successMessage.value = '';
 
   const payload = {
+    category: category.value,
     title: title.value,
     description: description.value || null,
     location: location.value,
@@ -290,6 +296,13 @@ onUnmounted(() => {
               <div class="space-y-2">
                 <Label for="event-title">Tiêu đề *</Label>
                 <Input id="event-title" v-model="title" required :maxlength="LIMITS.TITLE" placeholder="Nhập tiêu đề sự kiện" />
+              </div>
+              <div class="space-y-2">
+                <Label for="event-category">Danh mục *</Label>
+                <Select v-model="category" required>
+                  <SelectTrigger id="event-category" class="w-full"><SelectValue placeholder="Chọn danh mục" /></SelectTrigger>
+                  <SelectContent><SelectItem v-for="item in EVENT_CATEGORIES" :key="item.value" :value="item.value">{{ item.label }}</SelectItem></SelectContent>
+                </Select>
               </div>
               <div class="space-y-2">
                 <Label for="event-description">Mô tả</Label>

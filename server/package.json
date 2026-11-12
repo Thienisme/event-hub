@@ -39,6 +39,7 @@
     "test:cors": "node test-cors.cjs",
     "test:regressions": "node test-regressions.cjs",
     "test:lifecycle": "node test-order-lifecycle.cjs",
+    "test:filters": "node test-event-filters.cjs",
     "test:all": "node run-all-tests.cjs",
     "seed": "ts-node prisma/seed.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",
