@@ -29,6 +29,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Lỗi và mã HTTP | `server/src/utils/errors.ts` |
 | Dữ liệu mẫu | `server/prisma/seed.ts` (admin), `server/prisma/seed-demo.ts` (demo) |
 | Client gọi API | `client/src/api/axios.ts`, `client/src/stores/` |
+| Giao diện: màu, chữ, bo góc, thành phần | `DESIGN.md`, `client/src/style.css` |
 | Deploy | `render.yaml`, `Dockerfile` (gốc), `deploy/ENVIRONMENTS.md`, `deploy/cloud/` |
 
 ## Lệnh
@@ -121,6 +122,7 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 
 ### Client
 
+- **Sửa giao diện phải theo `DESIGN.md`:** chỉ dùng class theo token (`bg-primary`, `text-muted-foreground`, `border-border`, `text-brand`...), không viết class màu thô của Tailwind (`indigo-*`, `gray-*`...) hay mã hex trong component. Màu đỏ rượu `brand` chỉ cho nút mua hàng, giá vé và badge khan hiếm.
 - **`api/axios.ts` nhận diện loại lỗi 403 bằng regex trên message tiếng Việt** ("token", "bị khoá", "không có quyền"). Đổi các thông báo này ở `auth.middleware.ts` thì phải sửa cả regex.
 - `api/session.ts` là kênh callback giữa axios và `main.ts`, tránh vòng import với router.
 - `token` lưu ở `localStorage`, `user` chỉ nằm trong RAM. Router guard của route cần role phải chờ `authStore.ensureProfile()`.
