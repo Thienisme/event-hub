@@ -5,6 +5,7 @@ import { useEventStore } from '../stores/event';
 import type { EventItem, TicketType } from '../stores/event';
 import { useOrderStore } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
+import { useToastStore } from '../stores/toast';
 import apiClient from '../api/axios';
 import { formatPrice, formatDateTime, getEventPhase, toAppDateTimeInput } from '../utils/format';
 import { categoryLabel } from '@/utils/categories';
@@ -23,6 +24,7 @@ const router = useRouter();
 const eventStore = useEventStore();
 const orderStore = useOrderStore();
 const authStore = useAuthStore();
+const toast = useToastStore();
 
 const loadError = ref('');
 const errorMessage = ref('');
@@ -72,7 +74,7 @@ watch(ticketSection, (element) => {
 }, { flush: 'post' });
 const saleableTickets = computed(() => (event.value?.ticketTypes ?? []).filter(ticket => ticket.availableQuantity > 0 && !saleLabel(ticket)));
 const lowestPrice = computed(() => Math.min(...saleableTickets.value.map(ticket => Number(ticket.price))));
-const scrollToTickets = () => ticketSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const scrollToTickets = () => ticketSection.value?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
 const eventDates = computed(() => {
   const start = toAppDateTimeInput(event.value?.startTime);
   const end = toAppDateTimeInput(event.value?.endTime);
@@ -93,6 +95,10 @@ const soldPercent = (ticket: TicketType) => ticket.totalQuantity > 0 ? Math.min(
 
 /** Số lượng vé user chọn cho từng loại vé, key = ticketTypeId */
 const quantities = ref<Record<string, number>>({});
+const ticketSubtotal = (ticket: TicketType) => {
+  const quantity = Number(quantities.value[ticket.id]);
+  return Number.isInteger(quantity) && quantity > 0 ? formatPrice(Number(ticket.price) * quantity) : '—';
+};
 
 // Huỷ request cũ khi đổi route nhanh (/events/a -> /events/b) để response
 // của sự kiện cũ không về muộn và ghi đè sự kiện mới.
@@ -178,6 +184,7 @@ const normalizeQuantity = (ticket: TicketType) => {
 };
 
 const handleBook = async (ticket: TicketType) => {
+  if (submittingId.value) return;
   errorMessage.value = '';
   if (saleLabel(ticket) || isEnded.value) return;
 
@@ -203,9 +210,10 @@ const handleBook = async (ticket: TicketType) => {
   submittingId.value = ticket.id;
 
   try {
-    await orderStore.createOrder(ticket.id, quantity);
+    const { order } = await orderStore.createOrder(ticket.id, quantity);
+    toast.success('Đã giữ chỗ. Hãy thanh toán trước khi đơn hết hạn.');
     // Thành công -> sang trang "Vé của tôi", đơn mới nằm ngay đầu danh sách
-    router.push({ name: 'MyOrders' });
+    router.push({ name: 'MyOrders', query: { order: order.id } });
   } catch (error: any) {
     const status = error.response?.status;
 
@@ -274,7 +282,11 @@ const handleDelete = async () => {
         <CardContent class="space-y-5 p-8">
           <CircleAlert class="mx-auto size-12 text-muted-foreground" />
           <h1 class="text-xl font-semibold tracking-tight" role="alert">{{ loadError }}</h1>
-          <Button class="rounded-md" @click="router.push({ name: 'Home' })"><ArrowLeft />Về trang chủ</Button>
+          <p class="text-sm leading-6 text-muted-foreground">Bạn có thể thử tải lại hoặc khám phá các sự kiện khác.</p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <Button variant="outline" @click="router.push({ name: 'Home' })"><ArrowLeft />Về trang chủ</Button>
+            <Button @click="loadEvent(String(route.params.id))">Thử lại</Button>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -328,7 +340,7 @@ const handleDelete = async () => {
 
         <aside id="ticket-selection" ref="ticketSection" class="min-w-0 scroll-mt-20 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
           <Card class="shadow-none ring-0 border border-border bg-background gap-0 overflow-hidden rounded-lg py-0">
-            <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-primary" />Chọn loại vé</CardTitle></CardHeader>
+            <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-primary" />Chọn loại vé</CardTitle><p class="mt-2 text-sm leading-6 text-muted-foreground">Chọn số lượng, đặt vé rồi thanh toán để nhận mã QR.</p></CardHeader>
             <CardContent class="space-y-4 p-5 sm:p-6">
               <AppAlert :message="errorMessage" type="error" />
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
@@ -343,13 +355,17 @@ const handleDelete = async () => {
                   <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" role="progressbar" :aria-valuenow="soldQuantity(ticket)" :aria-valuemax="ticket.totalQuantity" :aria-valuemin="0" :aria-label="`Số vé đã bán loại ${ticket.name}`"><div class="h-full rounded-md" :class="ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-brand' : 'bg-foreground'" :style="{ width: `${soldPercent(ticket)}%` }" /></div>
                 </div>
                 <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
-                <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
+                  <span class="text-muted-foreground">Thành tiền</span>
+                  <span class="font-semibold tabular-nums" aria-live="polite" aria-atomic="true">{{ ticketSubtotal(ticket) }}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-3" :aria-busy="submittingId === ticket.id">
                   <div class="flex items-center rounded-lg border bg-background">
-                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
-                    <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
-                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
+                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
+                    <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
+                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
                   </div>
-                  <Button class="min-w-24 flex-1 rounded-md" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
+                  <Button class="min-w-24 flex-1 rounded-md" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
                     <span v-if="isEnded">Đã kết thúc</span><span v-else-if="saleLabel(ticket)">{{ ticket.saleStart && new Date(ticket.saleStart).getTime() > now ? 'Chưa mở bán' : 'Đã ngừng bán' }}</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
                   </Button>
                 </div>

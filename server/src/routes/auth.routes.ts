@@ -2,7 +2,7 @@ import { forgotPassword, resetPassword, verifyEmail, resendVerification } from '
 import { forgotPasswordSchema, resetPasswordSchema, emailTokenSchema } from '../utils/validation';
 import { forgotIpLimiter, forgotEmailLimiter, resendVerificationLimiter } from '../middlewares/rateLimit.middleware';
 import { Router, Request, Response } from 'express';
-import { register, login, updateProfile, changePassword } from '../controllers/auth.controller';
+import { register, login, updateProfile, changePassword, updateAvatar, removeAvatar } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import {
   validateBody,
@@ -16,6 +16,8 @@ import {
   registerRateLimiter,
   passwordChangeRateLimiter,
 } from '../middlewares/rateLimit.middleware';
+import { parseImageUpload } from '../controllers/upload.controller';
+import { uploadRateLimiter } from '../middlewares/rateLimit.middleware';
 import prisma from '../utils/prisma';
 import { handleControllerError } from '../utils/errors';
 
@@ -44,6 +46,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
         id: true,
         email: true,
         fullName: true,
+        avatarUrl: true,
         role: true,
         createdAt: true,
         emailVerifiedAt: true,
@@ -62,6 +65,9 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
     return handleControllerError(res, 'auth.me', error);
   }
 });
+
+router.post('/me/avatar', authenticate, uploadRateLimiter, parseImageUpload, updateAvatar);
+router.delete('/me/avatar', authenticate, uploadRateLimiter, removeAvatar);
 
 router.patch('/me', authenticate, validateBody(updateProfileSchema), updateProfile);
 // Chống dò mật khẩu cũ bằng token bị lộ: 5 lần sai mỗi phút cho mỗi tài khoản.

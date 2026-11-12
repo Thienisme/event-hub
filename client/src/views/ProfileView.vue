@@ -3,6 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/format';
+import UserAvatar from '@/components/UserAvatar.vue';
+import { Camera, Trash2 } from '@lucide/vue';
+import { MAX_BANNER_BYTES, ALLOWED_BANNER_TYPES } from '@/utils/media';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -14,6 +17,42 @@ const loading = ref(true);
 const fullName = ref('');
 const savingName = ref(false);
 const nameError = ref('');
+const avatarInput = ref<HTMLInputElement | null>(null);
+const savingAvatar = ref(false);
+const avatarError = ref('');
+async function uploadAvatar(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || savingAvatar.value) return;
+  avatarError.value = '';
+  if (!ALLOWED_BANNER_TYPES.includes(file.type)) {
+    avatarError.value = 'Vui lòng chọn ảnh JPG, PNG hoặc WEBP.';
+    return;
+  }
+  if (file.size > MAX_BANNER_BYTES) {
+    avatarError.value = 'Ảnh không được vượt quá 5MB.';
+    return;
+  }
+  savingAvatar.value = true;
+  try {
+    await auth.updateAvatar(file);
+    toast.success('Đã cập nhật ảnh đại diện.');
+  } catch (error: any) {
+    avatarError.value = error.response?.data?.message || 'Không thể tải ảnh. Vui lòng thử lại.';
+  } finally { savingAvatar.value = false; }
+}
+async function removeAvatar() {
+  if (savingAvatar.value) return;
+  avatarError.value = '';
+  savingAvatar.value = true;
+  try {
+    await auth.removeAvatar();
+    toast.success('Đã xoá ảnh đại diện.');
+  } catch (error: any) {
+    avatarError.value = error.response?.data?.message || 'Không thể xoá ảnh. Vui lòng thử lại.';
+  } finally { savingAvatar.value = false; }
+}
 const currentPassword = ref('');
 const newPassword = ref('');
 const confirmation = ref('');
@@ -68,10 +107,10 @@ async function savePassword() {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
     <div>
-      <h1 class="text-2xl sm:text-3xl font-extrabold text-foreground">Hồ sơ của tôi</h1>
-      <p class="mt-2 text-sm text-muted-foreground">Quản lý thông tin cá nhân và mật khẩu tài khoản.</p>
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">Hồ sơ của tôi</h1>
+      <p class="mt-2 text-sm text-muted-foreground">Cập nhật diện mạo, thông tin cá nhân và bảo mật tài khoản.</p>
     </div>
     <p v-if="loading" role="status" class="text-sm text-muted-foreground">Đang tải hồ sơ...</p>
     <div v-else-if="!auth.user" class="space-y-3">
@@ -80,32 +119,43 @@ async function savePassword() {
     </div>
     <template v-else>
       <Card>
-        <CardHeader><CardTitle as="h2">Thông tin tài khoản</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle as="h2">Thông tin cá nhân</CardTitle>
+          <CardDescription>Ảnh và họ tên giúp bạn dễ được nhận diện trên EventHub.</CardDescription>
+        </CardHeader>
         <CardContent>
-          <dl class="grid gap-5 sm:grid-cols-3">
+          <div class="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-center" :aria-busy="savingAvatar">
+            <UserAvatar :name="auth.user.fullName" :url="auth.user.avatarUrl" class="size-20 text-2xl" />
+            <div class="min-w-0 space-y-3">
+              <div>
+                <p class="font-semibold">Ảnh đại diện</p>
+                <p id="avatar-hint" class="mt-1 text-sm text-muted-foreground">JPG, PNG hoặc WEBP, tối đa 5MB. Nên dùng ảnh vuông.</p>
+              </div>
+              <input ref="avatarInput" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" tabindex="-1" aria-label="Chọn ảnh đại diện" aria-describedby="avatar-hint" :disabled="savingAvatar" @change="uploadAvatar" />
+              <div class="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" :disabled="savingAvatar" @click="avatarInput?.click()"><Camera class="size-4" aria-hidden="true" />{{ savingAvatar ? 'Đang cập nhật...' : 'Đổi ảnh' }}</Button>
+                <Button v-if="auth.user.avatarUrl" type="button" variant="ghost" :disabled="savingAvatar" @click="removeAvatar"><Trash2 class="size-4" aria-hidden="true" />Xoá ảnh</Button>
+              </div>
+              <p v-if="avatarError" role="alert" class="text-sm text-danger">{{ avatarError }}</p>
+              <p v-if="savingAvatar" role="status" class="text-sm text-muted-foreground">Đang cập nhật ảnh đại diện...</p>
+            </div>
+          </div>
+          <form class="space-y-4 border-b border-border py-6" novalidate @submit.prevent="saveName">
+            <div class="space-y-2">
+              <Label for="profile-name">Họ và tên</Label>
+              <Input id="profile-name" v-model="fullName" type="text" autocomplete="name" maxlength="191" required :disabled="savingName" :aria-invalid="!!nameError" :aria-describedby="nameError ? 'name-error' : 'name-hint'" />
+              <p id="name-hint" class="text-xs text-muted-foreground">Tên hiển thị trên hồ sơ và vé của bạn, từ 2 đến 191 ký tự.</p>
+            </div>
+            <p v-if="nameError" id="name-error" role="alert" class="text-sm text-danger">{{ nameError }}</p>
+            <Button type="submit" :disabled="savingName || nameUnchanged" class="w-full sm:w-auto">{{ savingName ? 'Đang lưu...' : 'Lưu thay đổi' }}</Button>
+          </form>
+          <dl class="grid gap-5 pt-6 text-sm sm:grid-cols-3">
             <div class="min-w-0"><dt class="text-muted-foreground">Email</dt><dd class="mt-1 break-words font-medium">{{ auth.user.email }}</dd></div>
             <div><dt class="text-muted-foreground">Vai trò</dt><dd class="mt-1 font-medium">{{ roleLabel }}</dd></div>
             <div><dt class="text-muted-foreground">Ngày tạo tài khoản</dt><dd class="mt-1 font-medium">{{ formatDateTime(auth.user.createdAt) }}</dd></div>
           </dl>
         </CardContent>
       </Card>
-      <div class="grid gap-6 md:grid-cols-2 items-start">
-        <Card>
-          <CardHeader>
-            <CardTitle as="h2">Đổi họ tên</CardTitle>
-            <CardDescription>Họ và tên có từ 2 đến 191 ký tự.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form class="space-y-4" novalidate @submit.prevent="saveName">
-              <div class="space-y-2">
-                <Label for="profile-name">Họ và tên</Label>
-                <Input id="profile-name" v-model="fullName" type="text" autocomplete="name" required :disabled="savingName" :aria-invalid="!!nameError" :aria-describedby="nameError ? 'name-error' : undefined" />
-              </div>
-              <p v-if="nameError" id="name-error" role="alert" class="text-sm text-danger">{{ nameError }}</p>
-              <Button type="submit" :disabled="savingName || nameUnchanged" class="w-full sm:w-auto">{{ savingName ? 'Đang lưu...' : 'Lưu' }}</Button>
-            </form>
-          </CardContent>
-        </Card>
         <Card>
           <CardHeader>
             <CardTitle as="h2">Đổi mật khẩu</CardTitle>
@@ -133,7 +183,6 @@ async function savePassword() {
             </form>
           </CardContent>
         </Card>
-      </div>
     </template>
   </div>
 </template>
