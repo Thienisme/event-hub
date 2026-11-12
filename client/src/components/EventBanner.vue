@@ -43,13 +43,14 @@ watch(
       @error="broken = true"
     />
 
+    <slot v-else name="placeholder">
     <div
-      v-else
       class="w-full h-full flex items-center justify-center bg-muted transition-transform duration-300 group-hover:scale-105"
     >
       <span class="px-4 text-center text-sm font-semibold text-muted-foreground line-clamp-2">
         {{ alt }}
       </span>
     </div>
+    </slot>
   </div>
 </template>

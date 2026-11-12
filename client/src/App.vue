@@ -21,7 +21,9 @@ async function resendEmail() {
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const showNavbar = computed(() => route.name !== 'Login' && route.name !== 'Register');
+// Các trang tài khoản dùng bố cục tối giản, không có thanh menu (giống nhau cho cả 4 trang).
+const AUTH_PAGES = new Set(['Login', 'Register', 'ForgotPassword', 'ResetPassword']);
+const showNavbar = computed(() => !AUTH_PAGES.has(String(route.name)));
 const currentYear = new Date().getFullYear();
 const initial = computed(() => Array.from(authStore.user?.fullName.trim() || '?')[0]?.toLocaleUpperCase('vi-VN'));
 const roleLabel = computed(() => {
@@ -86,8 +88,8 @@ const handleLogout = () => {
 
 <template>
   <div class="min-h-screen flex flex-col bg-surface">
-    <header v-if="showNavbar" ref="headerRef" class="bg-background border-b border-border sticky top-0 z-10">
-      <nav class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+    <header v-if="showNavbar" ref="headerRef" class="bg-background border-b border-border sticky top-0 z-10 px-4 sm:px-6 lg:px-8">
+      <nav class="max-w-6xl mx-auto h-16 flex items-center justify-between gap-3">
         <router-link :to="{ name: 'Home' }" class="shrink-0 text-xl font-extrabold text-foreground">
           Event<span class="text-foreground">Hub</span>
         </router-link>

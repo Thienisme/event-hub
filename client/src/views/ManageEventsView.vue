@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import EventBanner from '@/components/EventBanner.vue';
-import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2, ScanLine } from '@lucide/vue';
+import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2, ScanLine, MoreHorizontal } from '@lucide/vue';
 
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -206,7 +207,7 @@ onUnmounted(() => {
                   </p>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2 shrink-0 sm:flex-col lg:flex-row">
+                <div class="flex items-center gap-2 shrink-0 sm:flex-col lg:flex-row">
                   <Button as-child size="sm" variant="outline"><router-link
                     :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"
                     ><Eye class="size-4" aria-hidden="true" />Xem</router-link></Button>
@@ -214,16 +215,17 @@ onUnmounted(() => {
                   <Button as-child size="sm" variant="outline"><router-link
                     :to="{ name: 'CheckIn', params: { id: event.id } }"
                     ><ScanLine class="size-4" aria-hidden="true" />Soát vé</router-link></Button>
-                  <Button as-child size="sm" variant="outline"><router-link
-                    :to="{ name: 'EditEvent', params: { id: event.id } }"
-                    ><Pencil class="size-4" aria-hidden="true" />Sửa</router-link></Button>
-
-                  <Button
-                    type="button"
-                    @click="pendingDelete = event"
-                   variant="outline" size="sm">
-                    <Trash2 class="size-4" aria-hidden="true" /> Xoá
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger as-child>
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label="Thêm thao tác"><MoreHorizontal class="size-4" aria-hidden="true" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" class="shadow-none">
+                      <DropdownMenuItem as-child>
+                        <router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil class="size-4" aria-hidden="true" />Sửa</router-link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" class="text-destructive" @select="pendingDelete = event"><Trash2 class="size-4" aria-hidden="true" />Xoá</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </Card>
