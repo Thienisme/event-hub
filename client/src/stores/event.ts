@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../api/axios';
+import type { EventCategory } from '../utils/categories';
 
 export interface EventOrganizer {
   id: string;
@@ -27,6 +28,7 @@ export interface EventItem {
   description?: string | null;
   location: string;
   bannerUrl?: string | null;
+  category?: EventCategory;
   startTime: string;
   endTime: string;
   organizerId: string;
@@ -73,12 +75,14 @@ export const useEventStore = defineStore('event', () => {
   // `signal` (tuỳ chọn) cho phép view huỷ request cũ khi user gõ tiếp / đổi trang,
   // tránh response về muộn ghi đè kết quả mới (race condition).
   async function fetchEvents(
-    params: { page: number; limit: number; search: string; status?: 'upcoming' | 'ended' } = { page: 1, limit: 10, search: '' },
+    params: { page: number; limit: number; search?: string; status?: 'upcoming' | 'ended'; category?: string; location?: string; from?: string; to?: string; minPrice?: string | number; maxPrice?: string | number } = { page: 1, limit: 10, search: '' },
     signal?: AbortSignal
   ): Promise<EventListResponse> {
     beginRequest();
     try {
-      const response = await apiClient.get<EventListResponse>('/events', { params: { ...params, status: params.status ?? 'upcoming' }, signal });
+      const query = Object.fromEntries(Object.entries({ ...params, status: params.status ?? 'upcoming' })
+        .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== ''));
+      const response = await apiClient.get<EventListResponse>('/events', { params: query, signal });
       events.value = response.data.data;
       return response.data;
     } finally {

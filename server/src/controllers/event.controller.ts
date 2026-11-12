@@ -10,6 +10,7 @@ import {
   invalidateEventDetails,
   listCacheKey,
 } from '../utils/cache';
+import { parseEventFilters } from '../utils/eventFilters';
 import { parsePagination } from '../utils/pagination';
 
 /** Giới hạn tham số của API danh sách công khai. */
@@ -51,7 +52,7 @@ const deleteReleasedOrdersOf = async (
 // 1. Tạo sự kiện mới
 export const createEvent = async (req: Request, res: Response) => {
   try {
-    const { title, description, location, bannerUrl, startTime, endTime, ticketTypes } = req.body;
+    const { title, description, location, category, bannerUrl, startTime, endTime, ticketTypes } = req.body;
     const organizerId = req.user?.userId;
 
     if (!organizerId) {
@@ -67,6 +68,7 @@ export const createEvent = async (req: Request, res: Response) => {
         title,
         description,
         location,
+        category,
         bannerUrl,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
@@ -109,13 +111,20 @@ export const getEvents = async (req: Request, res: Response) => {
     // Khoá cache có kèm version: khi version tăng, mọi key cũ trở nên vô hình.
     const version = await getListVersion();
     const status = req.query.status === 'ended' ? 'ended' : 'upcoming';
-    const cacheKey = listCacheKey(version, page, limit, search, status);
+    const filters = parseEventFilters(req.query);
+    const cacheKey = listCacheKey(version, page, limit, search, status, filters);
 
     // cacheGetOrLoad lo cả ba việc: đọc cache, chống stampede, và cho biết dữ liệu
     // đến từ đâu ('cache' | 'database') — vừa để FE biết, vừa để đo hit rate.
     const { value: result, source } = await cacheGetOrLoad(cacheKey, async () => {
       const now = new Date();
       const whereCondition: Prisma.EventWhereInput = {
+        category: filters.category,
+        location: filters.location ? { contains: filters.location } : undefined,
+        startTime: filters.from || filters.to ? { gte: filters.from, lte: filters.to } : undefined,
+        ticketTypes: filters.minPrice !== undefined || filters.maxPrice !== undefined
+          ? { some: { price: { gte: filters.minPrice, lte: filters.maxPrice } } }
+          : undefined,
         AND: [
           { endTime: status === 'ended' ? { lt: now } : { gte: now } },
           ...(search
@@ -194,7 +203,7 @@ export const getEventById = async (req: Request, res: Response) => {
 export const updateEvent = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, location, bannerUrl, startTime, endTime } = req.body;
+    const { title, description, location, category, bannerUrl, startTime, endTime } = req.body;
 
     // `undefined` (client không gửi) = KHÔNG đụng tới loại vé.
     // Mảng rỗng `[]` = người dùng đã xoá hết loại vé -> reconcile thật sự.
@@ -311,6 +320,7 @@ export const updateEvent = async (req: Request, res: Response) => {
           title,
           description,
           location,
+          category,
           bannerUrl,
           startTime: new Date(startTime),
           endTime: new Date(endTime),

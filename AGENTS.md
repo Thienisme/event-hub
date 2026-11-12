@@ -19,6 +19,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
 | Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
+| Danh mục, bộ lọc danh sách sự kiện | `server/src/utils/eventFilters.ts`, `client/src/utils/categories.ts`, `client/src/views/HomeView.vue` |
 | Đăng nhập, phân quyền | `server/src/middlewares/auth.middleware.ts`, `server/src/utils/userState.ts` |
 | Hồ sơ, đổi mật khẩu | `server/src/controllers/auth.controller.ts`, `client/src/views/ProfileView.vue` |
 | Quản trị | `server/src/controllers/admin.controller.ts` |
@@ -91,6 +92,8 @@ Luồng request: `routes/` gắn middleware theo thứ tự `authenticate` → `
 
 - **Hai Redis client có chủ đích:** `redisClient` cho Redlock (kiên nhẫn chờ, thử lại) và `cacheClient` (lỗi nhanh, timeout 200 ms). Cache phải dùng `cacheClient`, và lỗi Redis không được làm hỏng request đọc. `REDIS_URL` (nếu có) được ưu tiên hơn `REDIS_HOST`/`REDIS_PORT`.
 - Cache danh sách dùng version trong khoá: vô hiệu bằng `INCR`, không dùng `KEYS`. Mọi thao tác đổi số vé phải gọi `invalidateEventCache`.
+- `GET /api/events` lọc theo `category`, `location` (chứa chuỗi), `from`/`to` (ngày giờ Việt Nam, `to` gồm hết ngày), `minPrice`/`maxPrice` (có ít nhất một loại vé trong khoảng). `parseEventFilters` chuẩn hoá và **bỏ qua giá trị sai thay vì trả 400**, giống `parsePagination`. **Khoá cache phải gồm mọi bộ lọc đã chuẩn hoá**: thêm bộ lọc mới thì thêm vào `listCacheKey`, nếu không người dùng sẽ nhận kết quả của bộ lọc khác.
+- Danh mục là enum `EventCategory` (mặc định `OTHER`); thêm giá trị mới cần migration và nhãn tiếng Việt trong `client/src/utils/categories.ts`.
 - `getUserState` cache role và trạng thái khoá trong 30 giây; đổi role hoặc khoá tài khoản phải gọi `invalidateUserState`.
 
 ### Xác thực và phân quyền

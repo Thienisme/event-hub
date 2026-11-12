@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { categoryLabel } from '@/utils/categories';
 import { APP_TIMEZONE, formatEventDateShort, formatPrice, getEventPhase } from '@/utils/format';
 import { CalendarDays, MapPin } from '@lucide/vue';
 import { Card } from '@/components/ui/card';
@@ -54,6 +55,7 @@ const calendar = computed(() => {
         <Badge v-if="status" :variant="status.variant" class="absolute right-3 top-3 max-w-[calc(100%-5rem)] shadow-sm">{{ status.label }}</Badge>
       </div>
       <div class="flex flex-1 flex-col p-4">
+        <Badge v-if="event.category" variant="secondary" class="mb-2 self-start">{{ categoryLabel(event.category) }}</Badge>
         <h3 class="mb-3 line-clamp-2 min-h-12 break-words text-base font-semibold tracking-tight transition-colors group-hover:text-primary">{{ event.title }}</h3>
         <p class="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
           <CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
