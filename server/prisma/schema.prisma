@@ -48,6 +48,7 @@ model User {
   events    Event[]  @relation("OrganizerEvents")
   orders    Order[]
   auditLogs AdminAuditLog[] @relation("AuditActor")
+  checkedInTickets Ticket[] @relation("TicketCheckedInBy")
 
   @@index([role])
   @@index([isActive])
@@ -146,10 +147,18 @@ model Ticket {
   orderId      String
   ticketTypeId String
   qrCode       String?    @unique
+  // Thời điểm soát vé ở cổng. NULL = chưa check-in. Chỉ đổi từ NULL sang có giá
+  // trị bằng `updateMany` có điều kiện `checkedInAt: null` (xem checkin.controller).
+  checkedInAt  DateTime?
+  // Người quét vé. SetNull: xoá tài khoản nhân viên không được làm mất lịch sử soát vé.
+  checkedInById String?
   createdAt    DateTime   @default(now())
 
   order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  checkedInBy  User?      @relation("TicketCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+
+  @@index([checkedInById])
 
   @@map("tickets")
 }

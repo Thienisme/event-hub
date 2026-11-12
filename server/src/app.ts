@@ -45,7 +45,9 @@ app.use(helmet(clientDir ? {
     imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
     fontSrc: ["'self'", 'https:', 'data:'],
     styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
-    scriptSrc: ["'self'"],
+    // 'wasm-unsafe-eval': trang soát vé biên dịch bộ giải mã QR dạng WebAssembly.
+    // Chỉ mở biên dịch WASM, không mở eval() cho JavaScript.
+    scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
     connectSrc: ["'self'"],
   } },
 } : {}));

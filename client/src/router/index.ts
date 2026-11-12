@@ -41,6 +41,12 @@ const router = createRouter({
       meta: { requiresAuth: true, organizerOnly: true },
     },
     {
+      path: '/my-events/:id/check-in',
+      name: 'CheckIn',
+      component: () => import('@/views/CheckInView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
       // Tổng quan hệ thống (chỉ ADMIN)
       path: '/admin',
       name: 'AdminDashboard',
