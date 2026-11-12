@@ -44,7 +44,8 @@
     "test:all": "node run-all-tests.cjs",
     "seed": "ts-node prisma/seed.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",
-    "test:upload": "node test-upload.cjs"
+    "test:upload": "node test-upload.cjs",
+    "test:profile": "node test-profile.cjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

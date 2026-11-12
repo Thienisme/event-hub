@@ -4,6 +4,11 @@ export interface JwtPayload {
   userId: string; // ✅ Sửa String thành string (chữ s viết thường)
   role: Role;
   /**
+   * Phiên bản token lúc cấp (`users.tokenVersion`). Token cũ không có trường này
+   * được coi là 0. Lệch với DB nghĩa là mật khẩu đã đổi sau khi cấp token.
+   */
+  tv?: number;
+  /**
    * Role LẤY TỪ DB (không phải role trong token).
    *
    * Middleware `authorize` ghi đè giá trị này mỗi lần nó chạy. Controller nào

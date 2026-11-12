@@ -1,13 +1,30 @@
 import { Request, Response } from 'express';
+import { Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma';
-import { handleControllerError } from '../utils/errors';
+import { AppError, handleControllerError } from '../utils/errors';
+import { invalidateUserState } from '../utils/userState';
 import { getJwtSecret } from '../config/auth';
 
 // Người dùng tự đăng ký luôn được gán role CUSTOMER.
 // Role ORGANIZER/ADMIN chỉ có thể thay đổi thông qua cơ chế nội bộ (ví dụ: admin panel).
 const SELF_REGISTER_ROLE = 'CUSTOMER';
+
+/** Token mang `tv` = tokenVersion lúc cấp; xem `authenticate`. */
+const signAccessToken = (user: { id: string; role: Role; tokenVersion: number }) =>
+  jwt.sign({ userId: user.id, role: user.role, tv: user.tokenVersion }, getJwtSecret(), {
+    algorithm: 'HS256',
+    expiresIn: '1d',
+  });
+
+const PROFILE_SELECT = {
+  id: true,
+  email: true,
+  fullName: true,
+  role: true,
+  createdAt: true,
+} as const;
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -79,14 +96,8 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      getJwtSecret(),
-      // Ghim thuật toán thay vì để mặc định: mặc định của thư viện có thể đổi
-      // giữa các version, và ta muốn token sinh ra và token verify dùng CHUNG
-      // một thuật toán được chỉ định tường minh.
-      { algorithm: 'HS256', expiresIn: '1d' }
-    );
+    // Thuật toán được ghim HS256 trong signAccessToken (khớp với verify).
+    const token = signAccessToken(user);
 
     return res.json({
       message: 'Đăng nhập thành công!',
@@ -100,5 +111,78 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (error) {
     return handleControllerError(res, 'login', error);
+  }
+};
+
+/**
+ * PATCH /api/auth/me  { fullName }
+ * Chỉ đổi được tên. Email và role không đổi qua đây.
+ */
+export const updateProfile = async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { fullName: req.body.fullName },
+      select: PROFILE_SELECT,
+    });
+
+    return res.json({ message: 'Cập nhật hồ sơ thành công!', user });
+  } catch (error) {
+    return handleControllerError(res, 'updateProfile', error);
+  }
+};
+
+/**
+ * POST /api/auth/change-password  { currentPassword, newPassword }
+ *
+ * THU HỒI TOKEN: tăng `tokenVersion` cùng lúc với đổi mật khẩu. Mọi token cấp
+ * trước đó mang `tv` cũ nên `authenticate` từ chối ngay ở request kế tiếp (cache
+ * trạng thái được xoá ngay sau khi ghi). Thiết bị đang đổi mật khẩu nhận token
+ * mới trong response để không bị đăng xuất.
+ *
+ * Mật khẩu sai trả 400, KHÔNG phải 401: client coi mọi 401 là hết phiên.
+ *
+ * Ghi bằng `updateMany` có điều kiện `tokenVersion` vừa đọc: hai request đổi
+ * mật khẩu cùng lúc (cùng chứng minh bằng mật khẩu cũ) thì chỉ một bên thắng.
+ * Không có điều kiện này, bên thua vẫn ghi đè mật khẩu dù mật khẩu cũ nó dùng
+ * để chứng minh đã không còn đúng.
+ */
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, password: true, tokenVersion: true },
+    });
+    if (!user) throw new AppError('Không tìm thấy tài khoản!', 404);
+
+    if (!(await bcrypt.compare(currentPassword, user.password))) {
+      throw new AppError('Mật khẩu hiện tại không đúng!', 400);
+    }
+    if (currentPassword === newPassword) {
+      throw new AppError('Mật khẩu mới phải khác mật khẩu hiện tại!', 400);
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    const claimed = await prisma.user.updateMany({
+      where: { id: userId, tokenVersion: user.tokenVersion },
+      data: { password: hashed, tokenVersion: { increment: 1 } },
+    });
+
+    if (claimed.count === 0) {
+      throw new AppError('Mật khẩu vừa được đổi ở nơi khác, vui lòng thử lại!', 409);
+    }
+
+    await invalidateUserState(userId);
+    // Xoá lần hai sau 1 giây: một request đọc DB ngay TRƯỚC khi ghi có thể ghi
+    // trạng thái cũ vào cache SAU lần xoá đầu, giữ token cũ sống thêm tối đa 30 giây.
+    setTimeout(() => void invalidateUserState(userId), 1000).unref();
+
+    const token = signAccessToken({ ...user, tokenVersion: user.tokenVersion + 1 });
+    return res.json({ message: 'Đổi mật khẩu thành công!', token });
+  } catch (error) {
+    return handleControllerError(res, 'changePassword', error);
   }
 };

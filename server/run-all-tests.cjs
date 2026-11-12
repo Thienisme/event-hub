@@ -34,6 +34,7 @@ const SUITES = [
   ['test:lifecycle', 'test-order-lifecycle.cjs'],
   ['test:checkin', 'test-checkin.cjs'],
   ['test:upload', 'test-upload.cjs'],
+  ['test:profile', 'test-profile.cjs'],
 ];
 
 const G = '\u001b[32m';

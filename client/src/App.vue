@@ -83,6 +83,9 @@ const handleLogout = () => {
             <router-link :to="{ name: 'MyOrders' }" class="shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors" :class="linkClass('MyOrders')">
               Vé của tôi
             </router-link>
+            <router-link :to="{ name: 'Profile' }" class="shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors" :class="linkClass('Profile')">
+              Hồ sơ
+            </router-link>
             <div v-if="authStore.isOrganizer" ref="menuRef" class="relative shrink-0">
               <button type="button" class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:text-indigo-600" :aria-expanded="menuOpen" aria-controls="desktop-management" @click="menuOpen = !menuOpen">
                 Quản lý
@@ -126,6 +129,7 @@ const handleLogout = () => {
           </div>
         </div>
         <router-link :to="{ name: 'MyOrders' }" class="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium" :class="linkClass('MyOrders')" @click="closeMenus">Vé của tôi</router-link>
+        <router-link :to="{ name: 'Profile' }" class="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium" :class="linkClass('Profile')" @click="closeMenus">Hồ sơ</router-link>
         <div v-for="group in menuGroups" :key="group.title" class="mt-2 border-t border-gray-200 pt-2">
           <p class="px-3 py-2 text-xs uppercase text-gray-500">{{ group.title }}</p>
           <router-link v-for="item in group.items" :key="item.name" :to="{ name: item.name }" class="flex min-h-11 items-center rounded-lg px-3 text-sm" :class="linkClass(item.name)" @click="closeMenus">{{ item.label }}</router-link>

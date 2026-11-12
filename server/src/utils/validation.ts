@@ -68,6 +68,10 @@ export const loginSchema = z.object({
  */
 export const LIMITS = {
   TITLE: 255,
+  // users.fullName là VARCHAR(191) mặc định của Prisma.
+  FULL_NAME: 191,
+  // bcrypt chỉ dùng 72 byte đầu: dài hơn thì phần sau bị bỏ qua âm thầm.
+  PASSWORD_BYTES: 72,
   DESCRIPTION: 5000,
   LOCATION: 255,
   BANNER_URL: 500,
@@ -196,6 +200,29 @@ export const createEventSchema = z.object({
       });
     }
   });
+
+const fullNameField = z
+  .string({ message: 'Họ và tên không hợp lệ!' })
+  .trim()
+  .min(2, 'Họ và tên phải có ít nhất 2 ký tự!')
+  .max(LIMITS.FULL_NAME, `Họ và tên không được vượt quá ${LIMITS.FULL_NAME} ký tự!`);
+
+/** Schema đổi hồ sơ: hiện chỉ có tên. */
+export const updateProfileSchema = z.object({ fullName: fullNameField });
+
+/** Schema đổi mật khẩu. Mật khẩu không trim: khoảng trắng là một phần mật khẩu. */
+export const changePasswordSchema = z.object({
+  currentPassword: z
+    .string({ message: 'Vui lòng nhập mật khẩu hiện tại!' })
+    .min(1, 'Vui lòng nhập mật khẩu hiện tại!'),
+  newPassword: z
+    .string({ message: 'Mật khẩu mới không hợp lệ!' })
+    .min(8, 'Mật khẩu mới phải có ít nhất 8 ký tự!')
+    .refine(
+      (value) => Buffer.byteLength(value, 'utf8') <= LIMITS.PASSWORD_BYTES,
+      `Mật khẩu mới không được dài quá ${LIMITS.PASSWORD_BYTES} byte!`
+    ),
+});
 
 /**
  * Schema validation cho đặt hàng.

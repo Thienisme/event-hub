@@ -28,6 +28,12 @@ const router = createRouter({
       meta: { requiresAuth: true, organizerOnly: true },
     },
     {
+      path: '/profile',
+      name: 'Profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/my-orders',
       name: 'MyOrders',
       component: () => import('@/views/MyOrdersView.vue'),
