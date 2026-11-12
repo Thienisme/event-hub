@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
+import { createEventSlug } from '../utils/slug';
 import { AppError, handleControllerError } from '../utils/errors';
 import {
   cacheGetOrLoad,
@@ -63,8 +64,9 @@ export const createEvent = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Vui lòng nhập đầy đủ các trường bắt buộc!' });
     }
 
-    const newEvent = await prisma.event.create({
+    const create = () => prisma.event.create({
       data: {
+        slug: createEventSlug(title),
         title,
         description,
         location,
@@ -74,10 +76,12 @@ export const createEvent = async (req: Request, res: Response) => {
         endTime: new Date(endTime),
         organizerId,
         ticketTypes: ticketTypes && ticketTypes.length > 0 ? {
-          create: ticketTypes.map((ticket: { name: string; price: number; totalQuantity: number }) => ({
+          create: ticketTypes.map((ticket: { name: string; price: number; totalQuantity: number; saleStart?: string | null; saleEnd?: string | null }) => ({
             name: ticket.name,
             price: ticket.price,
             totalQuantity: ticket.totalQuantity,
+            saleStart: ticket.saleStart ? new Date(ticket.saleStart) : null,
+            saleEnd: ticket.saleEnd ? new Date(ticket.saleEnd) : null,
             availableQuantity: ticket.totalQuantity,
           })),
         } : undefined,
@@ -86,6 +90,14 @@ export const createEvent = async (req: Request, res: Response) => {
         ticketTypes: true,
       },
     });
+
+    let newEvent;
+    for (let attempt = 0; ; attempt++) {
+      try { newEvent = await create(); break; }
+      catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002' || attempt >= 3) throw error;
+      }
+    }
 
     // Vô hiệu cache danh sách khi có event mới.
     // Chỉ tăng version (O(1)) thay cho `KEYS events:list:*` (O(N) và chặn Redis).
@@ -167,24 +179,21 @@ export const getEvents = async (req: Request, res: Response) => {
   }
 };
 
+// Slug chỉ tra ID; mọi đường đọc dùng chung cache theo ID để vô hiệu nhất quán.
+export const loadEventDetail = async (idOrSlug: string) => {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+  const id = isUuid ? idOrSlug.toLowerCase() : (await prisma.event.findUnique({ where: { slug: idOrSlug }, select: { id: true } }))?.id;
+  return cacheGetOrLoad(detailCacheKey(id ?? idOrSlug), () => id ? prisma.event.findUnique({
+    where: { id }, include: { organizer: { select: PUBLIC_ORGANIZER_SELECT }, ticketTypes: true },
+  }) : Promise.resolve(null));
+};
+
 // 3. Lấy chi tiết 1 sự kiện (Có Redis Cache)
 export const getEventById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // `T` là `Event | null` vì sự kiện có thể không tồn tại. Giá trị null sẽ
-    // không được ghi vào cache (xem cacheGetOrLoad).
-    const { value: event, source } = await cacheGetOrLoad(
-      detailCacheKey(id),
-      () =>
-        prisma.event.findUnique({
-          where: { id },
-          include: {
-            organizer: { select: PUBLIC_ORGANIZER_SELECT },
-            ticketTypes: true,
-          },
-        })
-    );
+    const { value: event, source } = await loadEventDetail(id);
 
     if (!event) {
       return res.status(404).json({ message: 'Không tìm thấy sự kiện!' });
@@ -209,7 +218,7 @@ export const updateEvent = async (req: Request, res: Response) => {
     // Mảng rỗng `[]` = người dùng đã xoá hết loại vé -> reconcile thật sự.
     // Phân biệt hai ý này là điều kiện để không "xoá oan" khi sửa mỗi tiêu đề.
     const ticketTypesInput:
-      | Array<{ id?: string; name: string; price: number; totalQuantity: number }>
+      | Array<{ id?: string; name: string; price: number; totalQuantity: number; saleStart?: string | null; saleEnd?: string | null }>
       | undefined = req.body.ticketTypes;
 
     const userId = req.user?.userId;
@@ -234,6 +243,16 @@ export const updateEvent = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Bạn không có quyền sửa sự kiện này!' });
     }
 
+    const effectiveTickets = ticketTypesInput ?? existingEvent.ticketTypes;
+    for (const ticket of effectiveTickets) {
+      const old = 'id' in ticket ? existingEvent.ticketTypes.find(t => t.id === ticket.id) : undefined;
+      const saleStart = ticket.saleStart === undefined ? old?.saleStart : ticket.saleStart;
+      const saleEnd = ticket.saleEnd === undefined ? old?.saleEnd : ticket.saleEnd;
+      if (saleEnd && ((saleStart && new Date(saleEnd) <= new Date(saleStart)) || new Date(saleEnd) > new Date(endTime))) {
+        throw new AppError('Thời gian ngừng bán phải sau mở bán và không sau khi sự kiện kết thúc!');
+      }
+    }
+
     // Bước 1: phân loại yêu cầu thành 3 nhóm rõ ràng dựa trên ID.
     // Match theo ID (không theo index) vì thứ tự mảng không được đảm bảo.
     type UpdatePlan = {
@@ -241,12 +260,14 @@ export const updateEvent = async (req: Request, res: Response) => {
       name: string;
       price: number;
       totalQuantity: number;
+      saleStart?: string | null;
+      saleEnd?: string | null;
       oldTotal: number;
       delta: number;
     };
 
     const updates: UpdatePlan[] = [];
-    const creates: Array<{ name: string; price: number; totalQuantity: number }> = [];
+    const creates: Array<{ name: string; price: number; totalQuantity: number; saleStart?: string | null; saleEnd?: string | null }> = [];
     const deletes: string[] = [];
 
     if (ticketTypesInput !== undefined) {
@@ -280,6 +301,8 @@ export const updateEvent = async (req: Request, res: Response) => {
 
           updates.push({
             id: input.id,
+            saleStart: input.saleStart,
+            saleEnd: input.saleEnd,
             name: input.name,
             price: input.price,
             totalQuantity: input.totalQuantity,
@@ -288,6 +311,8 @@ export const updateEvent = async (req: Request, res: Response) => {
           });
         } else {
           creates.push({
+            saleStart: input.saleStart,
+            saleEnd: input.saleEnd,
             name: input.name,
             price: input.price,
             totalQuantity: input.totalQuantity,
@@ -338,6 +363,8 @@ export const updateEvent = async (req: Request, res: Response) => {
             ...(plan.delta < 0 ? { availableQuantity: { gte: -plan.delta } } : {}),
           },
           data: {
+            saleStart: plan.saleStart === undefined ? undefined : plan.saleStart ? new Date(plan.saleStart) : null,
+            saleEnd: plan.saleEnd === undefined ? undefined : plan.saleEnd ? new Date(plan.saleEnd) : null,
             name: plan.name,
             price: plan.price,
             totalQuantity: plan.totalQuantity,
@@ -366,6 +393,8 @@ export const updateEvent = async (req: Request, res: Response) => {
             name: ticket.name,
             price: ticket.price,
             totalQuantity: ticket.totalQuantity,
+            saleStart: ticket.saleStart ? new Date(ticket.saleStart) : null,
+            saleEnd: ticket.saleEnd ? new Date(ticket.saleEnd) : null,
             availableQuantity: ticket.totalQuantity,
           })),
         });

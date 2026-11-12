@@ -52,6 +52,7 @@ async function createUser(tag, role) {
 async function createEvent(organizerId) {
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title: 'CHECKIN',
       location: 'HN',
       startTime: new Date(Date.now() + DAY),

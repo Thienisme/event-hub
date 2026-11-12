@@ -44,6 +44,11 @@ Service `eventhub` → **Environment**. 🔒 là bí mật: chỉ nằm trên Re
 | `TZ` | `Asia/Ho_Chi_Minh` | `render.yaml` |
 | `ALLOW_SIMULATED_PAYMENT` | `true` (bật thanh toán giả lập cho demo) | `render.yaml` |
 | `CORS_ORIGINS` | `https://eventhub-v3xy.onrender.com` | `render.yaml` |
+| `MAIL_DRIVER` | `brevo` trên Render, mặc định `log` ở dev/CI | `render.yaml` |
+| `APP_PUBLIC_URL` | `https://eventhub-v3xy.onrender.com`; mặc định `http://localhost:5173` | `render.yaml`, sửa nếu tên miền thay đổi |
+| `BREVO_API_KEY` 🔒 | API key Brevo | Tự đặt (`sync: false`) |
+| `MAIL_FROM` | `EventHub <email đã xác thực với Brevo>` | Tự đặt (`sync: false`) |
+| `MAIL_OUTBOX_DIR` | Tuỳ chọn với driver `log`; CI dùng `/tmp/eventhub-mail-outbox`, mỗi thư một JSON chứa token | Dev/CI đặt; không public thư mục này |
 | `PORT` | `10000` | Render tự đặt |
 
 `DATABASE_URL` và `SEED_DEMO_PASSWORD` khai báo `sync: false`: Render chỉ hỏi một lần lúc tạo Blueprint; muốn đổi thì

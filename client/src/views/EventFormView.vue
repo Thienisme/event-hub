@@ -25,6 +25,8 @@ interface TicketTypeForm {
   name: string;
   price: number | string;
   totalQuantity: number;
+  saleStart?: string;
+  saleEnd?: string;
 }
 
 interface ApiResponse {
@@ -127,6 +129,8 @@ const loadEventForEdit = async (id: string) => {
       // Bỏ id đi thì mỗi lần lưu sẽ tạo loại vé mới và xoá loại chưa bán.
       ticketTypes.value = event.ticketTypes?.map((t: TicketType) => ({
         id: t.id,
+        saleStart: t.saleStart ? toAppDateTimeInput(t.saleStart) : '',
+        saleEnd: t.saleEnd ? toAppDateTimeInput(t.saleEnd) : '',
         name: t.name,
         price: t.price,
         totalQuantity: t.totalQuantity,
@@ -204,6 +208,11 @@ const handleSubmit = async () => {
     return;
   }
 
+  if (ticketTypes.value.some(t => t.saleEnd && ((t.saleStart && t.saleEnd <= t.saleStart) || t.saleEnd > endTime.value))) {
+    errorMessage.value = 'Thời gian ngừng bán phải sau mở bán và không sau khi sự kiện kết thúc!';
+    return;
+  }
+
   // Tổng tiền của một đơn = giá × số lượng, phải vừa biên DECIMAL(12,2) của
   // `orders.totalAmount`. Kiểm tra ngay ở form để người dùng biết trước khi
   // gửi, thay vì để tầng DB từ chối lúc đặt vé.
@@ -235,6 +244,8 @@ const handleSubmit = async () => {
     // Ở chế độ create, mảng rỗng cũng vô hại vì createEvent chỉ tạo khi length > 0.
     ticketTypes: ticketTypes.value.map(t => ({
       id: t.id,
+      saleStart: t.saleStart ? fromAppDateTimeInput(t.saleStart) : null,
+      saleEnd: t.saleEnd ? fromAppDateTimeInput(t.saleEnd) : null,
       name: t.name,
       price: Number(t.price),
       totalQuantity: Number(t.totalQuantity),
@@ -254,7 +265,7 @@ const handleSubmit = async () => {
       if (data.event) {
         redirectTimer = setTimeout(() => {
           redirectTimer = undefined;
-          router.push({ name: 'EventDetail', params: { id: data.event!.id } });
+          router.push({ name: 'EventDetail', params: { id: data.event!.slug ?? data.event!.id } });
         }, 1500);
       }
     }
@@ -339,20 +350,32 @@ onUnmounted(() => {
             <section class="space-y-4" aria-labelledby="tickets-heading">
               <h2 id="tickets-heading" class="text-sm font-semibold">Loại vé</h2>
               <div v-if="ticketTypes.length === 0" class="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">Chưa có loại vé nào</div>
-              <div v-for="(ticket, index) in ticketTypes" :key="index" class="grid grid-cols-1 items-end gap-3 rounded-lg border p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-                <div class="space-y-2">
-                  <Label :for="`ticket-name-${index}`">Tên loại vé</Label>
-                  <Input :id="`ticket-name-${index}`" v-model="ticket.name" :maxlength="LIMITS.TICKET_NAME" placeholder="VD: Vé VIP, vé thường" />
+              <div v-for="(ticket, index) in ticketTypes" :key="ticket.id ?? index" class="space-y-4 rounded-lg border p-4">
+                <div class="grid grid-cols-1 items-end gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <div class="space-y-2">
+                    <Label :for="`ticket-name-${index}`">Tên loại vé</Label>
+                    <Input :id="`ticket-name-${index}`" v-model="ticket.name" :maxlength="LIMITS.TICKET_NAME" placeholder="VD: Vé VIP, vé thường" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label :for="`ticket-price-${index}`">Giá (VNĐ)</Label>
+                    <Input :id="`ticket-price-${index}`" v-model.number="ticket.price" type="number" min="0" step="0.01" :max="LIMITS.PRICE" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label :for="`ticket-quantity-${index}`">Số lượng</Label>
+                    <Input :id="`ticket-quantity-${index}`" v-model.number="ticket.totalQuantity" type="number" min="1" :max="LIMITS.QUANTITY" />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 aria-hidden="true" /></Button>
                 </div>
-                <div class="space-y-2">
-                  <Label :for="`ticket-price-${index}`">Giá (VNĐ)</Label>
-                  <Input :id="`ticket-price-${index}`" v-model.number="ticket.price" type="number" min="0" step="0.01" :max="LIMITS.PRICE" />
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <Label :for="`ticket-sale-start-${index}`">Mở bán từ (tuỳ chọn)</Label>
+                    <Input :id="`ticket-sale-start-${index}`" v-model="ticket.saleStart" type="datetime-local" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label :for="`ticket-sale-end-${index}`">Ngừng bán lúc (tuỳ chọn)</Label>
+                    <Input :id="`ticket-sale-end-${index}`" v-model="ticket.saleEnd" type="datetime-local" :max="endTime || undefined" />
+                  </div>
                 </div>
-                <div class="space-y-2">
-                  <Label :for="`ticket-quantity-${index}`">Số lượng</Label>
-                  <Input :id="`ticket-quantity-${index}`" v-model.number="ticket.totalQuantity" type="number" min="1" :max="LIMITS.QUANTITY" />
-                </div>
-                <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 aria-hidden="true" /></Button>
               </div>
               <Button type="button" variant="outline" @click="addTicketType"><Plus aria-hidden="true" />Thêm loại vé</Button>
             </section>

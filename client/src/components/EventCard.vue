@@ -44,7 +44,7 @@ const calendar = computed(() => {
 </script>
 
 <template>
-  <router-link :to="`/events/${event.id}`" class="group block h-full min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+  <router-link :to="`/events/${event.slug ?? event.id}`" class="group block h-full min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
     <Card class="shadow-none ring-0 border border-border bg-background h-full gap-0 rounded-lg py-0 transition-colors">
       <div class="relative aspect-video overflow-hidden bg-surface">
         <EventBanner :src="event.bannerUrl" :alt="event.title" class="[&>*]:transition-transform [&>*]:duration-200 motion-safe:[&>*]:group-hover:scale-[1.02] motion-reduce:[&>*]:transform-none motion-reduce:[&>*]:transition-none [&>div]:bg-none [&>div]:bg-muted [&>div>span]:sr-only" />

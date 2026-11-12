@@ -6,6 +6,7 @@ async function main() {
   const user = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title: 'Test Event',
       location: 'Online',
       startTime: new Date(),

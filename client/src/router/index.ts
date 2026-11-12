@@ -5,12 +5,16 @@ const router = createRouter({
   // BASE_URL để build ra sub-folder (nếu có) vẫn chạy đúng
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/forgot-password', name: 'ForgotPassword', component: () => import('@/views/ForgotPasswordView.vue') },
+    { path: '/reset-password', name: 'ResetPassword', component: () => import('@/views/ResetPasswordView.vue') },
+    { path: '/verify-email', name: 'VerifyEmail', component: () => import('@/views/VerifyEmailView.vue') },
     {
       path: '/',
       name: 'Home',
       component: () => import('@/views/HomeView.vue'),
     },
     {
+      // Giữ tên tham số id để tương thích link cũ; giá trị nhận cả slug và UUID.
       path: '/events/:id',
       name: 'EventDetail',
       component: () => import('@/views/EventDetailView.vue'),

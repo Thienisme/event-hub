@@ -45,7 +45,10 @@
     "seed": "ts-node prisma/seed.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",
     "test:upload": "node test-upload.cjs",
-    "test:profile": "node test-profile.cjs"
+    "test:profile": "node test-profile.cjs",
+    "test:password-reset": "node test-password-reset.cjs",
+    "test:sale-window-slug": "node test-sale-window-slug.cjs",
+    "test:ticket-email": "node test-ticket-email.cjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

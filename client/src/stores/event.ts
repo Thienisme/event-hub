@@ -20,10 +20,13 @@ export interface TicketType {
   price: number | string;
   totalQuantity: number;
   availableQuantity: number;
+  saleStart?: string | null;
+  saleEnd?: string | null;
 }
 
 export interface EventItem {
   id: string;
+  slug?: string;
   title: string;
   description?: string | null;
   location: string;

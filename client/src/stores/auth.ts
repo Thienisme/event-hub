@@ -14,6 +14,7 @@ export interface User {
   email: string;
   role: UserRole;
   createdAt?: string;
+  emailVerifiedAt: string | null;
 }
 
 export const useAuthStore = defineStore('auth', () => {

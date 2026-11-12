@@ -48,6 +48,7 @@ const DAY = 86_400_000;
 async function createEvent({ startOffset = DAY, endOffset = DAY * 2, title = 'REGRESSION' } = {}) {
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title,
       location: 'HN',
       startTime: new Date(Date.now() + startOffset),

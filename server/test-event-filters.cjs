@@ -36,6 +36,7 @@ async function main() {
   } });
   for (const [i, category] of categories.entries()) {
     await prisma.event.create({ data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title: `${prefix}-${category}`, category, organizerId: user.id,
       location: i % 2 === 0 ? 'Nhà hát Hà Nội' : 'Sân vận động Đà Nẵng',
       startTime: new Date(i === 0 ? `${day}T23:59:59.999+07:00` : i === 1 ? `${year}-06-16T00:00:00+07:00` : startTime),
