@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
+import { sendVerificationEmail } from './emailAuth.controller';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma';
@@ -24,6 +25,7 @@ const PROFILE_SELECT = {
   fullName: true,
   role: true,
   createdAt: true,
+  emailVerifiedAt: true,
 } as const;
 
 export const register = async (req: Request, res: Response) => {
@@ -58,8 +60,13 @@ export const register = async (req: Request, res: Response) => {
         fullName: true,
         role: true,
         createdAt: true,
+        emailVerifiedAt: true,
       },
     });
+
+    // Lỗi tạo/gửi thư không làm hỏng tài khoản vừa đăng ký.
+    // Không chờ gửi thư: dịch vụ email chậm không được làm chậm đăng ký.
+    void sendVerificationEmail(user).catch(() => console.error('[email] Không thể tạo thư xác minh'));
 
     return res.status(201).json({
       message: 'Đăng ký tài khoản thành công!',
@@ -107,6 +114,7 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        emailVerifiedAt: user.emailVerifiedAt,
       },
     });
   } catch (error) {

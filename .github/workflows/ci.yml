@@ -41,6 +41,8 @@ jobs:
       JWT_SECRET: ci-only-secret-khong-dung-cho-production-0123456789abcdef
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: "6379"
+      MAIL_DRIVER: log
+      MAIL_OUTBOX_DIR: /tmp/eventhub-mail-outbox
       NODE_ENV: development
       TZ: Asia/Ho_Chi_Minh
       BASE_URL: http://127.0.0.1:5000/api

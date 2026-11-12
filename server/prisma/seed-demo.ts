@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createEventSlug } from '../src/utils/slug';
 import { PrismaClient, Prisma, EventCategory } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import sharp from 'sharp';
@@ -445,12 +446,13 @@ async function main() {
   for (const acc of ACCOUNTS) {
     const u = await prisma.user.upsert({
       where: { email: acc.email },
-      update: { password: passwordHash, role: acc.role, fullName: acc.fullName, isActive: true },
+      update: { password: passwordHash, role: acc.role, fullName: acc.fullName, emailVerifiedAt: new Date(), isActive: true },
       create: {
         email: acc.email,
         password: passwordHash,
         role: acc.role,
         fullName: acc.fullName,
+        emailVerifiedAt: new Date(),
         isActive: true,
       },
       select: { id: true, email: true, role: true, fullName: true },
@@ -493,6 +495,7 @@ async function main() {
     console.log(`  banner ${input.title}: ${source}`);
     const event = await prisma.event.create({
       data: {
+        slug: createEventSlug(input.title),
         title: input.title,
         description: input.description,
         location: input.location,

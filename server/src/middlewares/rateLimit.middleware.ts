@@ -120,3 +120,21 @@ export const passwordChangeRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+const emailLimitOptions = {
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 15 phút!' },
+};
+export const forgotIpLimiter = rateLimit(emailLimitOptions);
+export const forgotEmailLimiter = rateLimit({
+  ...emailLimitOptions,
+  keyGenerator: (req) => String(req.body.email).trim().toLowerCase(),
+});
+export const resendVerificationLimiter = rateLimit({
+  ...emailLimitOptions,
+  max: 3,
+  keyGenerator: (req) => req.user!.userId,
+});

@@ -8,6 +8,7 @@ async function main() {
   // Tạo event với 1 ticketType có 5 vé
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title: 'Concert Test',
       location: 'Online',
       startTime: new Date(),

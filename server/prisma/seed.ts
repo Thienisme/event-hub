@@ -38,6 +38,7 @@ async function main() {
       // Cache trạng thái (30 giây) có thể giữ token cũ sống thêm tối đa 30 giây.
       tokenVersion: { increment: 1 },
       role: 'ADMIN',
+      emailVerifiedAt: new Date(),
       isActive: true,
     },
     create: {
@@ -45,6 +46,7 @@ async function main() {
       password: passwordHash,
       fullName: ADMIN_NAME,
       role: 'ADMIN',
+      emailVerifiedAt: new Date(),
       isActive: true,
     },
     select: { id: true, email: true, role: true, isActive: true },

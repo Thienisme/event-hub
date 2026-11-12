@@ -178,7 +178,7 @@ onUnmounted(() => {
                 <div class="aspect-video w-full overflow-hidden rounded-lg sm:w-40 lg:w-48 shrink-0"><EventBanner :src="event.bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
                   <h3 class="font-semibold tracking-tight text-foreground break-words">
                     <router-link
-                      :to="{ name: 'EventDetail', params: { id: event.id } }"
+                      :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"
                       class="hover:text-primary transition-colors"
                     >
                       {{ event.title }}
@@ -208,7 +208,7 @@ onUnmounted(() => {
 
                 <div class="flex flex-wrap items-center gap-2 shrink-0 sm:flex-col lg:flex-row">
                   <Button as-child size="sm" variant="outline"><router-link
-                    :to="{ name: 'EventDetail', params: { id: event.id } }"
+                    :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"
                     ><Eye class="size-4" aria-hidden="true" />Xem</router-link></Button>
 
                   <Button as-child size="sm" variant="outline"><router-link

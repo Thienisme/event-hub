@@ -22,6 +22,7 @@ const API = process.env.BASE_URL || 'http://localhost:5000/api';
 
 // Thứ tự: test rẻ và nhanh trước, test nặng (race, load) sau.
 const SUITES = [
+  ['test:sale-window-slug', 'test-sale-window-slug.cjs'],
   ['test:security', 'test-jwt-security.cjs'],
   ['test:race', 'test-admin-race.cjs'],
   ['test:limits', 'test-event-limits.cjs'],
@@ -35,6 +36,8 @@ const SUITES = [
   ['test:checkin', 'test-checkin.cjs'],
   ['test:upload', 'test-upload.cjs'],
   ['test:profile', 'test-profile.cjs'],
+  ['test:password-reset', 'test-password-reset.cjs'],
+  ['test:ticket-email', 'test-ticket-email.cjs'],
 ];
 
 const G = '\u001b[32m';

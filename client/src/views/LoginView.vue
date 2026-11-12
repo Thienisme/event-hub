@@ -74,6 +74,8 @@ const handleLogin = async () => {
       <AppAlert :message="successMessage" type="success" class="mb-4" />
       <AppAlert :message="errorMessage" type="error" class="mb-4" />
 
+      <router-link to="/forgot-password" class="block text-sm text-foreground underline-offset-4 hover:underline">Quên mật khẩu?</router-link>
+
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
         <div class="space-y-4">
           <div>

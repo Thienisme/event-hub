@@ -16,11 +16,13 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Chủ đề | File |
 |---|---|
 | Đặt vé, xác nhận, huỷ đơn | `server/src/controllers/order.controller.ts`, `server/src/utils/orderInventory.ts` |
+| Email vé, nhắc lịch | `server/src/utils/ticketEmail.ts`, `server/src/jobs/eventReminder.job.ts`, `server/test-ticket-email.cjs` |
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
 | Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Danh mục, bộ lọc danh sách sự kiện | `server/src/utils/eventFilters.ts`, `client/src/utils/categories.ts`, `client/src/views/HomeView.vue` |
 | Đăng nhập, phân quyền | `server/src/middlewares/auth.middleware.ts`, `server/src/utils/userState.ts` |
+| Email, quên mật khẩu, xác minh email | `server/src/utils/mailer.ts`, `server/src/controllers/emailAuth.controller.ts`, `server/test-password-reset.cjs` |
 | Hồ sơ, đổi mật khẩu | `server/src/controllers/auth.controller.ts`, `client/src/views/ProfileView.vue` |
 | Quản trị | `server/src/controllers/admin.controller.ts` |
 | Cache, Redis | `server/src/utils/cache.ts`, `server/src/config/redis.ts` |
@@ -103,6 +105,22 @@ Luồng request: `routes/` gắn middleware theo thứ tự `authenticate` → `
 - **Thu hồi token bằng `users.tokenVersion`:** JWT mang `tv` lúc cấp (thiếu thì coi là 0), `authenticate` trả 403 nếu `tv` khác `tokenVersion` trong `getUserState`. Đổi mật khẩu (`POST /api/auth/change-password`) tăng `tokenVersion` bằng `updateMany` có điều kiện số cũ, gọi `invalidateUserState` và trả token mới. Cấp token mới chỉ qua `signAccessToken` để luôn có `tv`. Message 403 này phải chứa chữ "token" để client coi là hết phiên.
 - Sai mật khẩu hiện tại trả **400, không phải 401**: client coi mọi 401 là hết phiên và đăng xuất.
 - Đổi quyền admin khoá các dòng admin bằng `FOR UPDATE`, đếm kết quả trong JS (không dùng `count()`), và chạy qua `runWithDeadlockRetry`.
+
+### Email và token dùng một lần
+
+- `MAIL_DRIVER=log` mặc định: ghi JSON vào `MAIL_OUTBOX_DIR` nếu có, nếu không chỉ log tiêu đề và người nhận. Thư mục outbox chứa token thật, không phục vụ public. `MAIL_DRIVER=brevo` cần `BREVO_API_KEY` và `MAIL_FROM` dạng `Tên <email>`; fetch timeout 10 giây, không thêm thư viện.
+- `APP_PUBLIC_URL` là origin giao diện dùng dựng link (mặc định `http://localhost:5173`). Escape mọi giá trị chèn vào HTML email. `sendMail` ném lỗi; `sendMailSafe` chỉ log lỗi, không làm hỏng đăng ký hay yêu cầu quên mật khẩu.
+- Hai bảng token chỉ lưu SHA-256, hạn reset 30 phút, xác minh 24 giờ. Chiếm token bằng `updateMany` có điều kiện chưa dùng/chưa hết hạn trong cùng transaction với cập nhật user. Reset tăng `tokenVersion`, vô hiệu mọi token reset còn lại và gọi `invalidateUserState` sau commit; không cấp JWT mới.
+- Quên mật khẩu trả cùng thông báo cho email tồn tại/không tồn tại; giới hạn 5/15 phút riêng theo IP và email. Gửi lại xác minh cần đăng nhập, giới hạn 3/15 phút theo user. Chưa xác minh không bị chặn tính năng.
+- `test-password-reset.cjs` cần server và script dùng chung `MAIL_OUTBOX_DIR`, driver `log`, database tạm; thêm trong `test:all`. Không chạy trên database thật.
+
+### Email vé và nhắc lịch
+
+- `confirmOrder` chỉ gửi email vé qua `sendTicketEmail` sau commit và khi CAS thực sự chuyển sang CONFIRMED; gửi nền, bắt mọi lỗi, không await và không gửi lại khi xác nhận lần hai.
+- `sweepEventReminders` quét tối đa 100 đơn CONFIRMED chưa có `reminderSentAt`, sự kiện trong (now, now + 24h]. `startEventReminderJob` chạy cạnh job hết hạn, ngay lúc khởi động rồi mỗi `REMINDER_SWEEP_INTERVAL_MS` (mặc định 15 phút).
+- Chống gửi nhắc trùng giữa các instance bằng `updateMany` có điều kiện `reminderSentAt: null` trước khi gửi. Đây là dấu chiếm: lỗi gửi hoặc tiến trình dừng sau khi chiếm sẽ không tự thử lại, tránh gửi trùng. Mỗi đơn bắt lỗi riêng, lượt quét nền cũng bắt lỗi.
+- Nội dung HTML phải escape, thời gian dùng `Asia/Ho_Chi_Minh`, chỉ ghi mã vé và link `/my-orders`, không nhúng QR.
+- `test-ticket-email.cjs` import job TypeScript qua ts-node, không cần route dev. Chỉ chạy với database tạm, server/script dùng chung `MAIL_OUTBOX_DIR`, `MAIL_DRIVER=log` và bật thanh toán giả lập.
 
 ### Xử lý lỗi
 

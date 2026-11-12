@@ -1,3 +1,6 @@
+import { forgotPassword, resetPassword, verifyEmail, resendVerification } from '../controllers/emailAuth.controller';
+import { forgotPasswordSchema, resetPasswordSchema, emailTokenSchema } from '../utils/validation';
+import { forgotIpLimiter, forgotEmailLimiter, resendVerificationLimiter } from '../middlewares/rateLimit.middleware';
 import { Router, Request, Response } from 'express';
 import { register, login, updateProfile, changePassword } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
@@ -17,6 +20,11 @@ import prisma from '../utils/prisma';
 import { handleControllerError } from '../utils/errors';
 
 const router = Router();
+router.post('/forgot-password', forgotIpLimiter, validateBody(forgotPasswordSchema), forgotEmailLimiter, forgotPassword);
+router.post('/reset-password', validateBody(resetPasswordSchema), resetPassword);
+router.post('/verify-email', validateBody(emailTokenSchema), verifyEmail);
+router.post('/resend-verification', authenticate, resendVerificationLimiter, resendVerification);
+
 
 // Chống brute-force: 5 lần thất bại/phút cho login
 router.post('/login', authRateLimiter, validateBody(loginSchema), login);
@@ -38,6 +46,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
         fullName: true,
         role: true,
         createdAt: true,
+        emailVerifiedAt: true,
       },
     });
 

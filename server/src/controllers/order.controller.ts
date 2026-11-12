@@ -12,6 +12,7 @@ import { returnTicketsToStock } from '../utils/orderInventory';
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
 import { exceedsOrderAmount } from '../utils/validation';
+import { sendTicketEmail } from '../utils/ticketEmail';
 import { parsePagination } from '../utils/pagination';
 
 /** Đơn đang chiếm vé trong kho. Đơn EXPIRED và CANCELLED đã trả vé nên không tính. */
@@ -79,8 +80,12 @@ export const createOrder = async (req: Request, res: Response) => {
       // request thứ hai bị block, và khi được chạy thì điều kiện WHERE
       // được đánh giá lại trên dữ liệu ĐÃ COMMIT của request thứ nhất.
       // Đây là compare-and-swap: khoá row là cơ chế, không phải mẹo.
+      const saleNow = new Date();
       const reserved = await tx.ticketType.updateMany({
-        where: { id: ticketTypeId, availableQuantity: { gte: quantity } },
+        where: { id: ticketTypeId, availableQuantity: { gte: quantity }, AND: [
+          { OR: [{ saleStart: null }, { saleStart: { lte: saleNow } }] },
+          { OR: [{ saleEnd: null }, { saleEnd: { gt: saleNow } }] },
+        ] },
         data: {
           availableQuantity: {
             decrement: quantity,
@@ -88,17 +93,21 @@ export const createOrder = async (req: Request, res: Response) => {
         },
       });
 
-      // count === 0 nghĩa là KHÔNG còn đủ vé tại thời điểm ghi,
-      // chứ không phải tại thời điểm đọc.
+      // Đọc có khoá để lấy phiên bản hiện tại, tránh snapshot REPEATABLE READ
+      // cũ nếu ban tổ chức vừa sửa thời gian bán trong lúc request chờ giữ vé.
       if (reserved.count === 0) {
-        const current = await tx.ticketType.findUnique({
-          where: { id: ticketTypeId },
-          select: { availableQuantity: true },
-        });
+        const [current] = await tx.$queryRaw<Array<{
+          availableQuantity: number; saleStart: Date | null; saleEnd: Date | null;
+        }>>`SELECT availableQuantity, saleStart, saleEnd FROM ticket_types WHERE id = ${ticketTypeId} FOR UPDATE`;
 
         if (!current) {
           throw new AppError('Loại vé không tồn tại!');
         }
+
+        if (current.saleStart && current.saleStart > saleNow) {
+          throw new AppError('Loại vé này chưa mở bán!', 409, { saleStart: current.saleStart });
+        }
+        if (current.saleEnd && current.saleEnd <= saleNow) throw new AppError('Loại vé này đã ngừng bán!', 409);
 
         // AppError chứ không phải Error: câu này được viết để người dùng đọc,
         // nên nó là loại DUY NHẤT được phép ra client nguyên văn.
@@ -266,7 +275,7 @@ export const confirmOrder = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const order = await prisma.$transaction(
+    const { order, newlyConfirmed } = await prisma.$transaction(
       async (tx) => {
         const claimed = await tx.order.updateMany({
           where: { id, userId, status: 'PENDING', expiresAt: { gt: new Date() } },
@@ -280,7 +289,7 @@ export const confirmOrder = async (req: Request, res: Response) => {
           });
 
           if (!current) throw new AppError('Không tìm thấy đơn hàng!', 404);
-          if (current.status === 'CONFIRMED') return current;
+          if (current.status === 'CONFIRMED') return { order: current, newlyConfirmed: false };
           if (current.status === 'CANCELLED') {
             throw new AppError('Đơn hàng đã bị huỷ, không thể thanh toán!', 409);
           }
@@ -296,11 +305,17 @@ export const confirmOrder = async (req: Request, res: Response) => {
           });
         }
 
-        return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+        return {
+          order: await tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE }),
+          newlyConfirmed: true,
+        };
       },
       // Một đơn có tới MAX_ORDER_QUANTITY vé, mỗi vé một câu UPDATE.
       { timeout: 15_000 }
     );
+
+    // Transaction đã commit; gửi nền chỉ khi lần này thực sự đổi trạng thái.
+    if (newlyConfirmed) void sendTicketEmail(order.id);
 
     return res.json({ message: 'Thanh toán thành công!', order });
   } catch (error) {

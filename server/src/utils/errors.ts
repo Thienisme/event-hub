@@ -11,7 +11,7 @@ import { ErrorRequestHandler, Response } from 'express';
 export class AppError extends Error {
   public readonly statusCode: number;
 
-  constructor(message: string, statusCode = 400) {
+  constructor(message: string, statusCode = 400, public readonly details: { saleStart?: Date } = {}) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
@@ -134,7 +134,7 @@ export const handleControllerError = (
   }
 ): Response => {
   if (error instanceof AppError) {
-    return res.status(error.statusCode).json({ message: error.message });
+    return res.status(error.statusCode).json({ message: error.message, ...error.details });
   }
 
   const mapped = mapPrismaError(error);

@@ -9,6 +9,9 @@ import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
+import { readFileSync } from 'fs';
+import { loadEventDetail } from './controllers/event.controller';
+import { escapeHtml } from './utils/mailer';
 import helmet from 'helmet';
 import prisma from './utils/prisma';
 import authRoutes from './routes/auth.routes';
@@ -18,6 +21,7 @@ import adminRoutes from './routes/admin.routes';
 import organizerRoutes from './routes/organizer.routes';
 import uploadRoutes from './routes/upload.routes';
 import { UPLOAD_DIR, STORAGE_DRIVER, ensureUploadDir, readStoredImage } from './utils/storage';
+import { startEventReminderJob } from './jobs/eventReminder.job';
 import { startExpireOrdersJob } from './jobs/expireOrders.job';
 import { errorMiddleware, logUnexpectedError } from './utils/errors';
 import { parseAllowedOrigins } from './utils/cors';
@@ -148,6 +152,31 @@ app.get('/api/health', async (req: Request, res: Response) => {
 });
 
 if (clientDir) {
+  const indexHtml = readFileSync(path.join(clientDir, 'index.html'), 'utf8');
+  app.get('/events/:idOrSlug', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    try {
+      const { value: event } = await loadEventDetail(req.params.idOrSlug);
+      if (!event) { res.type('html').send(indexHtml); return; }
+      const origin = process.env.APP_PUBLIC_URL || 'http://localhost:5173';
+      const metadata: Record<string, string> = {
+        'og:title': event.title,
+        'og:description': (event.description || '').replace(/[\r\n]+/g, ' ').slice(0, 200),
+        'og:url': new URL(`/events/${event.slug ?? event.id}`, origin).toString(),
+        'og:type': 'website',
+      };
+      if (event.bannerUrl) metadata['og:image'] = new URL(event.bannerUrl, origin).toString();
+      const tags = Object.entries(metadata).map(([key, value]) => `<meta property="${key}" content="${escapeHtml(value)}">`).join('\n')
+        + '\n<meta name="twitter:card" content="summary_large_image">';
+      const html = indexHtml.replace(/<title[^>]*>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(event.title)}</title>`)
+        .replace(/<\/head>/i, () => `${tags}\n</head>`);
+      res.type('html').send(html);
+    } catch (error) {
+      // Chia sẻ vẫn tải được SPA khi cache hoặc database lỗi.
+      logUnexpectedError('eventOg', error);
+      res.type('html').send(indexHtml);
+    }
+  });
   app.use(express.static(clientDir, {
     setHeaders(res, filePath) {
       if (path.basename(filePath) === 'index.html') res.setHeader('Cache-Control', 'no-cache');
@@ -184,6 +213,7 @@ const server = app.listen(PORT, () => {
 
   // Job dọn các đơn giữ chỗ quá hạn, trả vé về kho
   startExpireOrdersJob();
+  startEventReminderJob();
 });
 
 /**

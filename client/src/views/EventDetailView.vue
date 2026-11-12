@@ -41,10 +41,17 @@ const deleteError = ref('');
  */
 const event = ref<EventItem | null>(null);
 const isLoading = ref(false);
+const now = ref(Date.now());
+const saleTimer = setInterval(() => { now.value = Date.now(); }, 1000);
+const saleLabel = (ticket: TicketType) => {
+  if (ticket.saleStart && new Date(ticket.saleStart).getTime() > now.value) return `Mở bán lúc ${formatDateTime(ticket.saleStart)}`;
+  if (ticket.saleEnd && new Date(ticket.saleEnd).getTime() <= now.value) return 'Đã ngừng bán';
+  return '';
+};
 
 /** Sự kiện đã kết thúc thì không bán vé nữa (server cũng chặn, xem createOrder). */
 const isEnded = computed(
-  () => !!event.value && new Date(event.value.endTime).getTime() <= Date.now()
+  () => !!event.value && new Date(event.value.endTime).getTime() <= now.value
 );
 
 const eventPhase = computed(() => event.value ? getEventPhase(event.value.startTime, event.value.endTime) : 'upcoming');
@@ -114,6 +121,7 @@ watch(
 
 onUnmounted(() => {
   eventAbort?.abort();
+  clearInterval(saleTimer);
 });
 
 /**
@@ -137,6 +145,7 @@ const normalizeQuantity = (ticket: TicketType) => {
 
 const handleBook = async (ticket: TicketType) => {
   errorMessage.value = '';
+  if (saleLabel(ticket) || isEnded.value) return;
 
   // POST /orders yêu cầu Bearer token -> chưa đăng nhập thì đẩy sang login
   // kèm `redirect` để sau khi đăng nhập quay lại đúng sự kiện này.
@@ -185,7 +194,7 @@ const handleBook = async (ticket: TicketType) => {
 };
 
 const handleDelete = async () => {
-  const id = route.params.id;
+  const id = event.value?.id;
   if (!id) return;
 
   if (!confirm(`Bạn có chắc muốn xóa sự kiện "${event.value?.title}"?`)) {
@@ -295,14 +304,15 @@ const handleDelete = async () => {
                   <p class="text-xs tabular-nums text-muted-foreground" :class="ticket.availableQuantity <= 0 ? 'text-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'text-warning' : ''">Còn {{ ticket.availableQuantity }} / {{ ticket.totalQuantity }} vé</p>
                   <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" aria-hidden="true"><div class="h-full rounded-md" :class="ticket.availableQuantity <= 0 ? 'bg-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-warning' : 'bg-primary'" :style="{ width: `${ticket.availableQuantity <= 0 ? 100 : Math.min(100, Math.max(0, ticket.availableQuantity / (ticket.totalQuantity || 1) * 100))}%` }" /></div>
                 </div>
+                <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
                 <div class="flex flex-wrap items-center gap-3">
                   <div class="flex items-center rounded-lg border bg-background">
-                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="isEnded || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
-                    <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="isEnded || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
-                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="isEnded || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
+                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
+                    <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
+                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
                   </div>
-                  <Button class="min-w-24 flex-1 rounded-md" :class="isEnded || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="isEnded || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
-                    <span v-if="isEnded">Đã kết thúc</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
+                  <Button class="min-w-24 flex-1 rounded-md" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
+                    <span v-if="isEnded">Đã kết thúc</span><span v-else-if="saleLabel(ticket)">{{ ticket.saleStart && new Date(ticket.saleStart).getTime() > now ? 'Chưa mở bán' : 'Đã ngừng bán' }}</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
                   </Button>
                 </div>
               </div>

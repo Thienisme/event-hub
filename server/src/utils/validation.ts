@@ -142,9 +142,12 @@ export const createEventSchema = z.object({
     .optional()
     .nullable(),
   startTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian bắt đầu không hợp lệ!'),
-  endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),  ticketTypes: z
+  endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),
+  ticketTypes: z
     .array(
       z.object({
+        saleStart: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian mở bán không hợp lệ!').nullable().optional(),
+        saleEnd: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian ngừng bán không hợp lệ!').nullable().optional(),
         id: z.string().uuid('ID loại vé không hợp lệ!').optional(),
         name: z
           .string()
@@ -189,6 +192,11 @@ export const createEventSchema = z.object({
   // object chứ không phải `refine` riêng cho từng field (mỗi field không biết
   // giá trị của field kia).
   .superRefine((data, ctx) => {
+    data.ticketTypes?.forEach((ticket, index) => {
+      if (ticket.saleEnd && ((ticket.saleStart && Date.parse(ticket.saleEnd) <= Date.parse(ticket.saleStart)) || Date.parse(ticket.saleEnd) > Date.parse(data.endTime))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ticketTypes', index, 'saleEnd'], message: 'Thời gian ngừng bán phải sau mở bán và không sau khi sự kiện kết thúc!' });
+      }
+    });
     const start = Date.parse(data.startTime);
     const end = Date.parse(data.endTime);
 
@@ -296,3 +304,6 @@ export const validateBody = (schema: z.ZodSchema) => {
     }
   };
 };
+export const forgotPasswordSchema = z.object({ email: z.string().trim().email('Email không hợp lệ!') });
+export const emailTokenSchema = z.object({ token: z.string().min(1, 'Liên kết không hợp lệ!').max(256, 'Liên kết không hợp lệ!') });
+export const resetPasswordSchema = emailTokenSchema.extend({ newPassword: changePasswordSchema.shape.newPassword });

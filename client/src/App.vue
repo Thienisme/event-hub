@@ -3,8 +3,21 @@ import { Button } from '@/components/ui/button';
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from './stores/auth';
+import apiClient from './api/axios';
 import AppToast from './components/AppToast.vue';
 
+const resendBusy = ref(false);
+const resendMessage = ref('');
+async function resendEmail() {
+  resendBusy.value = true;
+  try {
+    const { data } = await apiClient.post('/auth/resend-verification');
+    resendMessage.value = data.message;
+    await authStore.fetchProfile();
+  } catch (error: any) {
+    resendMessage.value = error.response?.data?.message || 'Không thể gửi email. Vui lòng thử lại.';
+  } finally { resendBusy.value = false; }
+}
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -139,6 +152,13 @@ const handleLogout = () => {
       </div>
     </header>
 
+    <div v-if="authStore.isAuthenticated && authStore.user?.emailVerifiedAt === null" class="border-b border-border bg-muted px-4 py-3 text-sm">
+      <div class="max-w-6xl mx-auto flex flex-wrap items-center gap-3">
+        <span>Email chưa được xác minh</span>
+        <Button variant="outline" size="sm" :disabled="resendBusy" @click="resendEmail">{{ resendBusy ? 'Đang gửi...' : 'Gửi lại email' }}</Button>
+        <span role="status" class="text-muted-foreground">{{ resendMessage }}</span>
+      </div>
+    </div>
     <main class="flex-1">
       <RouterView />
     </main>
