@@ -22,10 +22,12 @@ const redirectPath = computed(() => {
   return isSafeInternalPath ? target : '/';
 });
 
-// RegisterView chuyển sang đây kèm ?registered=true
-const successMessage = computed(() =>
-  route.query.registered === 'true' ? 'Đăng ký thành công! Hãy đăng nhập để tiếp tục.' : ''
-);
+// RegisterView chuyển sang đây kèm ?registered=true, ResetPasswordView kèm ?reset=true
+const successMessage = computed(() => {
+  if (route.query.registered === 'true') return 'Đăng ký thành công! Hãy đăng nhập để tiếp tục.';
+  if (route.query.reset === 'true') return 'Đặt lại mật khẩu thành công! Hãy đăng nhập bằng mật khẩu mới.';
+  return '';
+});
 
 const email = ref('');
 const password = ref('');
