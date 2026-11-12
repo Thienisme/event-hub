@@ -45,9 +45,9 @@ watch(
 
     <div
       v-else
-      class="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 transition-transform duration-300 group-hover:scale-105"
+      class="w-full h-full flex items-center justify-center bg-muted transition-transform duration-300 group-hover:scale-105"
     >
-      <span class="px-4 text-center text-sm font-semibold text-white/90 line-clamp-2">
+      <span class="px-4 text-center text-sm font-semibold text-muted-foreground line-clamp-2">
         {{ alt }}
       </span>
     </div>

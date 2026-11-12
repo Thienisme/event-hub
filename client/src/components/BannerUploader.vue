@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import apiClient from '../api/axios';
 import { resolveMediaUrl, MAX_BANNER_BYTES, ALLOWED_BANNER_TYPES } from '../utils/media';
+import { Button } from './ui/button';
 
 const props = defineProps<{
   modelValue: string | null;
@@ -135,32 +136,34 @@ const onUrlInput = (event: Event) => {
         v-if="!previewBroken"
         :src="previewUrl"
         alt="Ảnh banner sự kiện"
-        class="aspect-video w-full object-cover rounded-lg border border-gray-300 bg-gray-100"
+        class="aspect-video w-full object-cover rounded-lg border border-border bg-muted"
         @error="previewBroken = true"
       />
       <div
         v-else
-        class="aspect-video w-full flex items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-500"
+        class="aspect-video w-full flex items-center justify-center rounded-lg border border-dashed border-border bg-muted text-sm text-muted-foreground"
       >
         Không tải được ảnh từ URL này
       </div>
       <div class="flex gap-2">
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           :disabled="isUploading"
-          class="px-3 py-1.5 text-sm text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           @click="openPicker"
         >
           Đổi ảnh
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="destructive"
+          size="sm"
           :disabled="isUploading"
-          class="px-3 py-1.5 text-sm text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           @click="removeImage"
         >
           Xoá ảnh
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -170,11 +173,11 @@ const onUrlInput = (event: Event) => {
       role="button"
       tabindex="0"
       aria-label="Tải lên ảnh banner"
-      class="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      class="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
       :class="
         isDragging
-          ? 'border-indigo-500 bg-indigo-50'
-          : 'border-gray-300 hover:border-indigo-400 bg-gray-50'
+          ? 'border-foreground bg-muted'
+          : 'border-border hover:border-muted-foreground bg-muted'
       "
       @click="openPicker"
       @keydown.enter.prevent="openPicker"
@@ -184,7 +187,7 @@ const onUrlInput = (event: Event) => {
       @drop.prevent="onDrop"
     >
       <svg
-        class="mx-auto h-10 w-10 text-gray-400"
+        class="mx-auto h-10 w-10 text-muted-foreground"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -196,31 +199,31 @@ const onUrlInput = (event: Event) => {
           d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A1.5 1.5 0 0021.75 19.5V4.5A1.5 1.5 0 0020.25 3H3.75A1.5 1.5 0 002.25 4.5v15A1.5 1.5 0 003.75 21z"
         />
       </svg>
-      <p class="mt-2 text-sm text-gray-700 font-medium">
+      <p class="mt-2 text-sm text-muted-foreground font-medium">
         Kéo thả ảnh vào đây hoặc bấm để chọn
       </p>
-      <p class="mt-1 text-xs text-gray-500">JPG, PNG hoặc WEBP, tối đa 5MB. Tỉ lệ đề xuất 16:9</p>
+      <p class="mt-1 text-xs text-muted-foreground">JPG, PNG hoặc WEBP, tối đa 5MB. Tỉ lệ đề xuất 16:9</p>
     </div>
 
     <!-- Thanh tiến trình khi đang tải lên -->
     <div v-if="isUploading" class="mt-2">
-      <div class="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+      <div class="h-1.5 w-full bg-muted rounded-full overflow-hidden">
         <div
-          class="h-full bg-indigo-600 transition-all"
+          class="h-full bg-primary transition-all"
           :style="{ width: `${progress}%` }"
         ></div>
       </div>
-      <p class="mt-1 text-xs text-gray-500 text-right">Đang tải lên... {{ progress }}%</p>
+      <p class="mt-1 text-xs text-muted-foreground text-right">Đang tải lên... {{ progress }}%</p>
     </div>
 
     <!-- Lỗi upload hiển thị ngay dưới vùng upload -->
-    <p v-if="uploadError" class="mt-2 text-xs text-red-600">{{ uploadError }}</p>
+    <p v-if="uploadError" class="mt-2 text-xs text-danger">{{ uploadError }}</p>
 
     <!-- Dán URL ảnh ngoài cho ai không muốn tải file lên -->
     <div class="mt-3">
       <button
         type="button"
-        class="text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
+        class="text-xs text-muted-foreground underline-offset-4 hover:underline hover:text-foreground transition-colors"
         @click="showUrlInput = !showUrlInput"
       >
         {{ showUrlInput ? 'Ẩn ô dán URL ảnh' : 'Hoặc dán URL ảnh' }}
@@ -230,7 +233,7 @@ const onUrlInput = (event: Event) => {
         type="url"
         maxlength="500"
         :value="modelValue ?? ''"
-        class="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+        class="mt-2 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-sm"
         placeholder="https://example.com/banner.jpg"
         @input="onUrlInput"
       />

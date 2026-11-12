@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import apiClient from '../api/axios';
 import AppAlert from '../components/AppAlert.vue';
+import { Button } from '@/components/ui/button';
 
 const router = useRouter();
 
@@ -40,18 +41,18 @@ const handleRegister = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-12">
-    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-gray-500 hover:text-indigo-600">
+  <div class="min-h-screen flex flex-col items-center justify-center bg-surface px-4 py-12">
+    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-muted-foreground hover:text-foreground">
       ← Về trang chủ
     </router-link>
-    <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+    <div class="max-w-md w-full space-y-8 bg-background p-8 rounded-lg border border-border">
       <div>
-        <h2 class="text-center text-3xl font-extrabold text-gray-900">
-          Tạo tài khoản <span class="text-indigo-600">EventHub</span>
+        <h2 class="text-center text-3xl font-extrabold text-foreground">
+          Tạo tài khoản <span class="text-foreground">EventHub</span>
         </h2>
-        <p class="mt-2 text-center text-sm text-gray-600">
+        <p class="mt-2 text-center text-sm text-muted-foreground">
           Đã có tài khoản?
-          <router-link to="/login" class="font-medium text-indigo-600 hover:text-indigo-500">
+          <router-link to="/login" class="font-medium text-foreground underline-offset-4 hover:underline">
             Đăng nhập
           </router-link>
         </p>
@@ -62,48 +63,48 @@ const handleRegister = async () => {
       <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
         <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700">Họ và tên</label>
+            <label class="block text-sm font-medium text-muted-foreground">Họ và tên</label>
             <input
               v-model="fullName"
               type="text"
               required
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
               placeholder="Nguyễn Văn A"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700">Email</label>
+            <label class="block text-sm font-medium text-muted-foreground">Email</label>
             <input
               v-model="email"
               type="email"
               required
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700">Mật khẩu</label>
+            <label class="block text-sm font-medium text-muted-foreground">Mật khẩu</label>
             <input
               v-model="password"
               type="password"
               required
               minlength="8"
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              class="mt-1 block w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring text-sm"
               placeholder="•••••••• (tối thiểu 8 ký tự)"
             />
           </div>
         </div>
 
-        <button
+        <Button
           type="submit"
+          class="w-full"
           :disabled="isLoading"
-          class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
         >
           <span v-if="isLoading">Đang tạo tài khoản...</span>
           <span v-else>Đăng ký</span>
-        </button>
+        </Button>
       </form>
     </div>
   </div>
