@@ -115,6 +115,9 @@ const changePage = (page: number) => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 watch(() => route.query, (query) => {
+  // `route` là toàn cục: khi rời trang chủ, query đổi theo trang mới và watcher
+  // chạy thêm một lần trước khi component bị huỷ. Bỏ qua để khỏi gọi API thừa.
+  if (route.name !== 'Home') return;
   clearTimeout(searchTimer);
   const read = (key: string) => {
     const value = query[key];
