@@ -31,7 +31,7 @@ const status = computed(() => {
   if (phase.value === 'ended') return { label: 'Đã kết thúc', variant: 'muted' as const };
   if (soldOut.value) return { label: 'Hết vé', variant: 'danger' as const };
   if (inventory.value.available > 0 && inventory.value.available <= inventory.value.total * 0.1)
-    return { label: 'Sắp hết vé', variant: 'warning' as const };
+    return { label: 'Sắp hết vé', variant: 'brand' as const };
   if (phase.value === 'ongoing') return { label: 'Đang diễn ra', variant: 'success' as const };
   return null;
 });
@@ -47,7 +47,7 @@ const calendar = computed(() => {
   <router-link :to="`/events/${event.id}`" class="group block h-full min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
     <Card class="shadow-none ring-0 border border-border bg-background h-full gap-0 rounded-lg py-0 transition-colors">
       <div class="relative aspect-video overflow-hidden bg-surface">
-        <EventBanner :src="event.bannerUrl" :alt="event.title" class="[&>*]:transition-transform [&>*]:duration-200 motion-safe:[&>*]:group-hover:scale-[1.02] motion-reduce:[&>*]:transform-none motion-reduce:[&>*]:transition-none [&>div]:bg-none [&>div]:bg-muted [&>div>span]:text-muted-foreground" />
+        <EventBanner :src="event.bannerUrl" :alt="event.title" class="[&>*]:transition-transform [&>*]:duration-200 motion-safe:[&>*]:group-hover:scale-[1.02] motion-reduce:[&>*]:transform-none motion-reduce:[&>*]:transition-none [&>div]:bg-none [&>div]:bg-muted [&>div>span]:sr-only" />
         <div aria-hidden="true" class="absolute left-3 top-3 w-12 overflow-hidden rounded-lg bg-background text-center text-foreground">
           <div class="bg-primary/10 py-1 text-[10px] font-semibold text-primary">TH {{ calendar.month }}</div>
           <div class="py-1 text-2xl font-semibold tabular-nums">{{ calendar.day }}</div>
