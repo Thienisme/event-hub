@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma';
 import { AppError, handleControllerError } from '../utils/errors';
 import { invalidateUserState } from '../utils/userState';
+import { saveImage } from '../utils/storage';
 import { getJwtSecret } from '../config/auth';
 
 // Người dùng tự đăng ký luôn được gán role CUSTOMER.
@@ -23,6 +24,7 @@ const PROFILE_SELECT = {
   id: true,
   email: true,
   fullName: true,
+  avatarUrl: true,
   role: true,
   createdAt: true,
   emailVerifiedAt: true,
@@ -113,6 +115,7 @@ export const login = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
         role: user.role,
         emailVerifiedAt: user.emailVerifiedAt,
       },
@@ -137,6 +140,35 @@ export const updateProfile = async (req: Request, res: Response) => {
     return res.json({ message: 'Cập nhật hồ sơ thành công!', user });
   } catch (error) {
     return handleControllerError(res, 'updateProfile', error);
+  }
+};
+
+/** Ảnh đại diện chỉ được cập nhật cho tài khoản đang đăng nhập. */
+export const updateAvatar = async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'Vui lòng chọn ảnh đại diện!' });
+    const avatarUrl = await saveImage(req.file.buffer);
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { avatarUrl },
+      select: PROFILE_SELECT,
+    });
+    return res.json({ message: 'Cập nhật ảnh đại diện thành công!', user });
+  } catch (error) {
+    return handleControllerError(res, 'updateAvatar', error);
+  }
+};
+
+export const removeAvatar = async (req: Request, res: Response) => {
+  try {
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { avatarUrl: null },
+      select: PROFILE_SELECT,
+    });
+    return res.json({ message: 'Đã xoá ảnh đại diện!', user });
+  } catch (error) {
+    return handleControllerError(res, 'removeAvatar', error);
   }
 };
 

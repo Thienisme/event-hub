@@ -54,7 +54,7 @@ const loadOrders = async (page?: number, limit?: number) => {
 const changePage = (page: number) => {
   if (page < 1 || page > orderStore.pagination.totalPages || orderStore.loading) return;
   loadOrders(page, orderStore.pagination.limit);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 };
 
 /**
@@ -148,6 +148,7 @@ const handleConfirm = async (order: Order) => {
   actionOrderId.value = order.id;
   try {
     const response = await orderStore.confirmOrder(order.id);
+    expandedOrders.value[order.id] = true;
     toastStore.success(response.message || 'Thanh toán thành công!');
   } catch (error: any) {
     await handleActionError(error, 'Thanh toán thất bại, vui lòng thử lại!');
@@ -181,7 +182,7 @@ const handleCancel = async () => {
 };
 
 /** Mã QR đang xem lớn trong hộp thoại. */
-const selectedQr = ref<{ qrCode: string; label: string } | null>(null);
+const selectedQr = ref<{ qrCode: string; label: string; filename: string } | null>(null);
 
 const openQr = (order: Order, ticket: OrderTicket) => {
   if (!ticket.qrCode) return;
@@ -190,6 +191,7 @@ const openQr = (order: Order, ticket: OrderTicket) => {
   selectedQr.value = {
     qrCode: ticket.qrCode,
     label: `${ticket.ticketType?.name ?? 'Vé'} · Vé ${position}/${order.tickets.length}`,
+    filename: `eventhub-${order.id.slice(0, 8)}-ve-${position}.png`,
   };
 };
 
@@ -304,7 +306,7 @@ const copyOrderId = async (id: string) => {
                     <span>Đặt lúc {{ formatDateTime(order.createdAt) }}</span>
                   </div>
                 </div>
-                <div class="shrink-0"><OrderStatusBadge :status="displayStatus(order)" /></div>
+                <div class="flex shrink-0 flex-wrap items-center gap-2 self-start"><Badge v-if="route.query.order === order.id" variant="outline">Vừa đặt</Badge><OrderStatusBadge :status="displayStatus(order)" /></div>
               </header>
               <div class="space-y-4 px-5 pb-5 sm:px-6">
                 <div v-for="line in groupTickets(order)" :key="line.id" class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 text-sm">
@@ -320,9 +322,10 @@ const copyOrderId = async (id: string) => {
                 <template v-else>
                   <p class="flex items-center gap-2 text-sm font-medium"><Timer class="size-4 shrink-0 text-warning" aria-hidden="true" /><span>Còn <span class="font-semibold tabular-nums">{{ formatCountdown(remainingMs(order)) }}</span> để thanh toán</span></p>
                   <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Button class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán (giả lập)' }}</Button>
-                    <Button variant="outline" class="border-danger/30 bg-background text-danger hover:bg-danger/10 hover:text-danger" :disabled="actionOrderId === order.id" @click="askCancel(order)">Huỷ đơn</Button>
+                    <Button class="min-h-11 bg-brand text-brand-foreground hover:bg-brand/90" :disabled="!!actionOrderId" :aria-busy="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán (giả lập)' }}</Button>
+                    <Button variant="outline" class="min-h-11 border-danger/30 bg-background text-danger hover:bg-danger/10 hover:text-danger" :disabled="!!actionOrderId" @click="askCancel(order)">Huỷ đơn</Button>
                   </div>
+                  <p class="mt-3 text-xs leading-5 text-muted-foreground">Thanh toán demo, không thu tiền thật. Mã QR sẽ xuất hiện sau khi xác nhận thành công.</p>
                 </template>
               </div>
               <section v-if="order.status === 'CONFIRMED'" class="border-t bg-surface/60 p-5 sm:p-6">
@@ -363,7 +366,7 @@ const copyOrderId = async (id: string) => {
       <DialogContent class="max-w-sm rounded-lg">
         <template v-if="selectedQr">
           <DialogHeader><DialogTitle class="break-words pr-6">{{ selectedQr.label }}</DialogTitle><DialogDescription>Xuất trình mã QR này tại cổng soát vé.</DialogDescription></DialogHeader>
-          <QrCodeImage :value="selectedQr.qrCode" :size="288" />
+          <QrCodeImage :value="selectedQr.qrCode" :size="288" :download-name="selectedQr.filename" />
           <p class="break-all text-center text-xs text-muted-foreground">{{ selectedQr.qrCode }}</p>
           <Button variant="outline" class="w-full" @click="selectedQr = null">Đóng</Button>
         </template>

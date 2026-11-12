@@ -11,6 +11,7 @@ export type UserRole = 'CUSTOMER' | 'ORGANIZER' | 'ADMIN';
 export interface User {
   id: string;
   fullName: string;
+  avatarUrl?: string | null;
   email: string;
   role: UserRole;
   createdAt?: string;
@@ -71,6 +72,21 @@ export const useAuthStore = defineStore('auth', () => {
     return response.data;
   }
 
+  async function updateAvatar(file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    // Bỏ mặc định JSON để trình duyệt tự đặt multipart/form-data kèm boundary.
+    const { data } = await apiClient.post<{ user: User }>('/auth/me/avatar', form, {
+      headers: { 'Content-Type': undefined },
+    });
+    user.value = data.user;
+  }
+
+  async function removeAvatar() {
+    const { data } = await apiClient.delete<{ user: User }>('/auth/me/avatar');
+    user.value = data.user;
+  }
+
   async function changePassword(currentPassword: string, newPassword: string) {
     const response = await apiClient.post<{ message: string; token: string }>('/auth/change-password', {
       currentPassword,
@@ -96,6 +112,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     login,
     updateProfile,
+    updateAvatar,
+    removeAvatar,
     changePassword,
     fetchProfile,
     ensureProfile,
