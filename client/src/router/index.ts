@@ -4,6 +4,13 @@ import { useAuthStore } from '../stores/auth';
 const router = createRouter({
   // BASE_URL để build ra sub-folder (nếu có) vẫn chạy đúng
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.hash) return { el: to.hash, top: 96, behavior: 'smooth' };
+    // Cùng trang, chỉ đổi query (bộ lọc, phân trang trang chủ): giữ vị trí cuộn.
+    if (to.path === _from.path) return false;
+    return { top: 0 };
+  },
   routes: [
     { path: '/forgot-password', name: 'ForgotPassword', component: () => import('@/views/ForgotPasswordView.vue') },
     { path: '/reset-password', name: 'ResetPassword', component: () => import('@/views/ResetPasswordView.vue') },
@@ -90,6 +97,24 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/faq',
+      name: 'Faq',
+      component: () => import('@/views/FaqView.vue'),
+      meta: { title: 'Câu hỏi thường gặp' },
+    },
+    {
+      path: '/terms',
+      name: 'Terms',
+      component: () => import('@/views/TermsView.vue'),
+      meta: { title: 'Điều khoản sử dụng' },
+    },
+    {
+      path: '/privacy',
+      name: 'Privacy',
+      component: () => import('@/views/PrivacyView.vue'),
+      meta: { title: 'Chính sách bảo mật' },
+    },
+    {
       // Bắt mọi đường dẫn không khớp -> tránh màn hình trắng
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
@@ -133,6 +158,13 @@ router.beforeEach(async (to) => {
   }
 
   return true;
+});
+
+// Tiêu đề tab: trang có meta.title thì ghép thêm tên app, còn lại trả về mặc định
+// (tránh giữ tiêu đề của trang trước sau khi chuyển trang).
+router.afterEach((to) => {
+  const title = to.meta.title;
+  document.title = typeof title === 'string' ? `${title} · EventHub` : 'EventHub';
 });
 
 export default router;

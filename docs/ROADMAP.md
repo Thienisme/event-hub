@@ -50,6 +50,6 @@ Xong ở PR #16.
 
 ## Việc nhỏ còn treo
 
-- [ ] Chặn khoảng ngày ngược (`from` > `to`) ở bộ lọc trang chủ, hiện thông báo thay vì im lặng bỏ qua (O)
+- [x] Chặn khoảng ngày ngược (`from` > `to`) ở bộ lọc trang chủ, hiện thông báo thay vì im lặng bỏ qua (O)
 - [ ] Chạy lại `seed:demo` trên TiDB để sự kiện demo có đúng danh mục (anh quyết, vì lệnh này đặt lại mật khẩu tài khoản demo)
 - [ ] Email đang vào Spam vì người gửi là `@gmail.com` qua máy chủ Brevo: khi dùng thật thì mua tên miền riêng, xác minh tên miền trên Brevo (SPF/DKIM/DMARC), đổi `MAIL_FROM` sang `no-reply@<tên miền>` (anh làm)

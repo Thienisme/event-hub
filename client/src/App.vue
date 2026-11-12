@@ -164,8 +164,45 @@ const handleLogout = () => {
     <main class="flex-1">
       <RouterView />
     </main>
-    <footer v-if="showNavbar" class="border-t border-border px-4 py-5 text-center text-xs text-muted-foreground">
-      © {{ currentYear }} EventHub · Nền tảng đặt vé sự kiện
+    <footer v-if="showNavbar" class="border-t border-border bg-background px-4 sm:px-6 lg:px-8">
+      <div class="max-w-6xl mx-auto">
+        <div class="py-12 grid gap-10 grid-cols-2 md:grid-cols-5">
+          <div class="col-span-2">
+            <p class="text-xl font-extrabold">EventHub</p>
+            <p class="mt-4 text-sm text-muted-foreground max-w-xs">Nền tảng khám phá và đặt vé sự kiện: hoà nhạc, hội thảo, workshop và hơn thế nữa.</p>
+          </div>
+          <div>
+            <h2 class="text-sm font-semibold">Khám phá</h2>
+            <ul class="mt-4 space-y-3 text-sm">
+              <li><router-link to="/" class="text-muted-foreground hover:text-foreground transition-colors">Sự kiện sắp diễn ra</router-link></li>
+              <li><router-link to="/?category=MUSIC" class="text-muted-foreground hover:text-foreground transition-colors">Âm nhạc</router-link></li>
+              <li><router-link to="/?category=CONFERENCE" class="text-muted-foreground hover:text-foreground transition-colors">Hội thảo</router-link></li>
+              <li><router-link to="/?category=WORKSHOP" class="text-muted-foreground hover:text-foreground transition-colors">Workshop</router-link></li>
+              <li><router-link to="/?status=ended" class="text-muted-foreground hover:text-foreground transition-colors">Sự kiện đã kết thúc</router-link></li>
+            </ul>
+          </div>
+          <div>
+            <h2 class="text-sm font-semibold">Ban tổ chức</h2>
+            <ul class="mt-4 space-y-3 text-sm">
+              <li><router-link to="/events/create" class="text-muted-foreground hover:text-foreground transition-colors">Tạo sự kiện</router-link></li>
+              <li><router-link to="/my-events" class="text-muted-foreground hover:text-foreground transition-colors">Quản lý sự kiện</router-link></li>
+              <li><router-link to="/faq#ban-to-chuc" class="text-muted-foreground hover:text-foreground transition-colors">Câu hỏi cho ban tổ chức</router-link></li>
+            </ul>
+          </div>
+          <div>
+            <h2 class="text-sm font-semibold">Hỗ trợ</h2>
+            <ul class="mt-4 space-y-3 text-sm">
+              <li><router-link to="/faq" class="text-muted-foreground hover:text-foreground transition-colors">Câu hỏi thường gặp</router-link></li>
+              <li><router-link to="/terms" class="text-muted-foreground hover:text-foreground transition-colors">Điều khoản sử dụng</router-link></li>
+              <li><router-link to="/privacy" class="text-muted-foreground hover:text-foreground transition-colors">Chính sách bảo mật</router-link></li>
+            </ul>
+          </div>
+        </div>
+        <div class="border-t border-border py-6 flex flex-col sm:flex-row gap-3 justify-between text-xs text-muted-foreground">
+          <p>© {{ currentYear }} EventHub. Dự án demo, thanh toán là giả lập.</p>
+          <p>Giờ hiển thị theo múi giờ Việt Nam (GMT+7)</p>
+        </div>
+      </div>
     </footer>
     <AppToast />
   </div>
