@@ -240,6 +240,18 @@ export const createOrderSchema = z.object({
 });
 
 /**
+ * Schema validation cho soát vé. Mã QR do server sinh là 22 ký tự base64url
+ * (128 bit); trần 64 chỉ để chặn chuỗi rác dài, không ràng buộc định dạng.
+ */
+export const checkInSchema = z.object({
+  qrCode: z
+    .string({ message: 'Mã vé không hợp lệ!' })
+    .trim()
+    .min(1, 'Mã vé không được để trống!')
+    .max(64, 'Mã vé không hợp lệ!'),
+});
+
+/**
  * Schema validation cho thao tác đổi vai trò tài khoản (ADMIN).
  *
  * Enum gồm cả 3 role hợp lệ. Việc "có được phép hạ quyền admin cuối cùng hay

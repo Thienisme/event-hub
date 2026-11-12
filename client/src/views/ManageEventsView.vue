@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import EventBanner from '@/components/EventBanner.vue';
-import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2 } from '@lucide/vue';
+import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2, ScanLine } from '@lucide/vue';
 
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -211,6 +211,9 @@ onUnmounted(() => {
                     :to="{ name: 'EventDetail', params: { id: event.id } }"
                     ><Eye class="size-4" aria-hidden="true" />Xem</router-link></Button>
 
+                  <Button as-child size="sm" variant="outline"><router-link
+                    :to="{ name: 'CheckIn', params: { id: event.id } }"
+                    ><ScanLine class="size-4" aria-hidden="true" />Soát vé</router-link></Button>
                   <Button as-child size="sm" variant="outline"><router-link
                     :to="{ name: 'EditEvent', params: { id: event.id } }"
                     ><Pencil class="size-4" aria-hidden="true" />Sửa</router-link></Button>
