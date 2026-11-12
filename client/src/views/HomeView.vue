@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, reactive, watch, onUnmounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '../stores/event';
 import { useAuthStore } from '../stores/auth';
 import EventCard from '../components/EventCard.vue';
@@ -9,9 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EVENT_CATEGORIES } from '@/utils/categories';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const router = useRouter();
+const route = useRoute();
+const filters = reactive({ category: '', location: '', from: '', to: '', minPrice: '' as string | number, maxPrice: '' as string | number });
+const filtersOpen = ref(false);
 const eventStore = useEventStore();
 const authStore = useAuthStore();
 
@@ -47,56 +53,85 @@ const loadEvents = async () => {
         limit: limit.value,
         search: searchQuery.value,
         status: status.value,
+        ...filters,
       },
       controller.signal
     );
 
+    if (controller.signal.aborted) return;
     if (res?.pagination) {
       totalPages.value = res.pagination.totalPages;
     }
   } catch (error: any) {
     // Request bị chính mình huỷ -> không phải lỗi, đừng hiện thông báo.
-    if (error?.code === 'ERR_CANCELED') return;
+    if (controller.signal.aborted || error?.code === 'ERR_CANCELED') return;
     // Trước đây lỗi mạng không được bắt: BE chết thì UI hiện "Không tìm thấy 
     // sự kiện nào", khiến user tưởng hết dữ liệu thay vì biết là mất kết nối.
     errorMessage.value =
       error.response?.data?.message || 'Không tải được danh sách sự kiện!';
   } finally {
-    loaded.value = true;
+    if (!controller.signal.aborted) loaded.value = true;
   }
 };
 
-// Xử lý tìm kiếm có Debounce (đợi người dùng gõ xong 400ms mới gọi API)
+// URL là nguồn dữ liệu khi mở liên kết hoặc dùng Back/Forward.
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
+const syncQuery = async () => {
+  const query: Record<string, string> = {};
+  for (const [key, value] of Object.entries({ search: searchQuery.value, ...filters, page: currentPage.value })) {
+    if (String(value).trim() !== '') query[key] = String(value);
+  }
+  if (status.value === 'ended') query.status = 'ended';
+  // Cùng URL thì watcher không chạy; vẫn cần tải lại nếu request vừa bị huỷ.
+  if (router.resolve({ query }).fullPath === route.fullPath) {
+    loadEvents();
+    return;
+  }
+  await router.replace({ query });
+};
 const handleSearchInput = () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    currentPage.value = 1; // Reset về trang 1 khi tìm kiếm
-    loadEvents();
-  }, 400);
+  inFlight?.abort();
+  currentPage.value = 1;
+  searchTimer = setTimeout(syncQuery, 400);
 };
-
-// Đổi tab giữ từ khoá tìm kiếm và tải lại từ trang đầu.
+const clearFilters = () => {
+  Object.assign(filters, { category: '', location: '', from: '', to: '', minPrice: '', maxPrice: '' });
+  handleSearchInput();
+};
 const changeStatus = (value: string | number) => {
   const nextStatus = value === 'ended' ? 'ended' : 'upcoming';
   if (nextStatus === status.value) return;
   clearTimeout(searchTimer);
   status.value = nextStatus;
   currentPage.value = 1;
-  loadEvents();
+  syncQuery();
 };
-
-// Chuyển trang
 const changePage = (page: number) => {
   if (page < 1 || page > totalPages.value) return;
+  clearTimeout(searchTimer);
   currentPage.value = page;
-  loadEvents();
+  syncQuery();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
-
-onMounted(() => {
+watch(() => route.query, (query) => {
+  clearTimeout(searchTimer);
+  const read = (key: string) => {
+    const value = query[key];
+    return (Array.isArray(value) ? value[0] : value) ?? '';
+  };
+  searchQuery.value = read('search');
+  filters.category = EVENT_CATEGORIES.some(item => item.value === read('category')) ? read('category') : '';
+  filters.location = read('location');
+  filters.from = read('from');
+  filters.to = read('to');
+  filters.minPrice = read('minPrice');
+  filters.maxPrice = read('maxPrice');
+  const page = Number(read('page'));
+  currentPage.value = Number.isSafeInteger(page) && page > 0 ? page : 1;
+  status.value = read('status') === 'ended' ? 'ended' : 'upcoming';
   loadEvents();
-});
+}, { immediate: true });
 
 // Dọn dẹp khi rời trang: nếu không, timer debounce còn treo sẽ gọi API
 // sau khi component đã bị huỷ (request "mồ côi").
@@ -118,7 +153,37 @@ onUnmounted(() => {
             <p class="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">Tìm cảm hứng, kết nối cộng đồng và đặt vé cho những khoảnh khắc đáng nhớ.</p>
             <div class="relative mt-7">
               <Search class="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input v-model="searchQuery" @input="handleSearchInput" type="search" aria-label="Tìm kiếm sự kiện" placeholder="Tìm tên sự kiện, địa điểm…" class="h-14 rounded-xl bg-card pl-12 pr-4 text-base shadow-sm" />
+              <Input v-model="searchQuery" @update:model-value="handleSearchInput" type="search" aria-label="Tìm kiếm sự kiện" placeholder="Tìm tên sự kiện, địa điểm…" class="h-14 rounded-xl bg-card pl-12 pr-4 text-base shadow-sm" />
+            </div>
+            <div class="mt-4">
+              <Button variant="outline" class="sm:hidden" :aria-expanded="filtersOpen" aria-controls="event-filters" @click="filtersOpen = !filtersOpen">{{ filtersOpen ? 'Thu gọn bộ lọc' : 'Mở bộ lọc' }}</Button>
+              <div id="event-filters" class="mt-3 space-y-4" :class="filtersOpen ? 'block' : 'hidden sm:block'">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <Label for="filter-category">Danh mục</Label>
+                    <Select :model-value="filters.category || 'all'" @update:model-value="value => { filters.category = String(value) === 'all' ? '' : String(value); handleSearchInput(); }">
+                      <SelectTrigger id="filter-category" class="w-full bg-card"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="all">Tất cả danh mục</SelectItem><SelectItem v-for="item in EVENT_CATEGORIES" :key="item.value" :value="item.value">{{ item.label }}</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="filter-location">Thành phố / địa điểm</Label>
+                    <Select :model-value="filters.location || 'all'" @update:model-value="value => { filters.location = String(value) === 'all' ? '' : String(value); handleSearchInput(); }">
+                      <SelectTrigger id="filter-location" class="w-full bg-card"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tất cả</SelectItem>
+                        <SelectItem v-for="city in ['Hà Nội', 'TP.HCM', 'Đà Nẵng']" :key="city" :value="city">{{ city }}</SelectItem>
+                        <SelectItem v-if="filters.location && !['Hà Nội', 'TP.HCM', 'Đà Nẵng'].includes(filters.location)" :value="filters.location">{{ filters.location }}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div class="min-w-0 space-y-2"><Label for="filter-from">Từ ngày</Label><Input id="filter-from" v-model="filters.from" type="date" class="min-w-0 bg-card" @update:model-value="handleSearchInput" /></div>
+                  <div class="min-w-0 space-y-2"><Label for="filter-to">Đến ngày</Label><Input id="filter-to" v-model="filters.to" type="date" class="min-w-0 bg-card" @update:model-value="handleSearchInput" /></div>
+                  <div class="space-y-2"><Label for="filter-min-price">Giá thấp nhất (VNĐ)</Label><Input id="filter-min-price" v-model="filters.minPrice" type="number" min="0" placeholder="Không giới hạn" class="bg-card" @update:model-value="handleSearchInput" /></div>
+                  <div class="space-y-2"><Label for="filter-max-price">Giá cao nhất (VNĐ)</Label><Input id="filter-max-price" v-model="filters.maxPrice" type="number" min="0" placeholder="Không giới hạn" class="bg-card" @update:model-value="handleSearchInput" /></div>
+                </div>
+                <Button variant="outline" @click="clearFilters">Xoá bộ lọc</Button>
+              </div>
             </div>
           </div>
           <Button v-if="authStore.isOrganizer" @click="router.push({ name: 'CreateEvent' })" class="shrink-0 rounded-xl"><Plus aria-hidden="true" />Tạo sự kiện</Button>

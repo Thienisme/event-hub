@@ -110,6 +110,9 @@ export const exceedsOrderAmount = (price: number, quantity: number): boolean => 
 };
 
 export const createEventSchema = z.object({
+  category: z.enum(['MUSIC', 'SPORTS', 'CONFERENCE', 'WORKSHOP', 'THEATER', 'EXHIBITION', 'FESTIVAL', 'FOOD', 'OTHER'], {
+    message: 'Danh mục sự kiện không hợp lệ!',
+  }).optional(),
   title: z
     .string()
     .trim()
