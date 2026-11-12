@@ -17,6 +17,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 |---|---|
 | Đặt vé, xác nhận, huỷ đơn | `server/src/controllers/order.controller.ts`, `server/src/utils/orderInventory.ts` |
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
+| Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Đăng nhập, phân quyền | `server/src/middlewares/auth.middleware.ts`, `server/src/utils/userState.ts` |
 | Quản trị | `server/src/controllers/admin.controller.ts` |
@@ -79,6 +80,12 @@ Luồng request: `routes/` gắn middleware theo thứ tự `authenticate` → `
 - `updateEvent` đối chiếu loại vé theo `id` và dùng `increment` theo chênh lệch. `ticketTypes` là `undefined` nghĩa là không đụng tới, `[]` nghĩa là xoá hết các loại chưa bán.
 - MySQL từ chối `deleteMany` có điều kiện quan hệ (lỗi 1093): tìm id trước rồi xoá theo id.
 
+### Soát vé (check-in)
+
+- `POST /api/events/:id/check-in` `{ qrCode }`, trả `result`: `VALID` (200), `ALREADY_USED` (409, kèm `checkedInAt`), `NOT_FOUND` (404), `WRONG_EVENT` (409), `NOT_CONFIRMED` (409). `GET /api/events/:id/check-in/stats` đếm vé đã thanh toán và đã vào cổng.
+- Chỉ ORGANIZER của chính sự kiện hoặc ADMIN (`currentRole`). **Kiểm tra quyền trước khi tra mã QR** để người ngoài không dò được mã nào tồn tại.
+- **Chốt chặn quét trùng là `updateMany` có điều kiện `checkedInAt: null`**, ghi kèm `checkedInById`. Không đổi thành đọc rồi mới ghi. `test-checkin.cjs` bắn 20 request đồng thời cùng một mã và chỉ chấp nhận đúng 1 `VALID`.
+
 ### Cache và Redis
 
 - **Hai Redis client có chủ đích:** `redisClient` cho Redlock (kiên nhẫn chờ, thử lại) và `cacheClient` (lỗi nhanh, timeout 200 ms). Cache phải dùng `cacheClient`, và lỗi Redis không được làm hỏng request đọc. `REDIS_URL` (nếu có) được ưu tiên hơn `REDIS_HOST`/`REDIS_PORT`.
@@ -113,6 +120,7 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 - `token` lưu ở `localStorage`, `user` chỉ nằm trong RAM. Router guard của route cần role phải chờ `authStore.ensureProfile()`.
 - Prisma `Decimal` được serialize thành chuỗi, phải chuyển sang số trước khi tính toán.
 - `confirmOrder`/`cancelOrder` chỉ trả `tickets` trần, nên store ghép lại `ticketType` cũ theo ticket id.
+- Trang soát vé (`/my-events/:id/check-in`) quét QR bằng `vue-qrcode-reader`. Camera chỉ chạy trên HTTPS hoặc localhost; luôn giữ ô nhập mã tay dự phòng. File WASM của bộ giải mã được tự phục vụ qua `setZXingModuleOverrides` (mặc định nó tải từ CDN), và CSP ở `app.ts` cần `'wasm-unsafe-eval'` trong `script-src`.
 
 ## Deploy
 

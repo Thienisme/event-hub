@@ -11,6 +11,7 @@ export interface OrderTicket {
   orderId: string;
   ticketTypeId: string;
   qrCode?: string | null;
+  checkedInAt?: string | null;
   createdAt: string;
   /** Chỉ có ở /orders/my-orders, kèm luôn event của loại vé đó */
   ticketType?: TicketType & {
