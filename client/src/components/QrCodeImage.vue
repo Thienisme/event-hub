@@ -48,16 +48,18 @@ watch(
 
 <template>
   <div class="flex items-center justify-center">
+    <!-- bg-white tại đây là chủ ý: máy quét QR cần nền trắng sau mã để đọc được
+         (ảnh QR của thư viện `qrcode` có nền trong suốt), không đổi sang token khác. -->
     <img
       v-if="dataUrl"
       :src="dataUrl"
       alt="Mã QR của vé"
-      class="w-full h-auto rounded-lg"
+      class="w-full h-auto rounded-lg bg-white"
       :style="{ maxWidth: `${size}px` }"
     />
-    <div v-else-if="failed" class="py-6 px-2 text-xs text-center text-red-500">
+    <div v-else-if="failed" class="py-6 px-2 text-xs text-center text-danger">
       Không tạo được mã QR
     </div>
-    <div v-else class="py-6 px-2 text-xs text-center text-gray-400">Đang tạo mã QR...</div>
+    <div v-else class="py-6 px-2 text-xs text-center text-muted-foreground">Đang tạo mã QR...</div>
   </div>
 </template>

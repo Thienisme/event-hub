@@ -212,46 +212,46 @@ const handleDelete = async () => {
 
 <template>
   <div class="min-h-screen bg-surface pb-16 text-foreground">
-    <div v-if="isLoading" class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6" role="status" aria-label="Đang tải thông tin sự kiện">
+    <div v-if="isLoading" class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6" role="status" aria-label="Đang tải thông tin sự kiện">
       <span class="sr-only">Đang tải thông tin sự kiện...</span>
       <Skeleton class="h-5 w-44" />
-      <Skeleton class="aspect-video w-full rounded-2xl lg:aspect-[21/9]" />
+      <Skeleton class="aspect-video w-full rounded-lg lg:aspect-[21/9]" />
       <div class="grid gap-8 lg:grid-cols-3">
         <div class="space-y-6 lg:col-span-2">
           <Skeleton class="h-10 w-3/4" />
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2"><Skeleton v-for="item in 4" :key="item" class="h-28 rounded-xl" /></div>
-          <Skeleton class="h-40 rounded-xl" />
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2"><Skeleton v-for="item in 4" :key="item" class="h-28 rounded-lg" /></div>
+          <Skeleton class="h-40 rounded-lg" />
         </div>
-        <Skeleton class="h-96 rounded-2xl" />
+        <Skeleton class="h-96 rounded-lg" />
       </div>
     </div>
 
     <div v-else-if="loadError" class="mx-auto max-w-xl px-4 py-20">
-      <Card class="rounded-2xl text-center shadow-sm">
+      <Card class="shadow-none ring-0 border border-border bg-background rounded-lg text-center">
         <CardContent class="space-y-5 p-8">
           <CircleAlert class="mx-auto size-12 text-muted-foreground" />
           <h1 class="text-xl font-semibold tracking-tight" role="alert">{{ loadError }}</h1>
-          <Button class="rounded-xl" @click="router.push({ name: 'Home' })"><ArrowLeft />Về trang chủ</Button>
+          <Button class="rounded-md" @click="router.push({ name: 'Home' })"><ArrowLeft />Về trang chủ</Button>
         </CardContent>
       </Card>
     </div>
 
-    <div v-else-if="event" class="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+    <div v-else-if="event" class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <Button variant="link" class="mb-5 h-auto px-0 text-muted-foreground hover:text-primary" @click="router.push({ name: 'Home' })">
         <ArrowLeft />Quay lại danh sách
       </Button>
-      <div class="aspect-video overflow-hidden rounded-2xl border bg-muted shadow-sm lg:aspect-[21/9]">
+      <div class="aspect-video overflow-hidden rounded-lg border bg-muted lg:aspect-[21/9]">
         <EventBanner :src="event.bannerUrl" :alt="event.title" />
       </div>
 
       <div class="mt-8 flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div class="min-w-0 space-y-3">
           <Badge :variant="eventPhase === 'ended' ? 'muted' : eventPhase === 'ongoing' ? 'success' : 'info'">{{ phaseLabel }}</Badge>
-          <h1 class="break-words text-3xl font-semibold tracking-tight sm:text-4xl">{{ event.title }}</h1>
+          <h1 class="break-words text-3xl sm:text-4xl font-extrabold tracking-tight">{{ event.title }}</h1>
         </div>
         <div v-if="authStore.isOrganizer" class="flex shrink-0 flex-wrap gap-2">
-          <Button as-child variant="outline" class="rounded-xl"><router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil />Chỉnh sửa sự kiện</router-link></Button>
-          <Button variant="destructive" class="rounded-xl" :disabled="isDeleting" @click="handleDelete"><Trash2 />{{ isDeleting ? 'Đang xóa...' : 'Xóa sự kiện' }}</Button>
+          <Button as-child variant="outline" class="rounded-md"><router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil />Chỉnh sửa sự kiện</router-link></Button>
+          <Button variant="destructive" class="rounded-md" :disabled="isDeleting" @click="handleDelete"><Trash2 />{{ isDeleting ? 'Đang xóa...' : 'Xóa sự kiện' }}</Button>
         </div>
       </div>
       <AppAlert v-if="deleteError" :message="deleteError" type="error" class="mt-4" />
@@ -259,49 +259,49 @@ const handleDelete = async () => {
       <div class="mt-8 grid min-w-0 items-start gap-8 lg:grid-cols-3">
         <div class="min-w-0 space-y-8 lg:col-span-2">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div class="flex min-w-0 gap-3 rounded-xl border bg-card p-5 shadow-sm">
+            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
               <CalendarDays class="mt-1 size-5 shrink-0 text-primary" />
               <div class="min-w-0"><p class="text-sm text-muted-foreground">Bắt đầu</p><p class="mt-1 break-words font-medium">{{ formatDateTime(event.startTime) }}</p></div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-xl border bg-card p-5 shadow-sm">
+            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
               <CalendarCheck class="mt-1 size-5 shrink-0 text-primary" />
               <div class="min-w-0"><p class="text-sm text-muted-foreground">Kết thúc</p><p class="mt-1 break-words font-medium">{{ formatDateTime(event.endTime) }}</p></div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-xl border bg-card p-5 shadow-sm">
+            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
               <MapPin class="mt-1 size-5 shrink-0 text-primary" />
               <div class="min-w-0"><p class="text-sm text-muted-foreground">Địa điểm</p><p class="mt-1 break-words font-medium">{{ event.location }}</p></div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-xl border bg-card p-5 shadow-sm">
+            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
               <UserRound class="mt-1 size-5 shrink-0 text-primary" />
               <div class="min-w-0"><p class="text-sm text-muted-foreground">Ban tổ chức</p><div class="mt-2 flex items-center gap-2"><Avatar><AvatarFallback class="bg-primary/10 text-xs text-primary">{{ organizerInitials }}</AvatarFallback></Avatar><p class="min-w-0 break-words font-medium">{{ event.organizer?.fullName || 'Chưa cập nhật' }}</p></div></div>
             </div>
           </div>
-          <section class="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+          <section class="rounded-lg border bg-background p-5 sm:p-6">
             <h2 class="text-xl font-semibold tracking-tight">Giới thiệu</h2>
             <p class="mt-4 whitespace-pre-line break-words leading-relaxed text-muted-foreground">{{ event.description?.trim() ? event.description : 'Ban tổ chức chưa thêm mô tả' }}</p>
           </section>
         </div>
 
         <aside class="min-w-0 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
-          <Card class="gap-0 overflow-hidden rounded-2xl py-0 shadow-sm">
+          <Card class="shadow-none ring-0 border border-border bg-background gap-0 overflow-hidden rounded-lg py-0">
             <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-primary" />Chọn loại vé</CardTitle></CardHeader>
             <CardContent class="space-y-4 p-5 sm:p-6">
               <AppAlert :message="errorMessage" type="error" />
-              <p v-if="isEnded" class="rounded-xl bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
-              <p v-if="!event.ticketTypes?.length" class="rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
-              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-xl border p-4 transition-shadow hover:shadow-md" :class="{ 'bg-muted/50 opacity-60': ticket.availableQuantity <= 0 }">
-                <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-primary">{{ formatPrice(ticket.price) }}</p></div>
+              <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
+              <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
+              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50 opacity-60': ticket.availableQuantity <= 0 }">
+                <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p></div>
                 <div>
                   <p class="text-xs tabular-nums text-muted-foreground" :class="ticket.availableQuantity <= 0 ? 'text-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'text-warning' : ''">Còn {{ ticket.availableQuantity }} / {{ ticket.totalQuantity }} vé</p>
-                  <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div class="h-full rounded-full" :class="ticket.availableQuantity <= 0 ? 'bg-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-warning' : 'bg-primary'" :style="{ width: `${ticket.availableQuantity <= 0 ? 100 : Math.min(100, Math.max(0, ticket.availableQuantity / (ticket.totalQuantity || 1) * 100))}%` }" /></div>
+                  <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" aria-hidden="true"><div class="h-full rounded-md" :class="ticket.availableQuantity <= 0 ? 'bg-danger' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-warning' : 'bg-primary'" :style="{ width: `${ticket.availableQuantity <= 0 ? 100 : Math.min(100, Math.max(0, ticket.availableQuantity / (ticket.totalQuantity || 1) * 100))}%` }" /></div>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
-                  <div class="flex items-center rounded-lg border bg-card">
-                    <Button variant="ghost" size="icon" class="rounded-lg" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="isEnded || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
+                  <div class="flex items-center rounded-lg border bg-background">
+                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="isEnded || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
                     <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="isEnded || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
-                    <Button variant="ghost" size="icon" class="rounded-lg" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="isEnded || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
+                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="isEnded || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
                   </div>
-                  <Button class="min-w-24 flex-1 rounded-lg" :disabled="isEnded || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
+                  <Button class="min-w-24 flex-1 rounded-md" :class="isEnded || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="isEnded || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
                     <span v-if="isEnded">Đã kết thúc</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
                   </Button>
                 </div>

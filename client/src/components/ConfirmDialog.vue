@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue';
+import { Button } from './ui/button';
 
 /**
  * Hộp thoại xác nhận, thay cho `confirm()` của trình duyệt.
@@ -66,46 +67,48 @@ const onKeydown = (event: KeyboardEvent) => {
     >
       <!-- Lớp nền: bấm ra ngoài cũng đóng -->
       <div
-        class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
+        class="absolute inset-0 bg-foreground/50"
         @click="!loading && emit('cancel')"
       ></div>
 
       <div
         role="dialog"
         aria-modal="true"
-        class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 space-y-5"
+        class="relative w-full max-w-md bg-background rounded-lg shadow-xs p-6 space-y-5"
       >
         <div class="flex items-start gap-3">
           <div
             v-if="danger"
-            class="shrink-0 w-10 h-10 rounded-full bg-red-50 flex items-center justify-center"
+            class="shrink-0 w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center"
           >
-            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
           </div>
 
           <div class="flex-1">
-            <h3 class="text-lg font-bold text-gray-900">{{ title }}</h3>
-            <p v-if="message" class="mt-2 text-sm text-gray-600 leading-relaxed">{{ message }}</p>
+            <h3 class="text-lg font-bold text-foreground">{{ title }}</h3>
+            <p v-if="message" class="mt-2 text-sm text-muted-foreground leading-relaxed">{{ message }}</p>
           </div>
         </div>
 
         <div class="flex justify-end gap-3 pt-1">
-          <button
+          <Button
             type="button"
+            variant="outline"
             :disabled="loading"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             @click="emit('cancel')"
           >
             {{ cancelLabel }}
-          </button>
+          </Button>
+          <!-- Nút xác nhận giữ là button thường vì cần ref để focus khi mở hộp thoại,
+               component Button của shadcn không chuyển tiếp ref ra element. -->
           <button
             ref="confirmButton"
             type="button"
             :disabled="loading"
-            class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
-            :class="danger ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'"
+            class="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
+            :class="danger ? 'bg-danger text-white hover:bg-danger/90' : 'bg-primary text-primary-foreground hover:bg-primary/80'"
             @click="emit('confirm')"
           >
             <span v-if="loading">Đang xử lý...</span>

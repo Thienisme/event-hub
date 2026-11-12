@@ -31,7 +31,7 @@ const status = computed(() => {
   if (phase.value === 'ended') return { label: 'Đã kết thúc', variant: 'muted' as const };
   if (soldOut.value) return { label: 'Hết vé', variant: 'danger' as const };
   if (inventory.value.available > 0 && inventory.value.available <= inventory.value.total * 0.1)
-    return { label: 'Sắp hết vé', variant: 'warning' as const };
+    return { label: 'Sắp hết vé', variant: 'brand' as const };
   if (phase.value === 'ongoing') return { label: 'Đang diễn ra', variant: 'success' as const };
   return null;
 });
@@ -44,18 +44,18 @@ const calendar = computed(() => {
 </script>
 
 <template>
-  <router-link :to="`/events/${event.id}`" class="group block h-full min-w-0 rounded-2xl transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-    <Card class="h-full gap-0 rounded-2xl border py-0 shadow-sm ring-0 transition-shadow group-hover:shadow-md">
+  <router-link :to="`/events/${event.id}`" class="group block h-full min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+    <Card class="shadow-none ring-0 border border-border bg-background h-full gap-0 rounded-lg py-0 transition-colors">
       <div class="relative aspect-video overflow-hidden bg-surface">
-        <EventBanner :src="event.bannerUrl" :alt="event.title" />
-        <div aria-hidden="true" class="absolute left-3 top-3 w-12 overflow-hidden rounded-lg bg-white text-center text-slate-900 shadow-sm">
+        <EventBanner :src="event.bannerUrl" :alt="event.title" class="[&>*]:transition-transform [&>*]:duration-200 motion-safe:[&>*]:group-hover:scale-[1.02] motion-reduce:[&>*]:transform-none motion-reduce:[&>*]:transition-none [&>div]:bg-none [&>div]:bg-muted [&>div>span]:sr-only" />
+        <div aria-hidden="true" class="absolute left-3 top-3 w-12 overflow-hidden rounded-lg bg-background text-center text-foreground">
           <div class="bg-primary/10 py-1 text-[10px] font-semibold text-primary">TH {{ calendar.month }}</div>
           <div class="py-1 text-2xl font-semibold tabular-nums">{{ calendar.day }}</div>
         </div>
-        <Badge v-if="status" :variant="status.variant" class="absolute right-3 top-3 max-w-[calc(100%-5rem)] shadow-sm">{{ status.label }}</Badge>
+        <Badge v-if="status" :variant="status.variant" class="absolute right-3 top-3 max-w-[calc(100%-5rem)]">{{ status.label }}</Badge>
       </div>
       <div class="flex flex-1 flex-col p-4">
-        <Badge v-if="event.category" variant="secondary" class="mb-2 self-start">{{ categoryLabel(event.category) }}</Badge>
+        <Badge v-if="event.category" variant="outline" class="mb-2 self-start text-xs font-semibold uppercase tracking-widest text-muted-foreground">{{ categoryLabel(event.category) }}</Badge>
         <h3 class="mb-3 line-clamp-2 min-h-12 break-words text-base font-semibold tracking-tight transition-colors group-hover:text-primary">{{ event.title }}</h3>
         <p class="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
           <CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -68,9 +68,9 @@ const calendar = computed(() => {
           <div class="flex items-center justify-between gap-2 border-t pt-4">
             <div class="min-w-0">
               <span v-if="minPrice !== null && minPrice !== 0" class="block text-xs text-muted-foreground">Từ</span>
-              <span class="break-words font-semibold text-primary tabular-nums">{{ minPrice === null ? 'Chưa mở bán' : minPrice === 0 ? 'Miễn phí' : formatPrice(minPrice) }}</span>
+              <span class="break-words font-semibold text-brand tabular-nums">{{ minPrice === null ? 'Chưa mở bán' : minPrice === 0 ? 'Miễn phí' : formatPrice(minPrice) }}</span>
             </div>
-            <Button as="span" size="sm" class="shrink-0">{{ phase === 'ended' || soldOut ? 'Xem' : 'Đặt vé' }}</Button>
+            <Button as="span" size="sm" class="shrink-0" :class="phase === 'ended' || soldOut ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'">{{ phase === 'ended' || soldOut ? 'Xem' : 'Đặt vé' }}</Button>
           </div>
         </div>
       </div>

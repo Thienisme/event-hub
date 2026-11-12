@@ -4,9 +4,9 @@ import { useToastStore } from '../stores/toast';
 const toastStore = useToastStore();
 
 const typeClass: Record<string, string> = {
-  success: 'bg-green-50 text-green-700 border-green-200',
-  error: 'bg-red-50 text-red-700 border-red-200',
-  info: 'bg-white text-gray-700 border-gray-200',
+  success: 'bg-success/10 text-success border-success/30',
+  error: 'bg-danger/10 text-danger border-danger/30',
+  info: 'bg-background text-muted-foreground border-border',
 };
 
 const typeIcon: Record<string, string> = {
@@ -35,7 +35,7 @@ const typeIcon: Record<string, string> = {
       <div
         v-for="toast in toastStore.toasts"
         :key="toast.id"
-        class="flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg text-sm font-medium"
+        class="flex items-start gap-3 px-4 py-3 rounded-lg border shadow-xs text-sm font-medium"
         :class="typeClass[toast.type]"
       >
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

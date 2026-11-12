@@ -70,27 +70,27 @@ async function savePassword() {
 <template>
   <div class="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
     <div>
-      <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-900">Hồ sơ của tôi</h1>
-      <p class="mt-2 text-sm text-gray-600">Quản lý thông tin cá nhân và mật khẩu tài khoản.</p>
+      <h1 class="text-2xl sm:text-3xl font-extrabold text-foreground">Hồ sơ của tôi</h1>
+      <p class="mt-2 text-sm text-muted-foreground">Quản lý thông tin cá nhân và mật khẩu tài khoản.</p>
     </div>
-    <p v-if="loading" role="status" class="text-sm text-gray-500">Đang tải hồ sơ...</p>
+    <p v-if="loading" role="status" class="text-sm text-muted-foreground">Đang tải hồ sơ...</p>
     <div v-else-if="!auth.user" class="space-y-3">
-      <p role="alert" class="text-sm text-red-600">Không thể tải hồ sơ. Vui lòng thử lại.</p>
+      <p role="alert" class="text-sm text-danger">Không thể tải hồ sơ. Vui lòng thử lại.</p>
       <Button variant="outline" @click="loadProfile">Thử lại</Button>
     </div>
     <template v-else>
-      <Card class="bg-white border border-gray-200">
+      <Card>
         <CardHeader><CardTitle as="h2">Thông tin tài khoản</CardTitle></CardHeader>
         <CardContent>
           <dl class="grid gap-5 sm:grid-cols-3">
-            <div class="min-w-0"><dt class="text-gray-500">Email</dt><dd class="mt-1 break-words font-medium">{{ auth.user.email }}</dd></div>
-            <div><dt class="text-gray-500">Vai trò</dt><dd class="mt-1 font-medium">{{ roleLabel }}</dd></div>
-            <div><dt class="text-gray-500">Ngày tạo tài khoản</dt><dd class="mt-1 font-medium">{{ formatDateTime(auth.user.createdAt) }}</dd></div>
+            <div class="min-w-0"><dt class="text-muted-foreground">Email</dt><dd class="mt-1 break-words font-medium">{{ auth.user.email }}</dd></div>
+            <div><dt class="text-muted-foreground">Vai trò</dt><dd class="mt-1 font-medium">{{ roleLabel }}</dd></div>
+            <div><dt class="text-muted-foreground">Ngày tạo tài khoản</dt><dd class="mt-1 font-medium">{{ formatDateTime(auth.user.createdAt) }}</dd></div>
           </dl>
         </CardContent>
       </Card>
       <div class="grid gap-6 md:grid-cols-2 items-start">
-        <Card class="bg-white border border-gray-200">
+        <Card>
           <CardHeader>
             <CardTitle as="h2">Đổi họ tên</CardTitle>
             <CardDescription>Họ và tên có từ 2 đến 191 ký tự.</CardDescription>
@@ -101,12 +101,12 @@ async function savePassword() {
                 <Label for="profile-name">Họ và tên</Label>
                 <Input id="profile-name" v-model="fullName" type="text" autocomplete="name" required :disabled="savingName" :aria-invalid="!!nameError" :aria-describedby="nameError ? 'name-error' : undefined" />
               </div>
-              <p v-if="nameError" id="name-error" role="alert" class="text-sm text-red-600">{{ nameError }}</p>
-              <Button type="submit" :disabled="savingName || nameUnchanged" class="w-full sm:w-auto bg-indigo-600 text-white hover:bg-indigo-700">{{ savingName ? 'Đang lưu...' : 'Lưu' }}</Button>
+              <p v-if="nameError" id="name-error" role="alert" class="text-sm text-danger">{{ nameError }}</p>
+              <Button type="submit" :disabled="savingName || nameUnchanged" class="w-full sm:w-auto">{{ savingName ? 'Đang lưu...' : 'Lưu' }}</Button>
             </form>
           </CardContent>
         </Card>
-        <Card class="bg-white border border-gray-200">
+        <Card>
           <CardHeader>
             <CardTitle as="h2">Đổi mật khẩu</CardTitle>
             <CardDescription>Mật khẩu mới có ít nhất 8 ký tự và khác mật khẩu hiện tại.</CardDescription>
@@ -127,9 +127,9 @@ async function savePassword() {
                   <Label for="confirm-password">Nhập lại mật khẩu mới</Label>
                   <Input id="confirm-password" v-model="confirmation" type="password" autocomplete="new-password" minlength="8" required />
                 </div>
-                <Button type="submit" :disabled="savingPassword" class="w-full sm:w-auto bg-indigo-600 text-white hover:bg-indigo-700">{{ savingPassword ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu' }}</Button>
+                <Button type="submit" :disabled="savingPassword" class="w-full sm:w-auto">{{ savingPassword ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu' }}</Button>
               </fieldset>
-              <p v-if="passwordError" id="password-error" role="alert" class="text-sm text-red-600">{{ passwordError }}</p>
+              <p v-if="passwordError" id="password-error" role="alert" class="text-sm text-danger">{{ passwordError }}</p>
             </form>
           </CardContent>
         </Card>

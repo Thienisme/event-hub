@@ -145,19 +145,19 @@ function title(scan: CheckInResponse): string {
 }
 
 function resultClass(scan: CheckInResponse): string {
-  if (scan.result === 'VALID') return 'border-green-600 bg-green-50 text-green-900';
-  if (scan.result === 'ALREADY_USED') return 'border-orange-600 bg-orange-50 text-orange-900';
-  return 'border-red-600 bg-red-50 text-red-900';
+  if (scan.result === 'VALID') return 'border-success bg-success/10 text-foreground';
+  if (scan.result === 'ALREADY_USED') return 'border-warning bg-warning/10 text-foreground';
+  return 'border-danger bg-danger/10 text-foreground';
 }
 </script>
 
 <template>
   <main class="min-h-screen bg-surface px-4 py-8 sm:px-6 lg:px-8">
-    <div class="mx-auto max-w-7xl space-y-6">
+    <div class="mx-auto max-w-6xl space-y-6">
       <Button as-child variant="outline" size="sm"><router-link :to="{ name: 'MyEvents' }"><ArrowLeft class="size-4" aria-hidden="true" />Sự kiện của tôi</router-link></Button>
       <header class="space-y-2">
         <p class="text-sm font-medium text-primary">Soát vé QR</p>
-        <h1 class="break-words text-3xl font-bold tracking-tight">{{ stats?.eventTitle || 'Soát vé sự kiện' }}</h1>
+        <h1 class="break-words text-3xl sm:text-4xl font-extrabold tracking-tight">{{ stats?.eventTitle || 'Soát vé sự kiện' }}</h1>
         <p v-if="stats" class="text-xl font-semibold tabular-nums">Đã vào cổng: {{ stats.checkedIn }} / {{ stats.total }}</p>
         <p v-else-if="statsLoading" class="text-muted-foreground">Đang tải thống kê...</p>
         <div v-if="statsError" role="alert" class="space-y-2">
@@ -167,15 +167,15 @@ function resultClass(scan: CheckInResponse): string {
       </header>
 
       <div class="grid items-start gap-6 lg:grid-cols-2">
-        <Card class="gap-5 rounded-2xl p-5 shadow-sm sm:p-6">
+        <Card class="shadow-none ring-0 border border-border bg-background gap-5 rounded-lg p-5 sm:p-6">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="flex items-center gap-2 text-lg font-semibold"><ScanLine class="size-5" aria-hidden="true" />Quét mã QR</h2>
             <Button variant="outline" :aria-pressed="cameraEnabled" @click="toggleCamera"><Camera class="size-4" aria-hidden="true" />{{ cameraEnabled ? 'Tắt camera' : 'Bật camera' }}</Button>
           </div>
-          <div v-if="cameraEnabled" class="overflow-hidden rounded-xl bg-black">
+          <div v-if="cameraEnabled" class="overflow-hidden rounded-lg bg-foreground">
             <QrcodeStream @detect="detect" @error="handleCameraError" />
           </div>
-          <p v-else class="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Bật camera và đưa mã QR vào khung hình, hoặc nhập mã bên dưới.</p>
+          <p v-else class="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Bật camera và đưa mã QR vào khung hình, hoặc nhập mã bên dưới.</p>
           <p v-if="cameraError" role="alert" class="text-sm text-danger">{{ cameraError }} Bạn có thể dùng ô nhập mã tay.</p>
           <form class="space-y-3 border-t pt-5" @submit.prevent="checkCode(manualCode)">
             <Label for="qr-code">Nhập mã vé thủ công</Label>
@@ -187,8 +187,8 @@ function resultClass(scan: CheckInResponse): string {
         <div class="space-y-6">
           <p v-if="submitting" role="status" class="font-medium">Đang kiểm tra vé...</p>
           <section aria-live="polite" aria-atomic="true">
-            <Card v-if="latest" class="gap-3 rounded-2xl border-2 p-6 shadow-sm" :class="resultClass(latest)">
-              <h2 class="break-words text-2xl font-bold sm:text-3xl">{{ title(latest) }}</h2>
+            <Card v-if="latest" class="shadow-none ring-0 border border-border bg-background gap-3 rounded-lg p-6" :class="resultClass(latest)">
+              <h2 class="break-words text-2xl font-bold sm:text-3xl" :class="latest.result === 'VALID' ? 'text-success' : latest.result === 'ALREADY_USED' ? 'text-warning' : 'text-danger'">{{ title(latest) }}</h2>
               <p class="break-words">{{ latest.message }}</p>
               <template v-if="latest.ticket">
                 <p v-if="latest.ticket.ticketTypeName" class="break-words text-lg font-semibold">Loại vé: {{ latest.ticket.ticketTypeName }}</p>
@@ -196,14 +196,14 @@ function resultClass(scan: CheckInResponse): string {
                 <p v-if="latest.result === 'WRONG_EVENT'" class="break-words font-semibold">Sự kiện của vé: {{ latest.ticket.eventTitle }}</p>
               </template>
             </Card>
-            <Card v-else class="rounded-2xl border-dashed p-8 text-center text-muted-foreground">Kết quả kiểm tra vé sẽ hiển thị tại đây.</Card>
+            <Card v-else class="shadow-none ring-0 border border-border bg-background rounded-lg border-dashed p-8 text-center text-muted-foreground">Kết quả kiểm tra vé sẽ hiển thị tại đây.</Card>
           </section>
-          <Card class="gap-4 rounded-2xl p-5 shadow-sm sm:p-6">
+          <Card class="shadow-none ring-0 border border-border bg-background gap-4 rounded-lg p-5 sm:p-6">
             <h2 class="text-lg font-semibold">10 lượt quét gần nhất</h2>
             <p v-if="!history.length" class="text-sm text-muted-foreground">Chưa có lượt kiểm tra nào.</p>
             <ol v-else class="space-y-3">
-              <li v-for="scan in history" :key="scan.id" class="space-y-1 rounded-xl border-l-4 p-3" :class="resultClass(scan)">
-                <p class="break-words font-semibold">{{ title(scan) }}</p>
+              <li v-for="scan in history" :key="scan.id" class="space-y-1 rounded-lg border p-3" :class="resultClass(scan)">
+                <p class="break-words font-semibold" :class="scan.result === 'VALID' ? 'text-success' : scan.result === 'ALREADY_USED' ? 'text-warning' : 'text-danger'">{{ title(scan) }}</p>
                 <p class="break-words text-sm">{{ scan.message }}</p>
                 <p v-if="scan.ticket" class="break-words text-sm">{{ scan.ticket.ticketTypeName }} · {{ scan.ticket.holderName }}<span v-if="scan.result === 'WRONG_EVENT'"> · {{ scan.ticket.eventTitle }}</span></p>
                 <p class="text-xs">{{ formatDateTime(scan.scannedAt) }}</p>

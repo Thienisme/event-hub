@@ -66,10 +66,10 @@ onUnmounted(() => inFlight?.abort());
 
 <template>
   <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+    <div class="max-w-6xl mx-auto space-y-6">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Tổng quan hệ thống</h1>
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">Tổng quan hệ thống</h1>
           <p class="mt-1 text-sm text-muted-foreground">Số liệu toàn bộ nền tảng</p>
         </div>
 
@@ -105,7 +105,7 @@ onUnmounted(() => inFlight?.abort());
       >
         <template #skeleton>
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <Card v-for="n in 4" :key="n" class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
+            <Card v-for="n in 4" :key="n" class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
               <Skeleton class="h-3 w-20 bg-muted rounded animate-pulse" />
               <Skeleton class="mt-3 h-8 w-16 bg-muted rounded animate-pulse" />
             </Card>
@@ -115,31 +115,31 @@ onUnmounted(() => inFlight?.abort());
         <div class="space-y-6">
           <!-- Thẻ số liệu -->
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Người dùng</p><span class="rounded-full bg-primary/10 p-2 text-primary"><Users class="size-5" aria-hidden="true" /></span></div>
-              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-foreground">{{ stats?.users ?? 0 }}</p>
+            <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Người dùng</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><Users class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">{{ stats?.users ?? 0 }}</p>
               <p class="mt-1 text-xs text-muted-foreground">
                 +{{ stats?.organizers ?? 0 }} ban tổ chức
               </p>
             </Card>
 
-            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Sự kiện</p><span class="rounded-full bg-info/10 p-2 text-info"><CalendarDays class="size-5" aria-hidden="true" /></span></div>
-              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-primary">{{ stats?.events ?? 0 }}</p>
+            <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Sự kiện</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><CalendarDays class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-primary">{{ stats?.events ?? 0 }}</p>
               <p class="mt-1 text-xs text-muted-foreground">đang có trên nền tảng</p>
             </Card>
 
-            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Đơn hàng</p><span class="rounded-full bg-warning/10 p-2 text-warning"><ShoppingCart class="size-5" aria-hidden="true" /></span></div>
-              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-foreground">{{ stats?.orders ?? 0 }}</p>
+            <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Đơn hàng</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><ShoppingCart class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">{{ stats?.orders ?? 0 }}</p>
               <p class="mt-1 text-xs text-muted-foreground">
                 {{ stats?.confirmedOrders ?? 0 }} đã xác nhận
               </p>
             </Card>
 
-            <Card class="bg-card border border-border rounded-2xl gap-0 shadow-sm p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Doanh thu</p><span class="rounded-full bg-success/10 p-2 text-success"><Wallet class="size-5" aria-hidden="true" /></span></div>
-              <p class="mt-2 break-words text-2xl lg:text-3xl font-semibold tabular-nums text-success">
+            <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Doanh thu</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><Wallet class="size-5" aria-hidden="true" /></span></div>
+              <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">
                 {{ formatPrice(stats?.revenue ?? 0) }}
               </p>
               <p class="mt-1 text-xs text-muted-foreground">từ đơn đã xác nhận</p>
@@ -147,7 +147,7 @@ onUnmounted(() => inFlight?.abort());
           </div>
 
           <!-- Đơn hàng gần đây -->
-          <Card class="bg-card border border-border rounded-2xl gap-0 py-0 shadow-sm overflow-hidden">
+          <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 py-0 overflow-hidden">
             <header class="px-5 py-4 border-b border-border">
               <h2 class="text-lg font-semibold text-foreground">Đơn hàng gần đây</h2>
             </header>
@@ -156,7 +156,7 @@ onUnmounted(() => inFlight?.abort());
               <Inbox class="mx-auto mb-3 size-10 text-muted-foreground" aria-hidden="true" />Chưa có đơn hàng nào.
             </div>
 
-            <div v-else><div class="grid gap-3 p-4 md:hidden"><article v-for="order in stats.recentOrders" :key="order.id" class="rounded-xl border bg-card p-4 shadow-sm space-y-3 break-all">
+            <div v-else><div class="grid gap-3 p-4 md:hidden"><article v-for="order in stats.recentOrders" :key="order.id" class="rounded-lg border bg-background p-4 space-y-3 break-all">
                     <div>
                       #{{ order.id.slice(0, 8).toUpperCase() }}
                     </div>
@@ -186,7 +186,7 @@ onUnmounted(() => inFlight?.abort());
                 </TableHeader>
                 <TableBody class="divide-y divide-border">
                   <TableRow v-for="order in stats.recentOrders" :key="order.id" class="hover:bg-surface/70">
-                    <TableCell class="px-5 py-3 font-mono text-xs font-semibold text-foreground">
+                    <TableCell class="px-5 py-3 text-xs font-semibold text-foreground">
                       #{{ order.id.slice(0, 8).toUpperCase() }}
                     </TableCell>
                     <TableCell class="px-5 py-3">
