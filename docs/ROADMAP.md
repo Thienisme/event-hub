@@ -6,22 +6,22 @@ Ký hiệu người làm: **C** = Codex (việc khó: tiền, tranh chấp dữ 
 
 ## Giai đoạn 1: Những thứ người dùng thấy thiếu ngay
 
-Đang làm trên nhánh `feat/phase1-email-sharing`.
+Xong ở PR #16.
 
-- [ ] **1A. Hạ tầng email + quên mật khẩu + xác minh email** (C)
+- [x] **1A. Hạ tầng email + quên mật khẩu + xác minh email** (C, #16)
   - `utils/mailer.ts`: driver `log` (mặc định, ghi file vào `MAIL_OUTBOX_DIR` cho test) và `brevo` (API HTTP, không cần thư viện).
   - Quên mật khẩu: token ngẫu nhiên, chỉ lưu bản băm, hết hạn 30 phút, dùng một lần; đặt lại thì tăng `tokenVersion`.
   - Xác minh email khi đăng ký: chưa xác minh vẫn dùng được, chỉ hiện nhắc.
-- [ ] **1B. Thời gian mở bán + link dạng chữ + ảnh xem trước khi chia sẻ** (C)
+- [x] **1B. Thời gian mở bán + link dạng chữ + ảnh xem trước khi chia sẻ** (C)
   - `saleStart`/`saleEnd` cho từng loại vé, chặn ngay trong câu `updateMany` giữ vé.
   - `slug` cho sự kiện (`/events/hoi-thao-web3`), link UUID cũ vẫn chạy.
   - Server chèn thẻ OG (tiêu đề, mô tả, ảnh) vào `index.html` cho `/events/:slug`, để dán link vào Facebook/Zalo hiện ảnh.
-- [ ] **1C. Nút trên trang sự kiện** (O)
+- [x] **1C. Nút trên trang sự kiện** (O)
   - Thêm vào lịch (file `.ics` và Google Calendar), mở Google Maps, chia sẻ / sao chép link.
-- [ ] **1D. Email vé và nhắc lịch** (C, sau 1A)
+- [x] **1D. Email vé và nhắc lịch** (C, sau 1A)
   - Gửi email kèm mã vé sau khi thanh toán (không được làm hỏng việc thanh toán nếu gửi lỗi).
   - Nhắc lịch 24 giờ trước sự kiện, mỗi đơn chỉ gửi một lần.
-- [ ] **Anh tự làm:** tạo tài khoản Brevo, xác minh email người gửi, đặt `BREVO_API_KEY`, `MAIL_FROM`, `APP_PUBLIC_URL` trên Render.
+- [x] **Anh tự làm:** tạo tài khoản Brevo, xác minh email người gửi, đặt `BREVO_API_KEY`, `MAIL_FROM`, `APP_PUBLIC_URL` trên Render.
 
 ## Giai đoạn 2: Bán hàng thật
 
