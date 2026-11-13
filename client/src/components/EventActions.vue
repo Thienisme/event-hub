@@ -55,10 +55,10 @@ const handleShare = async () => {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-2">
+  <div class="flex flex-wrap items-center gap-1">
     <DropdownMenu>
       <DropdownMenuTrigger as-child>
-        <Button variant="outline" aria-label="Thêm sự kiện vào lịch">
+        <Button variant="ghost" size="sm" aria-label="Thêm sự kiện vào lịch">
           <Calendar />Thêm vào lịch
         </Button>
       </DropdownMenuTrigger>
@@ -73,7 +73,7 @@ const handleShare = async () => {
     </DropdownMenu>
     <Button
       as-child
-      variant="outline"
+      variant="ghost" size="sm"
       aria-label="Xem bản đồ sự kiện trên Google Maps"
     >
       <a :href="mapUrl" target="_blank" rel="noopener noreferrer">
@@ -81,7 +81,7 @@ const handleShare = async () => {
       </a>
     </Button>
     <Button
-      variant="outline"
+      variant="ghost" size="sm"
       aria-label="Chia sẻ liên kết sự kiện"
       @click="handleShare"
     >

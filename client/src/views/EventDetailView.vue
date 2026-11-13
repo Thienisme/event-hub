@@ -15,7 +15,7 @@ import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -371,6 +371,7 @@ const handleDelete = async () => {
             <Badge :variant="eventPhase === 'ended' ? 'muted' : eventPhase === 'ongoing' ? 'success' : 'info'">{{ phaseLabel }}</Badge>
           </div>
           <h1 class="break-words text-3xl sm:text-4xl font-extrabold tracking-tight">{{ event.title }}</h1>
+          <EventActions :event="event" class="-ml-2" />
         </div>
         <div v-if="authStore.isOrganizer" class="flex shrink-0 flex-wrap gap-2">
           <Button as-child variant="outline" class="rounded-md"><router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil />Chỉnh sửa sự kiện</router-link></Button>
@@ -380,26 +381,35 @@ const handleDelete = async () => {
       <AppAlert v-if="deleteError" :message="deleteError" type="error" class="mt-4" />
 
       <div class="mt-8 grid min-w-0 items-start gap-8 lg:grid-cols-3">
-        <div class="min-w-0 space-y-8 lg:col-span-2">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5 sm:col-span-2">
-              <CalendarDays class="mt-1 size-5 shrink-0 text-tone-ink" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Thời gian</p><p v-for="line in eventDates.lines" :key="line" class="mt-1 break-words font-medium tabular-nums">{{ line }}</p></div>
+        <div class="min-w-0 space-y-10 lg:col-span-2">
+          <div class="divide-y divide-border rounded-lg border bg-background">
+            <div class="flex min-w-0 gap-4 p-5">
+              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-tone-soft text-tone-ink"><CalendarDays class="size-5" /></div>
+              <div class="min-w-0 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Thời gian</p>
+                <p class="break-words font-semibold tabular-nums">{{ eventDates.lines[0] }}</p>
+                <p class="break-words text-sm tabular-nums text-muted-foreground">{{ eventDates.lines[1] }}</p>
+              </div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
-              <MapPin class="mt-1 size-5 shrink-0 text-tone-ink" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Địa điểm</p><p class="mt-1 break-words font-medium">{{ event.location }}</p></div>
+            <div class="flex min-w-0 gap-4 p-5">
+              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-tone-soft text-tone-ink"><MapPin class="size-5" /></div>
+              <div class="min-w-0 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Địa điểm</p>
+                <p class="break-words font-semibold">{{ event.location }}</p>
+              </div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
-              <UserRound class="mt-1 size-5 shrink-0 text-tone-ink" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Ban tổ chức</p><div class="mt-2 flex items-center gap-2"><Avatar><AvatarFallback class="bg-primary/10 text-xs text-primary">{{ organizerInitials }}</AvatarFallback></Avatar><p class="min-w-0 break-words font-medium">{{ event.organizer?.fullName || 'Chưa cập nhật' }}</p></div></div>
+            <div class="flex min-w-0 gap-4 p-5">
+              <Avatar class="size-10 shrink-0"><AvatarFallback class="bg-tone-soft text-xs text-tone-ink">{{ organizerInitials }}</AvatarFallback></Avatar>
+              <div class="min-w-0 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Ban tổ chức</p>
+                <p class="break-words font-semibold">{{ event.organizer?.fullName || 'Chưa cập nhật' }}</p>
+              </div>
             </div>
           </div>
-          <section class="rounded-lg border bg-background p-5 sm:p-6">
-            <h2 class="text-xl font-semibold tracking-tight">Giới thiệu</h2>
-            <p class="mt-4 whitespace-pre-line break-words leading-relaxed text-muted-foreground">{{ event.description?.trim() ? event.description : 'Ban tổ chức chưa thêm mô tả' }}</p>
+          <section class="max-w-prose">
+            <h2 class="text-xl font-bold tracking-tight">Giới thiệu</h2>
+            <p class="mt-4 whitespace-pre-line break-words text-base leading-7 text-foreground/80">{{ event.description?.trim() ? event.description : 'Ban tổ chức chưa thêm mô tả' }}</p>
           </section>
-          <EventActions :event="event" class="mt-6" />
         </div>
 
         <aside id="ticket-selection" ref="ticketSection" class="min-w-0 scroll-mt-20 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">

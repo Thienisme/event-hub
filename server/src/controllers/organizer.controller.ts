@@ -34,6 +34,7 @@ export const listMyEvents = async (req: Request, res: Response) => {
           title: true,
           location: true,
           bannerUrl: true,
+          category: true,
           startTime: true,
           endTime: true,
           createdAt: true,

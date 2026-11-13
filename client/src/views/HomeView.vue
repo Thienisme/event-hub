@@ -251,7 +251,7 @@ onUnmounted(() => {
       <header class="flex flex-wrap items-center justify-between gap-5 pt-4">
         <div class="min-w-0 space-y-3">
           <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Khám phá sự kiện</h1>
-          <p class="text-sm leading-6 text-muted-foreground sm:text-base">Tìm trải nghiệm mới, kết nối những điều bạn yêu.</p>
+          <p v-if="total !== null && !eventStore.loading && !errorMessage" class="text-sm leading-6 text-muted-foreground sm:text-base">{{ total.toLocaleString('vi-VN') }} sự kiện sắp diễn ra</p>
         </div>
         <Button v-if="authStore.isOrganizer" class="shrink-0" @click="router.push({ name: 'CreateEvent' })"><Plus class="size-4" aria-hidden="true" />Tạo sự kiện</Button>
       </header>

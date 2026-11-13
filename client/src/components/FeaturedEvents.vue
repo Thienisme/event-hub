@@ -15,26 +15,38 @@ const loading = ref(true);
 const activeIndex = ref(0);
 const failedImages = ref(new Set<string>());
 const controller = new AbortController();
-let interval: ReturnType<typeof setInterval> | undefined;
+const autoplayDuration = 6000;
+const paused = ref(false);
+const progressKey = ref(0);
+let remaining = autoplayDuration;
+let startedAt = 0;
+let interval: ReturnType<typeof setTimeout> | undefined;
 let motionQuery: MediaQueryList | undefined;
 let hovered = false;
 let focused = false;
 
 function stopAutoplay() {
-  if (interval !== undefined) clearInterval(interval);
+  if (interval !== undefined) clearTimeout(interval);
   interval = undefined;
 }
 
 function syncAutoplay() {
+  if (interval !== undefined) remaining = Math.max(0, remaining - (performance.now() - startedAt));
   stopAutoplay();
-  if (events.value.length > 1 && !hovered && !focused && !motionQuery?.matches) {
-    interval = setInterval(() => {
-      activeIndex.value = (activeIndex.value + 1) % events.value.length;
-    }, 6000);
+  paused.value = hovered || focused || !!motionQuery?.matches;
+  if (events.value.length > 1 && !paused.value) {
+    startedAt = performance.now();
+    interval = setTimeout(() => {
+      interval = undefined;
+      selectSlide(activeIndex.value + 1);
+    }, remaining);
   }
 }
 
 function selectSlide(index: number) {
+  stopAutoplay();
+  remaining = autoplayDuration;
+  progressKey.value += 1;
   activeIndex.value = (index + events.value.length) % events.value.length;
   syncAutoplay();
 }
@@ -125,8 +137,9 @@ onUnmounted(() => {
           @error="failedImages.add(event.id)"
         />
         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+        <div class="absolute inset-0 bg-gradient-to-r from-black/75 via-black/35 to-transparent" />
         <div
-          class="absolute inset-x-0 bottom-0 max-w-2xl space-y-4 p-6 sm:p-10"
+          class="absolute inset-x-0 bottom-0 max-w-xl space-y-4 p-6 sm:p-10"
           :class="events.length > 1 ? 'pb-24 sm:pb-24' : ''"
         >
           <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-widest text-white/80">
@@ -149,7 +162,7 @@ onUnmounted(() => {
           <p class="font-semibold tabular-nums text-white">{{ priceLabel(event) }}</p>
           <Button as-child class="bg-brand text-brand-foreground hover:bg-brand/90 motion-reduce:transform-none motion-reduce:transition-none">
             <RouterLink :to="`/events/${event.slug ?? event.id}`">Đặt vé ngay</RouterLink>
-          </Button>
+          </button>
         </div>
       </article>
 
@@ -161,38 +174,58 @@ onUnmounted(() => {
             type="button"
             :aria-label="`Xem sự kiện ${index + 1}`"
             :aria-current="index === activeIndex ? 'true' : undefined"
-            class="flex h-9 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            class="flex h-6 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
             @click="selectSlide(index)"
           >
-            <span
-              class="h-2 rounded-full"
-              :class="index === activeIndex ? 'w-6 bg-white' : 'w-2 bg-white/50'"
-            />
+            <span class="h-1 w-10 overflow-hidden rounded-full bg-white/30">
+              <span
+                :key="`${progressKey}-${index}`"
+                class="block h-full rounded-full bg-white"
+                :class="index === activeIndex ? 'slide-progress' : index < activeIndex ? 'w-full' : 'w-0'"
+                :style="index === activeIndex ? { animationDuration: `${autoplayDuration}ms`, animationPlayState: paused ? 'paused' : 'running' } : undefined"
+              />
+            </span>
           </button>
         </div>
-        <div class="absolute bottom-6 right-6 z-20 flex gap-2 sm:bottom-10 sm:right-10">
-          <Button
+        <div class="absolute bottom-6 right-6 z-20 flex h-10 items-center gap-2 sm:bottom-10 sm:right-10">
+          <span class="text-sm font-semibold tabular-nums text-white">{{ String(activeIndex + 1).padStart(2, '0') }} / {{ String(events.length).padStart(2, '0') }}</span>
+          <button
             type="button"
-            variant="outline"
-            size="icon"
             aria-label="Sự kiện trước"
-            class="bg-white/90 text-foreground shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+            class="hidden size-10 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white transition-colors hover:bg-black/55 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:flex"
             @click="selectSlide(activeIndex - 1)"
           >
-            <ChevronLeft class="size-4" aria-hidden="true" />
-          </Button>
-          <Button
+            <ChevronLeft class="size-5" aria-hidden="true" />
+          </button>
+          <button
             type="button"
-            variant="outline"
-            size="icon"
             aria-label="Sự kiện tiếp theo"
-            class="bg-white/90 text-foreground shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+            class="hidden size-10 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white transition-colors hover:bg-black/55 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:flex"
             @click="selectSlide(activeIndex + 1)"
           >
-            <ChevronRight class="size-4" aria-hidden="true" />
-          </Button>
+            <ChevronRight class="size-5" aria-hidden="true" />
+          </button>
         </div>
       </template>
     </template>
   </section>
 </template>
+
+<style scoped>
+.slide-progress {
+  width: 0;
+  animation: slide-progress linear forwards;
+}
+
+@keyframes slide-progress {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-progress {
+    width: 100%;
+    animation: none;
+  }
+}
+</style>

@@ -306,16 +306,14 @@ const copyOrderId = async (id: string) => {
             <Button @click="router.push({ name: 'Home' })">Khám phá sự kiện</Button>
           </Card>
           <div v-else class="space-y-5">
-            <section v-if="activeTab === 'all' && nextOrder" class="relative isolate aspect-square overflow-hidden rounded-lg bg-primary sm:aspect-[21/9] lg:aspect-[3/1]" aria-label="Sự kiện tiếp theo">
-              <img v-if="imageOf(nextOrder)" :src="imageOf(nextOrder)!" alt="" class="absolute inset-0 h-full w-full object-cover" @error="failedImages.add(nextOrder.id)" />
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <TicketDate :value="eventOf(nextOrder)?.startTime" :category="eventOf(nextOrder)?.category" class="absolute left-3 top-3 sm:left-6 sm:top-6" />
-              <div class="absolute inset-x-0 bottom-0 space-y-2 p-4 sm:p-6">
-                <p class="text-xs font-semibold uppercase tracking-widest text-white/80">Sự kiện tiếp theo · {{ nextCountdown }}</p>
-                <h2 class="line-clamp-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{{ eventOf(nextOrder)?.title }}</h2>
-                <p class="line-clamp-2 text-sm text-white/85">{{ formatDateTime(eventOf(nextOrder)?.startTime) }} · {{ eventOf(nextOrder)?.location }}</p>
-                <Button class="bg-background text-foreground hover:bg-background/90" @click="revealNextQr">Xem {{ nextOrder.tickets.length }} mã QR</Button>
+            <section v-if="activeTab === 'all' && nextOrder" :data-tone="eventOf(nextOrder)?.category" class="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border bg-background p-4 sm:flex-nowrap" aria-label="Sự kiện sắp tới">
+              <TicketDate :value="eventOf(nextOrder)?.startTime" :category="eventOf(nextOrder)?.category" class="shrink-0" />
+              <div class="min-w-0 flex-1 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">Sắp tới · {{ nextCountdown }}</p>
+                <h2 class="line-clamp-1 font-semibold">{{ eventOf(nextOrder)?.title }}</h2>
+                <p class="line-clamp-1 text-sm text-muted-foreground">{{ formatDateTime(eventOf(nextOrder)?.startTime) }} · {{ eventOf(nextOrder)?.location }}</p>
               </div>
+              <Button class="w-full shrink-0 sm:w-auto" @click="revealNextQr"><QrCode class="size-4" aria-hidden="true" />Mở mã QR</Button>
             </section>
             <article v-for="order in visibleOrders" :data-tone="isClosed(order) ? undefined : eventOf(order)?.category" :id="`order-${order.id}`" :key="order.id" class="group relative min-w-0 scroll-mt-6 rounded-lg border bg-background">
               <div class="grid min-w-0 sm:grid-cols-[176px_minmax(0,1fr)_200px]">
