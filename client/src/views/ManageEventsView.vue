@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import EventBanner from '@/components/EventBanner.vue';
-import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal } from '@lucide/vue';
+import { Plus, Search, CalendarDays, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal } from '@lucide/vue';
 
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -15,7 +16,7 @@ import { useToastStore } from '../stores/toast';
 import apiClient from '../api/axios';
 import DataState from '../components/DataState.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
-import { formatDateTime, formatPrice } from '../utils/format';
+import { APP_TIMEZONE, formatDateTime, formatPrice, getEventPhase } from '../utils/format';
 
 const router = useRouter();
 const manageStore = useManageStore();
@@ -50,6 +51,33 @@ const soldTickets = (event: ManagedEvent) =>
 
 const totalTickets = (event: ManagedEvent) =>
   event.ticketTypes.reduce((sum, type) => sum + type.totalQuantity, 0);
+
+/** Giai đoạn sự kiện: sắp diễn ra / đang diễn ra / đã kết thúc. */
+const PHASE_META = {
+  upcoming: { label: 'Sắp diễn ra', variant: 'info' as const },
+  ongoing: { label: 'Đang diễn ra', variant: 'success' as const },
+  ended: { label: 'Đã kết thúc', variant: 'muted' as const },
+};
+
+const phaseOf = (event: ManagedEvent) => getEventPhase(event.startTime, event.endTime);
+
+/** Ô ngày kiểu tờ lịch (ngày + tháng) theo giờ Việt Nam. */
+const calendarOf = (event: ManagedEvent) => {
+  const date = new Date(event.startTime);
+  if (Number.isNaN(date.getTime())) return { day: '—', month: '—' };
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: APP_TIMEZONE, day: '2-digit', month: '2-digit' }).formatToParts(date);
+  return {
+    day: parts.find((part) => part.type === 'day')?.value ?? '—',
+    month: parts.find((part) => part.type === 'month')?.value ?? '—',
+  };
+};
+
+/** Phần trăm vé đã bán, để tô đậm thanh tiến độ khi sắp cháy hàng. */
+const soldPercent = (event: ManagedEvent) => {
+  const total = totalTickets(event);
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((soldTickets(event) / total) * 100));
+};
 
 const confirmDelete = async () => {
   if (!pendingDelete.value) return;
@@ -91,7 +119,6 @@ onUnmounted(() => {
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 class="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">Sự kiện của tôi</h1>
-          <p class="mt-1 text-sm text-muted-foreground">Quản lý các sự kiện bạn đang phụ trách</p>
         </div>
 
         <Button
@@ -173,57 +200,80 @@ onUnmounted(() => {
             <Card
               v-for="event in manageStore.events"
               :key="event.id"
+              :data-tone="event.category || undefined"
               class="shadow-none ring-0 border border-border bg-background group gap-0 rounded-lg p-4 transition-colors"
             >
-              <div class="flex flex-col sm:flex-row sm:items-start gap-4">
-                <div class="aspect-video w-full overflow-hidden rounded-lg sm:w-40 lg:w-48 shrink-0"><EventBanner :src="event.bannerUrl" :alt="event.title" /></div><div class="flex-1 min-w-0">
-                  <h3 class="font-semibold tracking-tight text-foreground break-words">
-                    <router-link
-                      :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"
-                      class="hover:text-primary transition-colors"
-                    >
-                      {{ event.title }}
-                    </router-link>
-                  </h3>
-
-                  <p class="mt-1 text-sm text-muted-foreground break-all flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span class="inline-flex min-w-0 items-start gap-1 break-words">
-                      <CalendarDays class="size-4 shrink-0" aria-hidden="true" />
-                      {{ formatDateTime(event.startTime) }}
-                    </span>
-                    <span class="inline-flex min-w-0 items-start gap-1 break-words">
-                      <MapPin class="size-4 shrink-0" aria-hidden="true" />
-                      {{ event.location }}
-                    </span>
-                  </p>
-
-                  <p class="mt-2 text-xs tabular-nums text-muted-foreground">
-                    <strong class="text-foreground">{{ soldTickets(event) }}</strong>
-                    /
-                    {{ totalTickets(event) }} vé đã bán
-                    <span v-if="event.ticketTypes.length === 0" class="ml-2 text-muted-foreground">
-                      (chưa mở bán loại vé nào)
-                    </span>
-                  </p>
+              <div class="flex flex-col gap-4 sm:grid sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-center">
+                <div class="aspect-video w-full overflow-hidden rounded-lg">
+                  <EventBanner :src="event.bannerUrl" :alt="event.title">
+                    <template #placeholder>
+                      <div class="flex h-full w-full items-center justify-center bg-tone-soft">
+                        <div class="rounded-md bg-tone px-2 py-1 text-center text-tone-foreground">
+                          <div class="text-[10px] font-semibold uppercase tracking-widest">Tháng {{ calendarOf(event).month }}</div>
+                          <div class="text-xl font-extrabold tabular-nums leading-tight">{{ calendarOf(event).day }}</div>
+                        </div>
+                      </div>
+                    </template>
+                  </EventBanner>
                 </div>
 
-                <div class="flex items-center gap-2 shrink-0 sm:flex-col lg:flex-row">
-                  <Button as-child size="sm" variant="outline"><router-link
-                    :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"
-                    ><Eye class="size-4" aria-hidden="true" />Xem</router-link></Button>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="min-w-0 text-base font-semibold tracking-tight text-foreground break-words">
+                      <router-link
+                        :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"
+                        class="hover:text-primary transition-colors"
+                      >
+                        {{ event.title }}
+                      </router-link>
+                    </h3>
+                    <Badge :variant="PHASE_META[phaseOf(event)].variant">{{ PHASE_META[phaseOf(event)].label }}</Badge>
+                  </div>
 
-                  <Button as-child size="sm" variant="outline"><router-link
+                  <p class="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                    <CalendarDays class="size-4 shrink-0" aria-hidden="true" />
+                    <span class="line-clamp-1">{{ formatDateTime(event.startTime) }} · {{ event.location }}</span>
+                  </p>
+
+                  <div class="mt-3 flex items-center gap-3">
+                    <p class="shrink-0 text-sm tabular-nums text-muted-foreground">
+                      <span class="font-medium text-foreground">{{ soldTickets(event) }}</span>
+                      /
+                      {{ totalTickets(event) }} vé
+                    </p>
+                    <div
+                      v-if="totalTickets(event) > 0"
+                      class="h-1.5 w-40 overflow-hidden rounded-full bg-muted"
+                      role="img"
+                      :aria-label="`Đã bán ${soldPercent(event)}% số vé`"
+                    >
+                      <div
+                        class="h-full rounded-full transition-[width] duration-200"
+                        :class="soldPercent(event) >= 90 ? 'bg-brand' : 'bg-tone'"
+                        :style="{ width: `${soldPercent(event)}%` }"
+                      ></div>
+                    </div>
+                    <span v-else class="text-xs text-muted-foreground">Chưa mở bán loại vé nào</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <Button as-child size="sm"><router-link
                     :to="{ name: 'CheckIn', params: { id: event.id } }"
                     ><ScanLine class="size-4" aria-hidden="true" />Soát vé</router-link></Button>
 
-                  <Button as-child size="sm" variant="outline"><router-link
+                  <Button as-child size="sm" variant="ghost"><router-link
                     :to="{ name: 'PromoCodes', params: { id: event.id } }"
                     ><Percent class="size-4" aria-hidden="true" />Mã giảm giá</router-link></Button>
+
                   <DropdownMenu>
                     <DropdownMenuTrigger as-child>
                       <Button type="button" variant="ghost" size="icon-sm" aria-label="Thêm thao tác"><MoreHorizontal class="size-4" aria-hidden="true" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" class="shadow-none">
+                      <DropdownMenuItem as-child>
+                        <router-link :to="{ name: 'EventDetail', params: { id: event.slug ?? event.id } }"><Eye class="size-4" aria-hidden="true" />Xem</router-link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem as-child>
                         <router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil class="size-4" aria-hidden="true" />Sửa</router-link>
                       </DropdownMenuItem>

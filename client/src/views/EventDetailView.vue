@@ -15,7 +15,7 @@ import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -323,7 +323,7 @@ const handleDelete = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-surface pb-24 lg:pb-0 text-foreground">
+  <div class="min-h-screen bg-surface pb-24 lg:pb-0 text-foreground" :data-tone="event?.category || undefined">
     <div v-if="isLoading" class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6" role="status" aria-label="Đang tải thông tin sự kiện">
       <span class="sr-only">Đang tải thông tin sự kiện...</span>
       <Skeleton class="h-5 w-44" />
@@ -353,21 +353,25 @@ const handleDelete = async () => {
     </div>
 
     <div v-else-if="event" class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <Button variant="link" class="mb-5 h-auto px-0 text-muted-foreground hover:text-primary" @click="router.push({ name: 'Home' })">
+      <Button variant="link" class="mb-3 h-auto min-h-10 px-0 text-muted-foreground hover:text-primary" @click="router.push({ name: 'Home' })">
         <ArrowLeft />Quay lại danh sách
       </Button>
       <EventBanner :src="event.bannerUrl" :alt="event.title" class="rounded-lg [&>img]:aspect-video lg:[&>img]:aspect-[21/9]">
         <template #placeholder>
           <div class="flex aspect-[3/1] items-end rounded-lg bg-primary p-6 text-primary-foreground sm:aspect-[4/1] sm:p-10">
-            <div class="space-y-2"><p class="text-xs font-semibold uppercase tracking-widest text-primary-foreground/70">{{ categoryLabel(event.category ?? 'OTHER') }}</p><p class="text-2xl font-extrabold tabular-nums sm:text-4xl">{{ eventDates.banner }}</p></div>
+            <div class="space-y-2"><span class="inline-flex w-fit items-center gap-1.5 rounded-full bg-tone-soft px-2.5 py-0.5 text-xs font-semibold uppercase tracking-widest text-tone-ink"><span class="size-2 rounded-full bg-tone" aria-hidden="true" />{{ categoryLabel(event.category ?? 'OTHER') }}</span><p class="text-2xl font-extrabold tabular-nums sm:text-4xl">{{ eventDates.banner }}</p></div>
           </div>
         </template>
       </EventBanner>
 
       <div class="mt-8 flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div class="min-w-0 space-y-3">
-          <Badge :variant="eventPhase === 'ended' ? 'muted' : eventPhase === 'ongoing' ? 'success' : 'info'">{{ phaseLabel }}</Badge>
+          <div class="flex flex-wrap items-center gap-2">
+            <span v-if="event.category" class="inline-flex items-center gap-1.5 rounded-full bg-tone-soft px-2.5 py-0.5 text-xs font-semibold uppercase tracking-widest text-tone-ink"><span class="size-2 rounded-full bg-tone" aria-hidden="true" />{{ categoryLabel(event.category) }}</span>
+            <Badge :variant="eventPhase === 'ended' ? 'muted' : eventPhase === 'ongoing' ? 'success' : 'info'">{{ phaseLabel }}</Badge>
+          </div>
           <h1 class="break-words text-3xl sm:text-4xl font-extrabold tracking-tight">{{ event.title }}</h1>
+          <EventActions :event="event" class="-ml-2" />
         </div>
         <div v-if="authStore.isOrganizer" class="flex shrink-0 flex-wrap gap-2">
           <Button as-child variant="outline" class="rounded-md"><router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil />Chỉnh sửa sự kiện</router-link></Button>
@@ -377,31 +381,40 @@ const handleDelete = async () => {
       <AppAlert v-if="deleteError" :message="deleteError" type="error" class="mt-4" />
 
       <div class="mt-8 grid min-w-0 items-start gap-8 lg:grid-cols-3">
-        <div class="min-w-0 space-y-8 lg:col-span-2">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5 sm:col-span-2">
-              <CalendarDays class="mt-1 size-5 shrink-0 text-primary" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Thời gian</p><p v-for="line in eventDates.lines" :key="line" class="mt-1 break-words font-medium tabular-nums">{{ line }}</p></div>
+        <div class="min-w-0 space-y-10 lg:col-span-2">
+          <div class="divide-y divide-border rounded-lg border bg-background">
+            <div class="flex min-w-0 gap-4 p-5">
+              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-tone-soft text-tone-ink"><CalendarDays class="size-5" /></div>
+              <div class="min-w-0 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Thời gian</p>
+                <p class="break-words font-semibold tabular-nums">{{ eventDates.lines[0] }}</p>
+                <p class="break-words text-sm tabular-nums text-muted-foreground">{{ eventDates.lines[1] }}</p>
+              </div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
-              <MapPin class="mt-1 size-5 shrink-0 text-primary" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Địa điểm</p><p class="mt-1 break-words font-medium">{{ event.location }}</p></div>
+            <div class="flex min-w-0 gap-4 p-5">
+              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-tone-soft text-tone-ink"><MapPin class="size-5" /></div>
+              <div class="min-w-0 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Địa điểm</p>
+                <p class="break-words font-semibold">{{ event.location }}</p>
+              </div>
             </div>
-            <div class="flex min-w-0 gap-3 rounded-lg border bg-background p-5">
-              <UserRound class="mt-1 size-5 shrink-0 text-primary" />
-              <div class="min-w-0"><p class="text-sm text-muted-foreground">Ban tổ chức</p><div class="mt-2 flex items-center gap-2"><Avatar><AvatarFallback class="bg-primary/10 text-xs text-primary">{{ organizerInitials }}</AvatarFallback></Avatar><p class="min-w-0 break-words font-medium">{{ event.organizer?.fullName || 'Chưa cập nhật' }}</p></div></div>
+            <div class="flex min-w-0 gap-4 p-5">
+              <Avatar class="size-10 shrink-0"><AvatarFallback class="bg-tone-soft text-xs text-tone-ink">{{ organizerInitials }}</AvatarFallback></Avatar>
+              <div class="min-w-0 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Ban tổ chức</p>
+                <p class="break-words font-semibold">{{ event.organizer?.fullName || 'Chưa cập nhật' }}</p>
+              </div>
             </div>
           </div>
-          <section class="rounded-lg border bg-background p-5 sm:p-6">
-            <h2 class="text-xl font-semibold tracking-tight">Giới thiệu</h2>
-            <p class="mt-4 whitespace-pre-line break-words leading-relaxed text-muted-foreground">{{ event.description?.trim() ? event.description : 'Ban tổ chức chưa thêm mô tả' }}</p>
+          <section class="max-w-prose">
+            <h2 class="text-xl font-bold tracking-tight">Giới thiệu</h2>
+            <p class="mt-4 whitespace-pre-line break-words text-base leading-7 text-foreground/80">{{ event.description?.trim() ? event.description : 'Ban tổ chức chưa thêm mô tả' }}</p>
           </section>
-          <EventActions :event="event" class="mt-6" />
         </div>
 
         <aside id="ticket-selection" ref="ticketSection" class="min-w-0 scroll-mt-20 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
           <Card class="shadow-none ring-0 border border-border bg-background gap-0 overflow-hidden rounded-lg py-0">
-            <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-primary" />Chọn loại vé</CardTitle><p class="mt-2 text-sm leading-6 text-muted-foreground">Chọn số lượng, đặt vé rồi thanh toán để nhận mã QR.</p></CardHeader>
+            <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-tone-ink" />Chọn loại vé</CardTitle><p class="mt-2 text-sm leading-6 text-muted-foreground">Chọn số lượng, đặt vé rồi thanh toán để nhận mã QR.</p></CardHeader>
             <CardContent class="space-y-4 p-5 sm:p-6">
               <AppAlert :message="errorMessage" type="error" />
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
@@ -415,7 +428,7 @@ const handleDelete = async () => {
                     <span>Đã bán {{ soldQuantity(ticket) }} / {{ ticket.totalQuantity }}</span>
                     <span :class="ticket.availableQuantity > 0 && ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'text-brand font-medium' : ''">{{ ticket.availableQuantity <= 0 ? 'Hết vé' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? `Chỉ còn ${ticket.availableQuantity} vé` : `Còn ${ticket.availableQuantity}` }}</span>
                   </div>
-                  <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" role="progressbar" :aria-valuenow="soldQuantity(ticket)" :aria-valuemax="ticket.totalQuantity" :aria-valuemin="0" :aria-label="`Số vé đã bán loại ${ticket.name}`"><div class="h-full rounded-md" :class="ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-brand' : 'bg-foreground'" :style="{ width: `${soldPercent(ticket)}%` }" /></div>
+                  <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" role="progressbar" :aria-valuenow="soldQuantity(ticket)" :aria-valuemax="ticket.totalQuantity" :aria-valuemin="0" :aria-label="`Số vé đã bán loại ${ticket.name}`"><div class="h-full rounded-md" :class="ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-brand' : 'bg-tone'" :style="{ width: `${soldPercent(ticket)}%` }" /></div>
                 </div>
                 <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
                 <div v-if="!canJoinWaitlist(ticket)" class="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">

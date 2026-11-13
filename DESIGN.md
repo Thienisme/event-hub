@@ -2,16 +2,18 @@
 
 Hệ thiết kế của Event Hub. Mọi AI và người làm giao diện đọc file này trước khi sửa `client/`. Token thật nằm ở `client/src/style.css`; file này giải thích cách dùng. Hai nơi lệch nhau thì sửa cho khớp, đừng chọn một bên.
 
-## Hướng thiết kế: Đen trắng + một điểm nhấn
+## Hướng thiết kế: Nền sạch, màu theo danh mục, một điểm đỏ rượu để mua
 
-Hiện đại, sang trọng, tiết chế. Giống tờ chương trình của một nhà hát: nền trắng, chữ đen, nhiều khoảng trống, và **một** màu đỏ rượu như cuống vé. Sang trọng đến từ khoảng trắng, chữ đậm và căn lề chuẩn, không đến từ màu, bóng đổ hay hiệu ứng.
+Hiện đại, rõ ràng, có sức sống. Khung trang vẫn là nền sáng, chữ đen, nhiều khoảng trống, căn lề chuẩn.
+**Màu đến từ nội dung**: ảnh sự kiện và **màu riêng của từng danh mục** (Âm nhạc hồng, Triển lãm xanh cobalt, Workshop vàng nghệ...). Nhìn màu là biết loại sự kiện, nên màu có lý do chứ không để trang trí.
+**Đỏ rượu `brand` vẫn chỉ dành cho hành động mua** (nút Đặt vé/Thanh toán, giá, khan hiếm, ưu đãi), để nút mua luôn nổi nhất trang.
 
-Tham chiếu cảm giác (không sao chép): trang sự kiện của Apple, Vercel, Nothing, Bang & Olufsen.
+Tham chiếu cảm giác (không sao chép): Eventbrite, Dice, Resident Advisor, trang sự kiện của Apple.
 
 Ba câu để tự kiểm tra một màn hình:
-1. Bỏ màu đỏ đi, trang có còn đọc được thứ bậc không? Phải còn: thứ bậc đến từ cỡ chữ và độ đậm.
-2. Trên màn hình có quá **một** chỗ dùng màu đỏ nổi bật không? Nếu có, bớt đi.
-3. Có chỗ nào dùng bóng đổ, gradient hay viền dày để "cho đẹp" không? Bỏ.
+1. Bỏ màu đi, trang có còn đọc được thứ bậc không? Phải còn: thứ bậc đến từ cỡ chữ và độ đậm.
+2. Nút mua có còn là thứ nổi nhất màn hình không? Màu danh mục không được lấn nút đỏ rượu.
+3. Mỗi màu trên màn hình có gắn với một danh mục, trạng thái hay hành động cụ thể không? Màu không có lý do thì bỏ.
 
 ## Màu
 
@@ -31,15 +33,35 @@ Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (
 | `success` / `warning` / `danger` / `info` | giữ nguyên | chỉ cho trạng thái (đơn, check-in, lỗi), không trang trí |
 | `destructive` | đỏ tươi | nút xoá, huỷ. Khác hẳn `brand` để không nhầm "mua" với "xoá" |
 
+### Màu theo danh mục (`tone`)
+
+Token ở cuối `client/src/style.css`. Gắn `data-tone="<EventCategory>"` (giá trị `event.category`: `MUSIC`, `EXHIBITION`...) lên phần tử bao của một sự kiện, rồi dùng:
+
+| Class | Dùng cho |
+|---|---|
+| `bg-tone text-tone-foreground` | khối đặc nhỏ: ô ngày, chấm danh mục |
+| `bg-tone-soft text-tone-ink` | nhãn danh mục, nền cuống vé, cuống thẻ ưu đãi, chip lọc đang chọn |
+| `text-tone-ink` | chữ eyebrow danh mục trên nền trắng |
+| `border-tone` | viền nhấn mảnh 1px khi cần (không phải viền trái dày) |
+
+- Không có `data-tone` (hoặc `OTHER`) là tông xám than trung tính.
+- Mỗi khối chỉ một tông, theo danh mục của **chính sự kiện đó**. Không pha hai tông trong một thẻ, không dùng tông cho nút mua.
+- Không tô cả card hay cả trang bằng màu đặc; màu đặc chỉ ở khối nhỏ (ô ngày), còn lại là nền `soft`.
+- Thêm danh mục mới: thêm một dòng `[data-tone="..."]` (độ sáng/độ đậm giống các dòng khác) và nhãn trong `client/src/utils/categories.ts`.
+
+### Logo cổng thanh toán
+
+Phương thức thanh toán hiện **logo thật** của cổng (`client/src/assets/payments/vnpay.svg`, `momo.svg`, lấy từ trang chính thức), cao `h-6`, không đổi màu, không bo méo. Thanh toán thử dùng icon lucide.
+
 ### Luật dùng màu đỏ rượu `brand`
 
-Chỉ những chỗ sau:
+Chỉ những chỗ sau (hành động mua):
 - Nút hành động mua hàng: "Đặt vé", "Thanh toán" (`bg-brand text-brand-foreground hover:bg-brand/90`).
 - Giá vé trên thẻ và trang chi tiết (`text-brand`).
 - Badge khan hiếm: "Sắp hết vé", "Còn N vé" (`bg-brand-soft text-brand`).
 - Ưu đãi ở trang sự kiện: dòng "Có ưu đãi · Giảm đến 20%" (`bg-brand-soft text-brand`). Thẻ ưu đãi trong trang thanh toán thì không dùng `brand`.
 
-Mọi nút khác dùng `primary` (đen) hoặc `outline`. Logo, tiêu đề, menu, icon **không** dùng `brand`.
+Mọi nút khác dùng `primary` (đen) hoặc `outline`. Logo, tiêu đề, menu, icon **không** dùng `brand`. Màu danh mục cũng không dùng cho nút.
 
 ## Chữ
 
@@ -87,7 +109,8 @@ Thứ làm Event Hub khác một trang quản trị chung chung là **hình ản
 
 Người dùng nhận ra giao diện do AI làm qua những mẫu dưới đây. Gặp trong code cũ thì sửa luôn khi đang đụng tới file đó.
 
-- Màu indigo, tím, xanh dương mặc định; gradient tím-hồng; nền kem + nhấn đất nung (terracotta).
+- Màu indigo, tím, xanh dương mặc định của Tailwind; gradient tím-hồng; nền kem + nhấn đất nung (terracotta). Màu danh mục dùng token `tone`, không viết class màu thô.
+- Màu rải ngẫu nhiên "cho vui" (mỗi thẻ một màu không theo danh mục, icon nhiều màu, nền gradient cầu vồng).
 - Glassmorphism (`backdrop-blur` + nền trong suốt), viền phát sáng, bóng đổ lớn có màu.
 - Hero căn giữa với dòng chữ gradient và hai nút; khối "tính năng" ba cột có icon trong hình tròn màu.
 - Bo góc lớn khắp nơi, card lồng card.

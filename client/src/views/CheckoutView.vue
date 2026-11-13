@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { CreditCard, Wallet, FlaskConical, CalendarDays, MapPin, Timer, LockKeyhole } from '@lucide/vue';
+import { FlaskConical, CalendarDays, MapPin, Timer, LockKeyhole } from '@lucide/vue';
 import { useOrderStore, type Order, type OrderOffer, type PaymentProvider } from '@/stores/order';
 import { useToastStore } from '@/stores/toast';
 import { formatPrice, formatDateTime } from '@/utils/format';
+import TicketDate from '@/components/TicketDate.vue';
+import { categoryLabel } from '@/utils/categories';
+import { resolveMediaUrl } from '@/utils/media';
+import vnpayLogo from '@/assets/payments/vnpay.svg';
+import momoLogo from '@/assets/payments/momo.svg';
 import OfferCard from '@/components/OfferCard.vue';
 import DataState from '@/components/DataState.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
@@ -17,6 +22,7 @@ const store = useOrderStore();
 const toast = useToastStore();
 const order = ref<Order | null>(null);
 const loading = ref(true);
+const imageFailed = ref(false);
 const loadError = ref('');
 const providers = ref<PaymentProvider[]>([]);
 const PROVIDER_ORDER: PaymentProvider[] = ['VNPAY', 'MOMO', 'MOCK'];
@@ -49,8 +55,8 @@ const lines = computed(() => {
   return [...grouped.values()];
 });
 const methods = {
-  VNPAY: { name: 'VNPay', description: 'Thẻ ATM nội địa, QR ngân hàng, thẻ quốc tế', icon: CreditCard },
-  MOMO: { name: 'Ví MoMo', description: 'Quét mã bằng ứng dụng MoMo', icon: Wallet },
+  VNPAY: { name: 'VNPay', description: 'Thẻ ATM nội địa, QR ngân hàng, thẻ quốc tế', logo: vnpayLogo },
+  MOMO: { name: 'Ví MoMo', description: 'Quét mã bằng ứng dụng MoMo', logo: momoLogo },
   MOCK: { name: 'Thanh toán thử', description: 'Chỉ dùng cho môi trường demo, không trừ tiền', icon: FlaskConical },
 };
 const message = (error: any, fallback: string): string => error?.response?.data?.message || fallback;
@@ -64,6 +70,7 @@ async function load() {
   const currentVersion = ++version;
   loading.value = true;
   loadError.value = '';
+  imageFailed.value = false;
   order.value = null;
   offers.value = [];
   offersExpanded.value = false;
@@ -162,18 +169,24 @@ async function cancel() {
               <h2 id="payment-heading" class="text-xl font-bold tracking-tight sm:text-2xl">Phương thức thanh toán</h2>
               <p v-if="free" class="rounded-lg border border-border bg-background p-5 text-sm leading-6">Đơn được miễn phí, bấm xác nhận để nhận vé</p>
               <div v-else role="radiogroup" aria-labelledby="payment-heading" class="space-y-3">
-                <label v-for="provider in providers" :key="provider" class="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-5 transition-colors focus-within:ring-2 focus-within:ring-ring" :class="selected === provider ? 'border-primary bg-muted' : 'border-border bg-background'">
+                <label v-for="provider in providers" :key="provider" class="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-5 transition-colors focus-within:ring-2 focus-within:ring-ring" :class="selected === provider ? 'border-foreground bg-muted' : 'border-border bg-background'">
                   <input v-model="selected" type="radio" name="payment-provider" :value="provider" :disabled="busy || promoBusy" class="mt-1 size-4 shrink-0 accent-primary" />
-                  <component :is="methods[provider].icon" class="mt-1 size-4 shrink-0" aria-hidden="true" />
-                  <span class="min-w-0"><span class="block font-semibold">{{ methods[provider].name }}</span><span class="mt-1 block break-words text-sm leading-6 text-muted-foreground">{{ methods[provider].description }}</span></span>
+                  <FlaskConical v-if="provider === 'MOCK'" class="mt-1 size-4 shrink-0" aria-hidden="true" />
+                  <span class="min-w-0 flex-1"><span class="block font-semibold">{{ methods[provider].name }}</span><span class="mt-1 block break-words text-sm leading-6 text-muted-foreground">{{ methods[provider].description }}</span></span>
+                  <img v-if="provider !== 'MOCK'" :src="methods[provider].logo" :alt="provider === 'VNPAY' ? 'VNPay' : 'MoMo'" class="h-6 w-auto shrink-0 self-center" />
                 </label>
                 <p v-if="!providers.length" role="alert" class="text-sm text-danger">Hiện chưa có cổng thanh toán khả dụng. Vui lòng thử lại sau.</p>
               </div>
             </section>
             <aside class="contents min-w-0 lg:order-2 lg:block lg:space-y-5" aria-labelledby="summary-heading">
-              <Card class="order-1 min-w-0 gap-5 border border-border bg-background p-5 shadow-none ring-0 sm:p-6 lg:order-none">
+              <Card :data-tone="event?.category || undefined" class="order-1 min-w-0 overflow-hidden rounded-lg gap-5 border border-border bg-background p-5 shadow-none ring-0 sm:p-6 lg:order-none">
+                <div class="relative -mx-5 -mt-5 bg-tone-soft sm:-mx-6 sm:-mt-6" :class="{ 'h-24': !event?.bannerUrl || imageFailed }">
+                  <img v-if="event?.bannerUrl && !imageFailed" :src="resolveMediaUrl(event.bannerUrl) ?? undefined" alt="" class="aspect-[16/9] w-full rounded-t-lg object-cover" @error="imageFailed = true" />
+                  <TicketDate :value="event?.startTime" :category="event?.category" class="absolute left-3 top-3" />
+                </div>
                 <h2 id="summary-heading" class="text-xl font-bold tracking-tight">Tóm tắt đơn</h2>
                 <div class="min-w-0 space-y-2">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">{{ categoryLabel(event?.category ?? 'OTHER') }}</p>
                   <h3 class="break-words font-semibold">{{ event?.title ?? 'Sự kiện' }}</h3>
                   <p class="flex items-start gap-2 text-sm text-muted-foreground"><CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>{{ formatDateTime(event?.startTime) }}</span></p>
                   <p class="flex min-w-0 items-start gap-2 text-sm text-muted-foreground"><MapPin class="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{{ event?.location }}</span></p>
@@ -190,7 +203,7 @@ async function cancel() {
                       <OfferCard v-for="(offer, index) in visibleOffers" :key="offer.code" :offer="offer" :active="order.promoCode === offer.code" :best="index === 0 && !order.promoCode" :disabled="locked" @apply="changePromo(false, offer.code)" @remove="changePromo(true)" />
                       <Button v-if="!offersExpanded && offers.length > 3" variant="ghost" size="sm" @click="offersExpanded = true">Xem thêm {{ offers.length - 3 }} ưu đãi</Button>
                     </div>
-                    <button type="button" class="text-sm underline underline-offset-4 disabled:opacity-50" :disabled="locked" :aria-expanded="promoOpen" aria-controls="promo-form" @click="promoOpen = !promoOpen">{{ offers.length ? 'Có mã khác?' : 'Bạn có mã giảm giá?' }}</button>
+                    <button type="button" class="-my-2 py-2 text-sm underline underline-offset-4 disabled:opacity-50" :disabled="locked" :aria-expanded="promoOpen" aria-controls="promo-form" @click="promoOpen = !promoOpen">{{ offers.length ? 'Có mã khác?' : 'Bạn có mã giảm giá?' }}</button>
                     <form v-if="promoOpen" id="promo-form" class="space-y-2" @submit.prevent="changePromo()">
                       <label for="checkout-promo" class="text-sm font-medium">Mã giảm giá</label>
                       <div class="flex min-w-0 gap-2"><Input id="checkout-promo" v-model="promoInput" type="text" autocomplete="off" maxlength="32" class="min-w-0 flex-1 uppercase" :disabled="locked" :aria-invalid="!!promoError" :aria-describedby="promoError ? 'promo-error' : undefined" /><Button type="submit" variant="outline" :disabled="locked">Áp dụng</Button></div>
@@ -203,7 +216,7 @@ async function cancel() {
                 <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5"><span class="font-semibold">Tổng cộng</span><span class="text-2xl font-bold text-brand tabular-nums">{{ formatPrice(order.totalAmount) }}</span></div>
               </Card>
               <div class="order-3 min-w-0 space-y-3 text-center lg:order-none">
-                <p class="flex items-center justify-center gap-2 text-sm"><Timer class="size-4 shrink-0" aria-hidden="true" /><span v-if="remaining > 0">Vé được giữ trong <strong class="tabular-nums">{{ countdown }}</strong></span><span v-else role="status">Hết thời gian giữ vé</span></p>
+                <p class="flex items-center justify-center gap-2 text-sm" :class="{ 'text-danger': remaining < 120 }"><Timer class="size-4 shrink-0" :class="remaining < 120 ? 'text-danger' : 'text-warning'" aria-hidden="true" /><span v-if="remaining > 0">Vé được giữ trong <strong class="tabular-nums font-semibold">{{ countdown }}</strong></span><span v-else role="status">Hết thời gian giữ vé</span></p>
                 <Button v-if="remaining === 0" variant="outline" class="w-full" @click="router.push(eventRoute)">Chọn lại vé</Button>
                 <Button class="h-auto min-h-11 w-full whitespace-normal bg-brand py-3 text-brand-foreground hover:bg-brand/90" :disabled="locked || (!free && !selected)" @click="pay">{{ busy ? 'Đang chuyển tới cổng thanh toán...' : free ? 'Xác nhận nhận vé' : `Thanh toán ${formatPrice(order.totalAmount)}` }}</Button>
                 <p class="flex items-start justify-center gap-1.5 text-xs leading-5 text-muted-foreground"><LockKeyhole class="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>Thanh toán được bảo mật bởi cổng thanh toán</span></p>

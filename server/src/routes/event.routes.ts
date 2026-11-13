@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEvent, getEvents, getEventById, updateEvent, deleteEvent } from '../controllers/event.controller';
+import { createEvent, getEventCategories, getEventHighlights, getEvents, getEventById, updateEvent, deleteEvent } from '../controllers/event.controller';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { checkInTicket, getCheckInStats } from '../controllers/checkin.controller';
 import { validateBody, createEventSchema, checkInSchema, createPromoSchema } from '../utils/validation';
@@ -15,6 +15,8 @@ router.post('/:id/promo-codes', authenticate, authorize('ORGANIZER', 'ADMIN'), v
 
 // Public Routes (Xem danh sách & chi tiết)
 router.get('/', getEvents);
+router.get('/categories', getEventCategories);
+router.get('/highlights', getEventHighlights);
 router.get('/:id/offers', getEventOffers);
 router.get('/:id', getEventById);
 

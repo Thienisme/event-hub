@@ -48,11 +48,11 @@ onUnmounted(() => controller.abort());
       <RouterLink to="/" class="relative self-start text-xl font-extrabold tracking-tight">EventHub</RouterLink>
       <div class="relative space-y-6 lg:mt-16">
         <p class="text-2xl font-extrabold tracking-tight text-white sm:text-3xl xl:text-4xl">Mỗi tấm vé, một trải nghiệm.</p>
-        <RouterLink v-if="event" :to="`/events/${event.slug ?? event.id}`" class="hidden w-full max-w-md items-center overflow-hidden rounded-lg lg:flex bg-background text-foreground">
+        <RouterLink v-if="event" :data-tone="event.category || undefined" :to="`/events/${event.slug ?? event.id}`" class="hidden w-full max-w-md items-center overflow-hidden rounded-lg lg:flex bg-background text-foreground">
           <div class="flex min-w-0 flex-1 items-center gap-3 p-4">
-            <TicketDate :value="event.startTime" class="shrink-0" />
+            <TicketDate :value="event.startTime" :category="event.category" class="shrink-0" />
             <div class="min-w-0">
-              <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sắp diễn ra</p>
+              <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">Sắp diễn ra</p>
               <p class="mt-1 line-clamp-1 font-semibold">{{ event.title }}</p>
               <p class="mt-1 line-clamp-1 text-sm text-muted-foreground">{{ event.location }}</p>
             </div>

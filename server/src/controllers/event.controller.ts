@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { EventCategory, Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { notifyWaitlist } from '../utils/waitlistNotify';
 import { createEventSlug } from '../utils/slug';
@@ -23,6 +23,10 @@ const MAX_SEARCH_LENGTH = 100;
  * Không có email: người chưa đăng nhập không được thu thập email từ đây.
  */
 const PUBLIC_ORGANIZER_SELECT = { id: true, fullName: true } as const;
+const PUBLIC_EVENT_INCLUDE = {
+  organizer: { select: PUBLIC_ORGANIZER_SELECT },
+  ticketTypes: true,
+} as const;
 
 /**
  * Xoá các đơn EXPIRED và CANCELLED đang tham chiếu tới những loại vé sắp bị xoá.
@@ -152,10 +156,7 @@ export const getEvents = async (req: Request, res: Response) => {
           skip,
           take: limit,
           orderBy: [{ startTime: status === 'ended' ? 'desc' : 'asc' }, { id: 'asc' }],
-          include: {
-            organizer: { select: PUBLIC_ORGANIZER_SELECT },
-            ticketTypes: true,
-          },
+          include: PUBLIC_EVENT_INCLUDE,
         }),
         prisma.event.count({ where: whereCondition }),
       ]);
@@ -177,6 +178,69 @@ export const getEvents = async (req: Request, res: Response) => {
     });
   } catch (error) {
     return handleControllerError(res, 'getEvents', error);
+  }
+};
+
+// Dùng chung version danh sách để mọi thay đổi sự kiện/tồn kho vô hiệu cả discovery.
+export const getEventCategories = async (_req: Request, res: Response) => {
+  try {
+    const version = await getListVersion();
+    const { value } = await cacheGetOrLoad(`events:list:v${version}:categories`, async () => {
+      const groups = await prisma.event.groupBy({
+        by: ['category'],
+        where: { endTime: { gt: new Date() } },
+        _count: { _all: true },
+      });
+      const counts = new Map(groups.map(group => [group.category, group._count._all]));
+      return Object.values(EventCategory).map(category => ({ category, count: counts.get(category) ?? 0 }));
+    });
+    return res.json({ data: value });
+  } catch (error) {
+    return handleControllerError(res, 'getEventCategories', error);
+  }
+};
+
+export const getEventHighlights = async (_req: Request, res: Response) => {
+  try {
+    const version = await getListVersion();
+    const { value } = await cacheGetOrLoad(`events:list:v${version}:highlights`, async () => {
+      const now = new Date();
+      const weekEnd = new Date(now.getTime() + 7 * 86400000);
+      // Demo nhỏ: chỉ đọc tối đa 200 sự kiện chưa kết thúc mới nhất rồi lọc bằng JS.
+      const events = await prisma.event.findMany({
+        where: { endTime: { gt: now } },
+        take: 200,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        include: PUBLIC_EVENT_INCLUDE,
+      });
+      // Tỷ lệ thấp nhất trong các loại vé còn bán được; loại hết vé không tham gia.
+      const remainingRatio = (event: typeof events[number]) => Math.min(
+        ...event.ticketTypes
+          .filter(ticket => ticket.totalQuantity > 0 && ticket.availableQuantity > 0
+            && ticket.availableQuantity * 5 <= ticket.totalQuantity)
+          .map(ticket => ticket.availableQuantity / ticket.totalQuantity)
+      );
+      const almostSoldOut = events
+        .map(event => ({ event, ratio: remainingRatio(event) }))
+        .filter(item => Number.isFinite(item.ratio))
+        .sort((a, b) => a.ratio - b.ratio || a.event.id.localeCompare(b.event.id))
+        .slice(0, 8).map(item => item.event);
+      const almostSoldOutIds = new Set(almostSoldOut.map(event => event.id));
+      // Mỗi sự kiện chỉ ở một hàng (ưu tiên: sắp hết vé > tuần này > mới mở bán) để trang chủ không lặp.
+      // endTime > now đã bảo đảm sự kiện bắt đầu trước now vẫn đang diễn ra.
+      const thisWeek = events.filter(event => event.startTime < weekEnd && !almostSoldOutIds.has(event.id))
+        .sort((a, b) => a.startTime.getTime() - b.startTime.getTime() || a.id.localeCompare(b.id))
+        .slice(0, 8);
+      const shownIds = new Set([...almostSoldOutIds, ...thisWeek.map(event => event.id)]);
+      return {
+        thisWeek,
+        almostSoldOut,
+        newlyOnSale: events.filter(event => !shownIds.has(event.id)).slice(0, 8),
+      };
+    });
+    return res.json({ data: value });
+  } catch (error) {
+    return handleControllerError(res, 'getEventHighlights', error);
   }
 };
 

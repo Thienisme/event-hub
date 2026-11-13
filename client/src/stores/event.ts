@@ -39,6 +39,16 @@ export interface EventItem {
   ticketTypes?: TicketType[];
 }
 
+export interface CategoryCount {
+  category: EventCategory;
+  count: number;
+}
+export interface EventHighlights {
+  thisWeek: EventItem[];
+  almostSoldOut: EventItem[];
+  newlyOnSale: EventItem[];
+}
+
 export interface EventListResponse {
   source?: string;
   data: EventItem[];
@@ -108,7 +118,18 @@ export const useEventStore = defineStore('event', () => {
     }
   }
 
+  async function fetchCategories(signal?: AbortSignal): Promise<CategoryCount[]> {
+    const response = await apiClient.get<{ data: CategoryCount[] }>('/events/categories', { signal });
+    return response.data.data;
+  }
+  async function fetchHighlights(signal?: AbortSignal): Promise<EventHighlights> {
+    const response = await apiClient.get<{ data: EventHighlights }>('/events/highlights', { signal });
+    return response.data.data;
+  }
+
   return {
+    fetchCategories,
+    fetchHighlights,
     events,
     currentEvent,
     loading,
