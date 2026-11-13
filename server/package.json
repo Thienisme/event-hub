@@ -27,6 +27,7 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
+    "test:promo-codes": "node test-promo-codes.cjs",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
@@ -48,7 +49,9 @@
     "test:profile": "node test-profile.cjs",
     "test:password-reset": "node test-password-reset.cjs",
     "test:sale-window-slug": "node test-sale-window-slug.cjs",
-    "test:ticket-email": "node test-ticket-email.cjs"
+    "test:ticket-email": "node test-ticket-email.cjs",
+    "test:payments": "node test-payments.cjs",
+    "test:waitlist": "node test-waitlist.cjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

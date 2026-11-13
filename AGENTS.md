@@ -18,6 +18,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Đặt vé, xác nhận, huỷ đơn | `server/src/controllers/order.controller.ts`, `server/src/utils/orderInventory.ts` |
 | Email vé, nhắc lịch | `server/src/utils/ticketEmail.ts`, `server/src/jobs/eventReminder.job.ts`, `server/test-ticket-email.cjs` |
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
+| Thanh toán VNPay/MoMo, mã giảm giá, danh sách chờ | `docs/PAYMENTS.md` (luồng, chốt chặn, cách test), `server/src/payments/`, `server/src/controllers/payment.controller.ts` |
 | Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Danh mục, bộ lọc danh sách sự kiện | `server/src/utils/eventFilters.ts`, `client/src/utils/categories.ts`, `client/src/views/HomeView.vue` |
@@ -79,11 +80,23 @@ Luồng request: `routes/` gắn middleware theo thứ tự `authenticate` → `
 `availableQuantity` là số vé còn lại; số đã "bán" là `totalQuantity - availableQuantity`, gồm cả vé đang giữ chỗ.
 
 - **Chốt chặn chống bán quá số vé là `updateMany` có điều kiện `availableQuantity >= quantity`** trong `createOrder`, cùng `CHECK` ở database. Redlock chỉ là lớp bên ngoài. Không đổi thành kiểu đọc rồi mới ghi.
-- Vòng đời đơn: `createOrder` tạo `PENDING`; chỉ một trong ba đường đổi được trạng thái nhờ `updateMany` có điều kiện: `confirmOrder` (`CONFIRMED`, sinh `qrCode`, thanh toán giả lập), `cancelOrder` (`CANCELLED`) và job hết hạn (`EXPIRED`). Hai đường sau trả vé qua `returnTicketsToStock` trong cùng transaction.
+- Vòng đời đơn: `createOrder` tạo `PENDING`; chỉ một trong các đường sau đổi được trạng thái nhờ `updateMany` có điều kiện: `confirmOrder` (`CONFIRMED`, sinh `qrCode`, thanh toán giả lập), `completePayment` (`CONFIRMED` khi VNPay/MoMo báo trả tiền), `cancelOrder` (`CANCELLED`) và job hết hạn (`EXPIRED`). Hai đường sau trả vé qua `returnTicketsToStock` trong cùng transaction.
 - Hạn mức theo tài khoản: câu đầu tiên của transaction trong `createOrder` phải là `SELECT ... FOR UPDATE` trên dòng user. Redlock khoá theo loại vé nên không bảo vệ được hạn mức, và đọc thường trước đó sẽ chụp snapshot cũ.
 - Đơn `EXPIRED` và `CANCELLED` vẫn giữ dòng `Ticket`, mà `tickets -> ticket_types` là FK `RESTRICT`. Xoá sự kiện hoặc loại vé phải xoá các đơn đó trong cùng transaction (`deleteReleasedOrdersOf`).
 - `updateEvent` đối chiếu loại vé theo `id` và dùng `increment` theo chênh lệch. `ticketTypes` là `undefined` nghĩa là không đụng tới, `[]` nghĩa là xoá hết các loại chưa bán.
 - MySQL từ chối `deleteMany` có điều kiện quan hệ (lỗi 1093): tìm id trước rồi xoá theo id.
+
+### Thanh toán, mã giảm giá, danh sách chờ
+
+Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không được phá:
+
+- IPN và route return đều đi qua `completePayment`: khoá dòng `payments` bằng `FOR UPDATE` theo `txnRef`, chỉ xử lý Payment `PENDING`, so số tiền với lúc tạo, đổi đơn bằng `updateMany` có điều kiện `PENDING`. Tiền về khi đơn đã huỷ/hết hạn thì đánh dấu `needsRefund`, không xác nhận đơn.
+- Kiểm chữ ký bằng `timingSafeEqual`; IPN VNPay luôn trả HTTP 200 kèm `RspCode`.
+- `/pay` kéo `expiresAt` của đơn qua thời điểm cổng đóng (`PAYMENT_HOLD_MINUTES` + 5 phút); tối đa 3 Payment mỗi đơn; đơn 0 đ xác nhận luôn.
+- Đơn đã có Payment thì không đổi mã giảm giá nữa (409), để số tiền gửi sang cổng luôn khớp đơn.
+- Lượt dùng mã: chiếm bằng `claimPromoUsage` (UPDATE có điều kiện `usedCount < maxUses`), trả bằng `releasePromoUsage` trong cùng transaction khi huỷ/hết hạn. Hạn mức `perUserLimit` cần `SELECT ... FOR UPDATE` dòng user trước, như `createOrder`.
+- Danh sách chờ chỉ báo email, không giữ vé; chiếm lượt báo bằng `updateMany` có điều kiện `notifiedAt: null` trước khi gửi.
+- Test thanh toán và mã giảm giá tự ký callback bằng khoá giả (`TESTTMN`/`testsecret`, `MOMO`/`testaccess`/`testmomosecret`): server phải chạy với cùng bộ khoá đó, database tên chứa `test`/`tmp`/`temp`.
 
 ### Soát vé (check-in)
 

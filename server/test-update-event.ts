@@ -31,7 +31,7 @@ async function main() {
     await tx.order.create({
       data: {
         userId: user.id,
-        totalAmount: 200,
+        totalAmount: 200, subtotalAmount: 200,
         status: 'CONFIRMED',
         tickets: { create: [
           { ticketTypeId: tt.id },

@@ -13,12 +13,13 @@ export interface OrderTicket {
   qrCode?: string | null;
   checkedInAt?: string | null;
   createdAt: string;
-  /** Chỉ có ở /orders/my-orders, kèm luôn event của loại vé đó */
+  /** Có ở API đọc đơn, kèm luôn event của loại vé đó */
   ticketType?: TicketType & {
     event?: {
       title: string;
       startTime: string;
       location: string;
+      slug: string;
     };
   };
 }
@@ -28,13 +29,33 @@ export interface Order {
   userId: string;
   /** Decimal -> serialize thành chuỗi, xem ghi chú ở TicketType.price */
   totalAmount: number | string;
+  /** Giá trước giảm (Decimal -> chuỗi) */
+  subtotalAmount?: number | string;
+  /** Mức giảm (Decimal -> chuỗi), mặc định 0 */
+  discountAmount?: number | string;
+  promoCodeId?: string | null;
+  promoCode?: string | null;
+  paymentStarted?: boolean;
   status: OrderStatus;
   expiresAt?: string | null;
   createdAt: string;
   tickets: OrderTicket[];
 }
 
-/** BE trả về: { message, order } */
+/** Các cổng thanh toán BE đang bật (GET /payments/providers) */
+export type PaymentProvider = 'MOCK' | 'VNPAY' | 'MOMO';
+
+/** POST /orders/:id/pay trả về */
+export interface PayOrderResponse {
+  message: string;
+  /** Đơn 0đ: BE xác nhận luôn và trả `order` thay vì `paymentUrl` */
+  data: {
+    paymentUrl?: string;
+    order?: Order;
+  };
+}
+
+/** POST /orders trả về: { message, order } */
 export interface CreateOrderResponse {
   message: string;
   order: Order;
@@ -67,21 +88,46 @@ export const useOrderStore = defineStore('order', () => {
   });
   const loading = ref(false);
 
+  /** Cổng thanh toán đang bật từ GET /payments/providers */
+  const paymentProviders = ref<PaymentProvider[]>([]);
+
   /**
    * Đặt vé. BE dùng distributed lock (Redlock) + transaction, nên có thể trả về:
    * - 201: thành công
-   * - 400: hết vé / số lượng không hợp lệ / loại vé không tồn tại
+   * - 400: hết vé / số lượng không hợp lệ / loại vé không tồn tại / mã giảm giá sai
    * - 401: chưa đăng nhập hoặc token hết hạn
    * - 403: token không hợp lệ
    * - 429: quá tải vì nhiều người cùng mua
    * Tất cả lỗi đều có dạng { message } bằng tiếng Việt -> hiển thị thẳng cho user.
    */
   async function createOrder(ticketTypeId: string, quantity: number): Promise<CreateOrderResponse> {
-    const response = await apiClient.post<CreateOrderResponse>('/orders', {
-      ticketTypeId,
-      quantity,
-    });
+    const response = await apiClient.post<CreateOrderResponse>('/orders', { ticketTypeId, quantity });
     return response.data;
+  }
+
+  /** Chỉ hiển thị các cổng thực sự được server bật. */
+  async function loadPaymentProviders(): Promise<PaymentProvider[]> {
+    const response = await apiClient.get<{ data: PaymentProvider[] }>('/payments/providers');
+    paymentProviders.value = response.data.data;
+    return paymentProviders.value;
+  }
+
+  async function fetchOrder(id: string): Promise<Order> {
+    const response = await apiClient.get<{ message: string; data: Order }>(`/orders/${id}`);
+    replaceOrder(response.data.data);
+    return response.data.data;
+  }
+
+  async function applyPromo(id: string, code: string): Promise<Order> {
+    const response = await apiClient.post<{ message: string; data: Order }>(`/orders/${id}/promo`, { code });
+    replaceOrder(response.data.data);
+    return response.data.data;
+  }
+
+  async function removePromo(id: string): Promise<Order> {
+    const response = await apiClient.delete<{ message: string; data: Order }>(`/orders/${id}/promo`);
+    replaceOrder(response.data.data);
+    return response.data.data;
   }
 
   /** BE trả về { message, data, pagination }, mặc định 20 đơn mỗi trang */
@@ -147,13 +193,33 @@ export const useOrderStore = defineStore('order', () => {
     return response.data;
   }
 
+  /**
+   * Bắt đầu thanh toán qua VNPay/MoMo. BE trả `paymentUrl` -> view chuyển trang
+   * bằng window.location.href. Đơn tổng 0đ BE xác nhận luôn và trả `order`,
+   * cập nhật tại chỗ như sau khi confirm.
+   */
+  async function payOrder(id: string, provider: 'VNPAY' | 'MOMO'): Promise<PayOrderResponse> {
+    const response = await apiClient.post<PayOrderResponse>(`/orders/${id}/pay`, { provider });
+
+    const order = response.data.data?.order;
+    if (order) replaceOrder(order);
+
+    return response.data;
+  }
+
   return {
     orders,
     pagination,
     loading,
+    paymentProviders,
     createOrder,
     fetchMyOrders,
+    fetchOrder,
+    applyPromo,
+    removePromo,
     confirmOrder,
     cancelOrder,
+    loadPaymentProviders,
+    payOrder,
   };
 });

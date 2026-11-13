@@ -16,7 +16,7 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: eventhub
+          MYSQL_DATABASE: eventhub_test
         ports:
           - 3306:3306
         options: >-
@@ -37,7 +37,7 @@ jobs:
 
     env:
       # Giá trị giả, chỉ dùng trong CI. JWT_SECRET phải >= 32 ký tự.
-      DATABASE_URL: mysql://root:root@127.0.0.1:3306/eventhub
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/eventhub_test
       JWT_SECRET: ci-only-secret-khong-dung-cho-production-0123456789abcdef
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: "6379"
@@ -47,6 +47,12 @@ jobs:
       TZ: Asia/Ho_Chi_Minh
       BASE_URL: http://127.0.0.1:5000/api
       ORDER_SWEEP_INTERVAL_MS: "3600000"
+      # Khoá giả cho cổng thanh toán: test tự ký callback bằng các khoá này, không gọi VNPay/MoMo thật.
+      VNPAY_TMN_CODE: TESTTMN
+      VNPAY_HASH_SECRET: testsecret
+      MOMO_PARTNER_CODE: MOMO
+      MOMO_ACCESS_KEY: testaccess
+      MOMO_SECRET_KEY: testmomosecret
 
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +69,7 @@ jobs:
       - name: Tạo .env cho test
         run: |
           cat > .env <<'EOF'
-          DATABASE_URL="mysql://root:root@127.0.0.1:3306/eventhub"
+          DATABASE_URL="mysql://root:root@127.0.0.1:3306/eventhub_test"
           JWT_SECRET="ci-only-secret-khong-dung-cho-production-0123456789abcdef"
           REDIS_HOST="127.0.0.1"
           REDIS_PORT="6379"

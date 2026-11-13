@@ -546,7 +546,7 @@ async function main() {
       await tx.order.create({
         data: {
           userId: customer,
-          totalAmount,
+          totalAmount, subtotalAmount: totalAmount,
           status: 'CONFIRMED',
           expiresAt: null,
           tickets: {
@@ -580,7 +580,7 @@ async function main() {
     await tx.order.create({
       data: {
         userId: customer,
-        totalAmount: pendingTotal,
+        totalAmount: pendingTotal, subtotalAmount: pendingTotal,
         status: 'PENDING',
         expiresAt: tenMinLater,
         tickets: {

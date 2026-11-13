@@ -5,6 +5,7 @@ import { useEventStore } from '../stores/event';
 import type { EventItem, TicketType } from '../stores/event';
 import { useOrderStore } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
+import { useWaitlistStore } from '../stores/waitlist';
 import { useToastStore } from '../stores/toast';
 import apiClient from '../api/axios';
 import { formatPrice, formatDateTime, getEventPhase, toAppDateTimeInput } from '../utils/format';
@@ -12,7 +13,7 @@ import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert, Bell } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,6 +25,7 @@ const router = useRouter();
 const eventStore = useEventStore();
 const orderStore = useOrderStore();
 const authStore = useAuthStore();
+const waitlistStore = useWaitlistStore();
 const toast = useToastStore();
 
 const loadError = ref('');
@@ -100,6 +102,52 @@ const ticketSubtotal = (ticket: TicketType) => {
   return Number.isInteger(quantity) && quantity > 0 ? formatPrice(Number(ticket.price) * quantity) : '—';
 };
 
+/**
+ * Danh sách chờ: loại vé hết vé nhưng sự kiện chưa kết thúc và còn trong
+ * giờ bán -> cho user đăng ký nhận báo khi có vé trả về.
+ */
+const canJoinWaitlist = (ticket: TicketType): boolean =>
+  ticket.availableQuantity <= 0 && !isEnded.value && !saleLabel(ticket) && !!event.value;
+
+const isWaitingTicket = (ticket: TicketType): boolean =>
+  !!event.value && waitlistStore.isWaiting(event.value.id, ticket.id);
+
+const waitlistBusyId = ref<string | null>(null);
+
+const handleWaitlist = async (ticket: TicketType) => {
+  const eventId = event.value?.id;
+  if (!eventId || waitlistBusyId.value) return;
+
+  // POST/DELETE waitlist cần Bearer token -> chưa đăng nhập thì sang trang login
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: route.fullPath } });
+    return;
+  }
+
+  const wasWaiting = isWaitingTicket(ticket);
+  waitlistBusyId.value = ticket.id;
+
+  try {
+    const response = wasWaiting
+      ? await waitlistStore.leave(eventId, ticket.id)
+      : await waitlistStore.join(eventId, ticket.id);
+    toast.success(response.message || (wasWaiting ? 'Đã rời danh sách chờ vé.' : 'Sẽ báo cho bạn khi có vé!'));
+  } catch (error: any) {
+    const status = error?.response?.status;
+
+    if (status === 401 || status === 403) {
+      authStore.logout();
+      waitlistStore.reset();
+      router.push({ name: 'Login', query: { redirect: route.fullPath } });
+      return;
+    }
+
+    toast.error(error?.response?.data?.message || 'Không đăng ký được danh sách chờ, vui lòng thử lại!');
+  } finally {
+    waitlistBusyId.value = null;
+  }
+};
+
 // Huỷ request cũ khi đổi route nhanh (/events/a -> /events/b) để response
 // của sự kiện cũ không về muộn và ghi đè sự kiện mới.
 let eventAbort: AbortController | undefined;
@@ -131,6 +179,11 @@ const loadEvent = async (id: string) => {
     quantities.value = Object.fromEntries(
       (loaded.ticketTypes ?? []).map((ticket) => [ticket.id, 1])
     );
+
+    // Trạng thái danh sách chờ là của từng user: tải nền, lỗi không chặn trang.
+    if (authStore.isAuthenticated) {
+      waitlistStore.load(loaded.id).catch(() => undefined);
+    }
   } catch (error: any) {
     // Request bị chính mình huỷ -> bỏ qua, không phải lỗi thật.
     if (error?.code === 'ERR_CANCELED') return;
@@ -212,8 +265,7 @@ const handleBook = async (ticket: TicketType) => {
   try {
     const { order } = await orderStore.createOrder(ticket.id, quantity);
     toast.success('Đã giữ chỗ. Hãy thanh toán trước khi đơn hết hạn.');
-    // Thành công -> sang trang "Vé của tôi", đơn mới nằm ngay đầu danh sách
-    router.push({ name: 'MyOrders', query: { order: order.id } });
+    router.push({ name: 'Checkout', params: { orderId: order.id } });
   } catch (error: any) {
     const status = error.response?.status;
 
@@ -345,8 +397,9 @@ const handleDelete = async () => {
               <AppAlert :message="errorMessage" type="error" />
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
               <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
-              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50 opacity-60': ticket.availableQuantity <= 0 }">
-                <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p></div>
+              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50': ticket.availableQuantity <= 0, 'opacity-60': ticket.availableQuantity <= 0 && !canJoinWaitlist(ticket) }">
+                <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p>
+                </div>
                 <div>
                   <div class="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
                     <span>Đã bán {{ soldQuantity(ticket) }} / {{ ticket.totalQuantity }}</span>
@@ -355,17 +408,22 @@ const handleDelete = async () => {
                   <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" role="progressbar" :aria-valuenow="soldQuantity(ticket)" :aria-valuemax="ticket.totalQuantity" :aria-valuemin="0" :aria-label="`Số vé đã bán loại ${ticket.name}`"><div class="h-full rounded-md" :class="ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-brand' : 'bg-foreground'" :style="{ width: `${soldPercent(ticket)}%` }" /></div>
                 </div>
                 <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
-                <div class="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
+                <div v-if="!canJoinWaitlist(ticket)" class="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
                   <span class="text-muted-foreground">Thành tiền</span>
                   <span class="font-semibold tabular-nums" aria-live="polite" aria-atomic="true">{{ ticketSubtotal(ticket) }}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-3" :aria-busy="submittingId === ticket.id">
-                  <div class="flex items-center rounded-lg border bg-background">
+                  <!-- Hết vé thì bộ chọn số lượng vô nghĩa: nhường chỗ cho nút danh sách chờ -->
+                  <div v-if="!canJoinWaitlist(ticket)" class="flex items-center rounded-lg border bg-background">
                     <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
                     <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
                     <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
                   </div>
-                  <Button class="min-w-24 flex-1 rounded-md" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || submittingId === ticket.id" @click="handleBook(ticket)">
+                  <Button v-if="canJoinWaitlist(ticket)" variant="outline" class="min-w-24 flex-1 rounded-md" :disabled="waitlistBusyId === ticket.id" @click="handleWaitlist(ticket)">
+                    <Bell />
+                    <span v-if="waitlistBusyId === ticket.id">Đang xử lý...</span><span v-else-if="isWaitingTicket(ticket)">Đang chờ vé · Huỷ</span><span v-else>Báo tôi khi có vé</span>
+                  </Button>
+                  <Button v-else class="min-w-24 flex-1 rounded-md" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" @click="handleBook(ticket)">
                     <span v-if="isEnded">Đã kết thúc</span><span v-else-if="saleLabel(ticket)">{{ ticket.saleStart && new Date(ticket.saleStart).getTime() > now ? 'Chưa mở bán' : 'Đã ngừng bán' }}</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
                   </Button>
                 </div>

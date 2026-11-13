@@ -36,6 +36,17 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      # Thanh toán sandbox: để trống thì cổng đó tự tắt (xem server/src/config/payment.ts)
+      - key: VNPAY_TMN_CODE
+        sync: false
+      - key: VNPAY_HASH_SECRET
+        sync: false
+      - key: MOMO_PARTNER_CODE
+        sync: false
+      - key: MOMO_ACCESS_KEY
+        sync: false
+      - key: MOMO_SECRET_KEY
+        sync: false
       - key: STORAGE_DRIVER
         value: db
       - key: SERVE_CLIENT_DIR

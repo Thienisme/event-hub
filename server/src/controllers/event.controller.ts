@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
+import { notifyWaitlist } from '../utils/waitlistNotify';
 import { createEventSlug } from '../utils/slug';
 import { AppError, handleControllerError } from '../utils/errors';
 import {
@@ -410,6 +411,10 @@ export const updateEvent = async (req: Request, res: Response) => {
         },
       });
     });
+
+    void notifyWaitlist(updates.filter(plan => plan.delta > 0).map(plan => ({
+      ticketTypeId: plan.id, quantity: plan.delta,
+    }))).catch(() => console.error('[waitlist] Lỗi báo vé bổ sung'));
 
     // Vô hiệu cache chi tiết và danh sách
     await Promise.all([invalidateEventDetails(id), invalidateEventList()]);

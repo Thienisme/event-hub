@@ -22,6 +22,9 @@ const API = process.env.BASE_URL || 'http://localhost:5000/api';
 
 // Thứ tự: test rẻ và nhanh trước, test nặng (race, load) sau.
 const SUITES = [
+  ['test:waitlist', 'test-waitlist.cjs'],
+  ['test:payments', 'test-payments.cjs'],
+  ['test:promo-codes', 'test-promo-codes.cjs'],
   ['test:sale-window-slug', 'test-sale-window-slug.cjs'],
   ['test:security', 'test-jwt-security.cjs'],
   ['test:race', 'test-admin-race.cjs'],

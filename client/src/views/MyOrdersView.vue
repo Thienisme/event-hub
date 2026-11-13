@@ -100,6 +100,9 @@ const formatCountdown = (ms: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
+/** Đơn có giảm giá: subtotalAmount/discountAmount là Decimal (chuỗi) -> ép Number. */
+const hasDiscount = (order: Order): boolean => Number(order.discountAmount) > 0;
+
 /** Id đơn đang gửi request thanh toán/huỷ -> disable nút để tránh bấm hai lần. */
 const actionOrderId = ref<string | null>(null);
 
@@ -139,21 +142,6 @@ const handleActionError = async (error: any, fallback: string) => {
     } catch {
       // Đây chỉ là lần tải lại để đồng bộ UI; lỗi chính đã hiện ở toast.
     }
-  }
-};
-
-const handleConfirm = async (order: Order) => {
-  if (actionOrderId.value) return;
-
-  actionOrderId.value = order.id;
-  try {
-    const response = await orderStore.confirmOrder(order.id);
-    expandedOrders.value[order.id] = true;
-    toastStore.success(response.message || 'Thanh toán thành công!');
-  } catch (error: any) {
-    await handleActionError(error, 'Thanh toán thất bại, vui lòng thử lại!');
-  } finally {
-    actionOrderId.value = null;
   }
 };
 
@@ -315,17 +303,24 @@ const copyOrderId = async (id: string) => {
                 </div>
               </div>
               <div class="flex flex-wrap items-center justify-between gap-2 border-t border-dashed px-5 py-5 sm:px-6">
-                <span class="text-sm text-muted-foreground">Tổng tiền</span><span class="ml-auto text-right text-2xl font-semibold tracking-tight text-primary tabular-nums">{{ formatPrice(order.totalAmount) }}</span>
+                <span class="text-sm text-muted-foreground">Tổng tiền</span>
+                <div class="ml-auto flex flex-col items-end gap-1">
+                  <p v-if="hasDiscount(order)" class="flex flex-wrap items-center justify-end gap-x-2 text-xs tabular-nums">
+                    <span class="text-muted-foreground line-through">{{ formatPrice(order.subtotalAmount) }}</span>
+                    <span class="font-medium text-success">Giảm {{ formatPrice(order.discountAmount) }}</span>
+                  </p>
+                  <span class="text-right text-2xl font-semibold tracking-tight text-primary tabular-nums">{{ formatPrice(order.totalAmount) }}</span>
+                </div>
               </div>
               <div v-if="order.status === 'PENDING'" class="mx-5 mb-5 rounded-lg border border-warning/25 bg-warning/10 p-4 sm:mx-6 sm:mb-6">
                 <p v-if="isHoldExpired(order)" class="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Timer class="size-4 shrink-0" aria-hidden="true" />Đã hết hạn giữ chỗ</p>
                 <template v-else>
                   <p class="flex items-center gap-2 text-sm font-medium"><Timer class="size-4 shrink-0 text-warning" aria-hidden="true" /><span>Còn <span class="font-semibold tabular-nums">{{ formatCountdown(remainingMs(order)) }}</span> để thanh toán</span></p>
                   <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Button class="min-h-11 bg-brand text-brand-foreground hover:bg-brand/90" :disabled="!!actionOrderId" :aria-busy="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán (giả lập)' }}</Button>
+                    <Button class="min-h-11 bg-brand text-brand-foreground hover:bg-brand/90" :disabled="!!actionOrderId" @click="router.push({ name: 'Checkout', params: { orderId: order.id } })">Tiếp tục thanh toán</Button>
                     <Button variant="outline" class="min-h-11 border-danger/30 bg-background text-danger hover:bg-danger/10 hover:text-danger" :disabled="!!actionOrderId" @click="askCancel(order)">Huỷ đơn</Button>
                   </div>
-                  <p class="mt-3 text-xs leading-5 text-muted-foreground">Thanh toán demo, không thu tiền thật. Mã QR sẽ xuất hiện sau khi xác nhận thành công.</p>
+                  <p class="mt-3 text-xs leading-5 text-muted-foreground">Mã QR sẽ xuất hiện sau khi thanh toán thành công.</p>
                 </template>
               </div>
               <section v-if="order.status === 'CONFIRMED'" class="border-t bg-surface/60 p-5 sm:p-6">
