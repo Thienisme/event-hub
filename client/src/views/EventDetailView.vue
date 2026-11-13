@@ -528,7 +528,7 @@ const handleDelete = async () => {
               </div>
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
               <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
-              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50 opacity-60': ticket.availableQuantity <= 0 }">
+              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50': ticket.availableQuantity <= 0, 'opacity-60': ticket.availableQuantity <= 0 && !canJoinWaitlist(ticket) }">
                 <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p>
                   <p v-if="appliedPromo && promoPreviews[ticket.id] && (quantities[ticket.id] ?? 0) > 0" class="text-sm text-muted-foreground">
                     Giảm <span class="font-medium tabular-nums text-brand">{{ formatPrice(promoPreviews[ticket.id]!.discountAmount) }}</span>, còn <span class="font-medium tabular-nums text-brand">{{ formatPrice(promoPreviews[ticket.id]!.totalAmount) }}</span>
@@ -543,7 +543,8 @@ const handleDelete = async () => {
                 </div>
                 <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
                 <div class="flex flex-wrap items-center gap-3">
-                  <div class="flex items-center rounded-lg border bg-background">
+                  <!-- Hết vé thì bộ chọn số lượng vô nghĩa: nhường chỗ cho nút danh sách chờ -->
+                  <div v-if="!canJoinWaitlist(ticket)" class="flex items-center rounded-lg border bg-background">
                     <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
                     <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
                     <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>

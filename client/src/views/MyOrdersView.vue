@@ -361,7 +361,7 @@ const copyOrderId = async (id: string) => {
                   <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <Button v-if="paymentProviders.includes('VNPAY')" class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handlePay(order, 'VNPAY')">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán VNPay' }}</Button>
                     <Button v-if="paymentProviders.includes('MOMO')" class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handlePay(order, 'MOMO')">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán MoMo' }}</Button>
-                    <Button v-if="paymentProviders.includes('MOCK')" class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán thử' }}</Button>
+                    <Button v-if="paymentProviders.includes('MOCK')" variant="outline" :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán thử' }}</Button>
                     <Button variant="outline" class="border-danger/30 bg-background text-danger hover:bg-danger/10 hover:text-danger" :disabled="actionOrderId === order.id" @click="askCancel(order)">Huỷ đơn</Button>
                   </div>
                 </template>

@@ -64,7 +64,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center bg-surface px-4 py-12 text-foreground sm:px-6">
+  <div class="flex items-center justify-center bg-surface px-4 py-16 text-foreground sm:px-6">
     <Card class="w-full max-w-lg shadow-none ring-0 border border-border bg-background rounded-lg">
       <CardContent class="space-y-6 p-8 text-center sm:p-10">
         <div
@@ -101,5 +101,5 @@ onMounted(async () => {
         </Button>
       </CardContent>
     </Card>
-  </main>
+  </div>
 </template>

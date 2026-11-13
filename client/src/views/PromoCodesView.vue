@@ -54,9 +54,15 @@ const valueLabel = computed(() =>
   form.discountType === 'PERCENT' ? 'Giá trị giảm (%)' : 'Giá trị giảm (₫)'
 );
 
+/**
+ * Ô `type="number"` khiến v-model trả về kiểu số (Vue tự ép kiểu), ô trống lại là chuỗi:
+ * luôn đưa về chuỗi trước khi `trim`, nếu không handler ném TypeError và form im lặng.
+ */
+const asText = (raw: unknown): string => String(raw ?? '').trim();
+
 /** Chuẩn hoá số nguyên dương từ ô nhập; trả null khi không hợp lệ. */
-function parsePositiveInteger(raw: string): number | null {
-  if (raw.trim() === '') return null;
+function parsePositiveInteger(raw: unknown): number | null {
+  if (asText(raw) === '') return null;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1) return null;
   return parsed;
@@ -79,7 +85,7 @@ function validateForm(): boolean {
   }
 
   const value = Number(form.discountValue);
-  if (form.discountValue.trim() === '') {
+  if (asText(form.discountValue) === '') {
     fieldErrors.discountValue = 'Vui lòng nhập giá trị giảm.';
   } else if (form.discountType === 'PERCENT') {
     if (!Number.isInteger(value) || value < 1 || value > 100) {
@@ -89,7 +95,7 @@ function validateForm(): boolean {
     fieldErrors.discountValue = 'Số tiền giảm phải lớn hơn 0.';
   }
 
-  if (form.maxUses.trim() !== '' && parsePositiveInteger(form.maxUses) === null) {
+  if (asText(form.maxUses) !== '' && parsePositiveInteger(form.maxUses) === null) {
     fieldErrors.maxUses = 'Số lượt tối đa phải là số nguyên dương, hoặc để trống để không giới hạn.';
   }
 
