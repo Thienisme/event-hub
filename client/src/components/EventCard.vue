@@ -44,18 +44,18 @@ const calendar = computed(() => {
 </script>
 
 <template>
-  <router-link :to="`/events/${event.slug ?? event.id}`" class="group block h-full min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+  <router-link :to="`/events/${event.slug ?? event.id}`" :data-tone="event.category || undefined" class="group block h-full min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
     <Card class="shadow-none ring-0 border border-border bg-background h-full gap-0 rounded-lg py-0 transition-colors">
       <div class="relative aspect-video overflow-hidden bg-surface">
         <EventBanner :src="event.bannerUrl" :alt="event.title" class="[&>*]:transition-transform [&>*]:duration-200 motion-safe:[&>*]:group-hover:scale-[1.02] motion-reduce:[&>*]:transform-none motion-reduce:[&>*]:transition-none [&>div]:bg-none [&>div]:bg-muted [&>div>span]:sr-only" />
-        <div aria-hidden="true" class="absolute left-3 top-3 w-12 overflow-hidden rounded-lg bg-background text-center text-foreground">
-          <div class="bg-primary/10 py-1 text-[10px] font-semibold text-primary">TH {{ calendar.month }}</div>
+        <div aria-hidden="true" class="absolute left-3 top-3 w-12 overflow-hidden rounded-lg bg-tone text-center text-tone-foreground">
+          <div class="bg-black/15 py-1 text-[10px] font-semibold">TH {{ calendar.month }}</div>
           <div class="py-1 text-2xl font-semibold tabular-nums">{{ calendar.day }}</div>
         </div>
         <Badge v-if="status" :variant="status.variant" class="absolute right-3 top-3 max-w-[calc(100%-5rem)]">{{ status.label }}</Badge>
       </div>
       <div class="flex flex-1 flex-col p-4">
-        <Badge v-if="event.category" variant="outline" class="mb-2 self-start text-xs font-semibold uppercase tracking-widest text-muted-foreground">{{ categoryLabel(event.category) }}</Badge>
+        <Badge v-if="event.category" variant="outline" class="mb-2 self-start border-transparent bg-tone-soft text-xs font-semibold uppercase tracking-widest text-tone-ink"><span class="size-2 rounded-full bg-tone" aria-hidden="true" />{{ categoryLabel(event.category) }}</Badge>
         <h3 class="mb-3 line-clamp-2 min-h-12 break-words text-base font-semibold tracking-tight transition-colors group-hover:text-primary">{{ event.title }}</h3>
         <p class="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
           <CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />

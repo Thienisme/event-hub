@@ -113,6 +113,7 @@ onUnmounted(() => {
         :aria-label="`${index + 1} / ${events.length}`"
         :aria-hidden="index !== activeIndex"
         :inert="index !== activeIndex"
+        :data-tone="event.category || undefined"
         class="absolute inset-0 bg-primary transition-opacity duration-500 motion-reduce:transition-none"
         :class="index === activeIndex ? 'z-10 opacity-100' : 'pointer-events-none opacity-0'"
       >
@@ -128,8 +129,9 @@ onUnmounted(() => {
           class="absolute inset-x-0 bottom-0 max-w-2xl space-y-4 p-6 sm:p-10"
           :class="events.length > 1 ? 'pb-24 sm:pb-24' : ''"
         >
-          <p class="text-xs font-semibold uppercase tracking-widest text-white/80">
-            Nổi bật · {{ categoryLabel(event.category ?? 'OTHER') }}
+          <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-widest text-white/80">
+            <span>Nổi bật ·</span>
+            <span class="rounded-full bg-tone px-2.5 py-0.5 text-tone-foreground">{{ categoryLabel(event.category ?? 'OTHER') }}</span>
           </p>
           <h2 class="line-clamp-2 text-2xl font-extrabold tracking-tight text-white sm:text-4xl">
             {{ event.title }}

@@ -309,7 +309,7 @@ const copyOrderId = async (id: string) => {
             <section v-if="activeTab === 'all' && nextOrder" class="relative isolate aspect-square overflow-hidden rounded-lg bg-primary sm:aspect-[21/9] lg:aspect-[3/1]" aria-label="Sự kiện tiếp theo">
               <img v-if="imageOf(nextOrder)" :src="imageOf(nextOrder)!" alt="" class="absolute inset-0 h-full w-full object-cover" @error="failedImages.add(nextOrder.id)" />
               <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <TicketDate :value="eventOf(nextOrder)?.startTime" class="absolute left-3 top-3 sm:left-6 sm:top-6" />
+              <TicketDate :value="eventOf(nextOrder)?.startTime" :category="eventOf(nextOrder)?.category" class="absolute left-3 top-3 sm:left-6 sm:top-6" />
               <div class="absolute inset-x-0 bottom-0 space-y-2 p-4 sm:p-6">
                 <p class="text-xs font-semibold uppercase tracking-widest text-white/80">Sự kiện tiếp theo · {{ nextCountdown }}</p>
                 <h2 class="line-clamp-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{{ eventOf(nextOrder)?.title }}</h2>
@@ -317,15 +317,15 @@ const copyOrderId = async (id: string) => {
                 <Button class="bg-background text-foreground hover:bg-background/90" @click="revealNextQr">Xem {{ nextOrder.tickets.length }} mã QR</Button>
               </div>
             </section>
-            <article v-for="order in visibleOrders" :id="`order-${order.id}`" :key="order.id" class="group relative min-w-0 scroll-mt-6 rounded-lg border bg-background">
+            <article v-for="order in visibleOrders" :data-tone="isClosed(order) ? undefined : eventOf(order)?.category" :id="`order-${order.id}`" :key="order.id" class="group relative min-w-0 scroll-mt-6 rounded-lg border bg-background">
               <div class="grid min-w-0 sm:grid-cols-[176px_minmax(0,1fr)_200px]">
                 <div class="relative aspect-[2/1] min-h-40 overflow-hidden rounded-t-lg bg-muted sm:aspect-auto sm:rounded-l-lg sm:rounded-tr-none">
                   <img v-if="imageOf(order)" :src="imageOf(order)!" alt="" loading="lazy" class="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] motion-reduce:transform-none" :class="{ 'grayscale opacity-60': isClosed(order) }" @error="failedImages.add(order.id)" />
                   <div v-else class="absolute inset-0 flex items-center justify-center" :class="{ 'grayscale opacity-60': isClosed(order) }"><Ticket class="size-6 text-muted-foreground" aria-hidden="true" /></div>
-                  <TicketDate :value="eventOf(order)?.startTime" class="absolute left-3 top-3" />
+                  <TicketDate :value="eventOf(order)?.startTime" :category="isClosed(order) ? undefined : eventOf(order)?.category" class="absolute left-3 top-3" />
                 </div>
                 <div class="flex min-w-0 flex-col gap-3 p-5">
-                  <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{{ categoryLabel(eventOf(order)?.category ?? 'OTHER') }}</p>
+                  <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">{{ categoryLabel(eventOf(order)?.category ?? 'OTHER') }}</p>
                   <h2 class="break-words text-lg font-semibold tracking-tight">
                     <RouterLink v-if="eventOf(order)?.slug" :to="`/events/${eventOf(order)?.slug}`" class="underline-offset-4 hover:underline">{{ eventOf(order)?.title }}</RouterLink>
                     <template v-else>{{ eventOf(order)?.title || 'Sự kiện' }}</template>
@@ -339,7 +339,7 @@ const copyOrderId = async (id: string) => {
                     <span>Đặt lúc {{ formatDateTime(order.createdAt) }}</span>
                   </div>
                 </div>
-                <div class="relative flex min-w-0 flex-col gap-4 border-t border-dashed p-5 sm:border-t-0 sm:border-l">
+                <div class="relative flex min-w-0 flex-col gap-4 rounded-b-lg border-t border-dashed border-tone/30 bg-tone-soft p-5 sm:rounded-bl-none sm:rounded-r-lg sm:border-t-0 sm:border-l">
                   <span aria-hidden="true" class="absolute -left-2 -top-2 size-4 rounded-full border bg-surface" />
                   <span aria-hidden="true" class="absolute -right-2 -top-2 size-4 rounded-full border bg-surface sm:-bottom-2 sm:-left-2 sm:top-auto sm:right-auto" />
                   <div class="flex flex-wrap items-center gap-2"><OrderStatusBadge :status="displayStatus(order)" /><Badge v-if="route.query.order === order.id" variant="outline">Vừa đặt</Badge></div>
