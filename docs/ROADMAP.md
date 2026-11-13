@@ -25,9 +25,14 @@ Xong ở PR #16.
 
 ## Giai đoạn 2: Bán hàng thật
 
-- [ ] Thanh toán VNPay hoặc MoMo (sandbox), nhận kết quả qua webhook, mỗi đơn chỉ xác nhận một lần (C)
-- [ ] Mã giảm giá: phần trăm hoặc số tiền, giới hạn lượt dùng, chống dùng vượt lượt khi áp cùng lúc (C)
-- [ ] Danh sách chờ khi hết vé, có vé trả về thì báo người đầu danh sách (C)
+Nhánh `feat/phase2-sales`, chưa mở PR.
+
+- [x] Thanh toán VNPay và MoMo (sandbox), nhận kết quả qua webhook, mỗi đơn chỉ xác nhận một lần (C)
+- [x] Mã giảm giá: phần trăm hoặc số tiền, giới hạn lượt dùng, chống dùng vượt lượt khi áp cùng lúc (C)
+- [x] Danh sách chờ khi hết vé, có vé trả về thì báo người đầu danh sách (C)
+- [x] Trang thanh toán riêng `/checkout/:orderId` kiểu Ticketbox: chọn cổng, mã giảm giá thu gọn, đồng hồ giữ vé (C)
+- [ ] Mua nhiều loại vé trong một đơn (chọn số lượng từng loại, một nút "Tiếp tục"). Đụng `createOrder`: trừ kho nhiều loại trong một transaction, Redlock nhiều khoá (C)
+- [ ] **Anh tự làm:** đăng ký VNPay sandbox, gửi URL IPN `https://<render>/api/payments/vnpay/ipn` cho VNPay, đặt 5 biến `VNPAY_*`, `MOMO_*` trên Render
 
 ## Giai đoạn 3: Công cụ cho nhà tổ chức
 
