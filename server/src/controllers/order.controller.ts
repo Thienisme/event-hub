@@ -13,7 +13,7 @@ import { claimPromoUsage, releasePromoUsage, returnTicketsToStock } from '../uti
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
 import { exceedsOrderAmount } from '../utils/validation';
-import { applicablePromo, computeDiscount } from '../utils/promo';
+import { applicablePromo, computeDiscount, publicOfferWhere, hasRemainingUses, publicOffer } from '../utils/promo';
 import { parsePagination } from '../utils/pagination';
 
 /** Đơn đang chiếm vé trong kho. Đơn EXPIRED và CANCELLED đã trả vé nên không tính. */
@@ -442,4 +442,31 @@ export const removeOrderPromo = async (req: Request, res: Response) => {
   } catch (error) {
     return handleControllerError(res, 'removeOrderPromo', error);
   }
+};
+
+export const getOrderOffers = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const order = await prisma.order.findFirst({ where: { id: req.params.id, userId },
+      include: { tickets: { include: { ticketType: true } } } });
+    if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
+    const now = new Date();
+    const eventId = order.tickets[0]?.ticketType.eventId;
+    if (order.status !== 'PENDING' || !order.expiresAt || order.expiresAt <= now || !eventId) {
+      return res.json({ data: [] });
+    }
+    const promos = (await prisma.promoCode.findMany({ where: publicOfferWhere(eventId, now) })).filter(hasRemainingUses);
+    const usage = await prisma.order.groupBy({ by: ['promoCodeId'],
+      where: { userId, id: { not: order.id }, status: { in: ['PENDING', 'CONFIRMED'] },
+        promoCodeId: { in: promos.map(p => p.id) } }, _count: { _all: true } });
+    const counts = new Map(usage.map(row => [row.promoCodeId, row._count._all]));
+    const data = promos.filter(p => (counts.get(p.id) ?? 0) < p.perUserLimit)
+      .map(p => ({ promo: p, discountAmount: computeDiscount(order.subtotalAmount, p).discountAmount }))
+      .filter(p => p.discountAmount.gt(0))
+      .sort((a, b) => b.discountAmount.comparedTo(a.discountAmount)
+        || (a.promo.endsAt?.getTime() ?? Infinity) - (b.promo.endsAt?.getTime() ?? Infinity)
+        || a.promo.code.localeCompare(b.promo.code))
+      .slice(0, 10).map(p => ({ ...publicOffer(p.promo), discountAmount: p.discountAmount.toString() }));
+    return res.json({ data });
+  } catch (error) { return handleControllerError(res, 'getOrderOffers', error); }
 };

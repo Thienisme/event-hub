@@ -21,3 +21,22 @@ export async function applicablePromo(tx: Prisma.TransactionClient, eventId: str
   if (used >= promo.perUserLimit) throw new AppError('Bạn đã dùng đủ số lần cho mã giảm giá này!');
   return promo;
 }
+
+/** Điều kiện hiển thị ưu đãi; việc chiếm lượt vẫn do claimPromoUsage bảo vệ. */
+export function publicOfferWhere(eventId: string, now: Date): Prisma.PromoCodeWhereInput {
+  return { eventId, isPublic: true, active: true, AND: [
+    { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+    { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+  ] };
+}
+
+export function hasRemainingUses(promo: PromoCode) {
+  return promo.maxUses === null || promo.usedCount < promo.maxUses;
+}
+
+/** Chỉ xuất các trường được phép công khai. */
+export function publicOffer(promo: PromoCode) {
+  return { code: promo.code, discountType: promo.discountType, discountValue: promo.discountValue.toString(),
+    endsAt: promo.endsAt?.toISOString() ?? null,
+    remainingUses: promo.maxUses === null ? null : promo.maxUses - promo.usedCount };
+}

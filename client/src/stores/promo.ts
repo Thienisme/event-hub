@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../api/axios';
 
+import type { Offer } from '@/utils/offers';
+
 export type PromoDiscountType = 'PERCENT' | 'FIXED';
 
 /**
@@ -20,11 +22,13 @@ export interface PromoCode {
   startsAt: string | null;
   endsAt: string | null;
   active: boolean;
+  isPublic: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface PromoCodeInput {
+  isPublic?: boolean;
   code: string;
   discountType: PromoDiscountType;
   discountValue: number;
@@ -50,6 +54,13 @@ export const usePromoStore = defineStore('promo', () => {
   const loading = ref(false);
   const loaded = ref(false);
   const errorMessage = ref('');
+
+  async function fetchEventOffers(eventId: string, signal?: AbortSignal): Promise<Offer[]> {
+    const { data } = await apiClient.get<{ data: Offer[] }>(
+      `/events/${encodeURIComponent(eventId)}/offers`, { signal }
+    );
+    return data.data;
+  }
 
   async function list(eventId: string): Promise<void> {
     loading.value = true;
@@ -102,5 +113,5 @@ export const usePromoStore = defineStore('promo', () => {
     errorMessage.value = '';
   }
 
-  return { codes, loading, loaded, errorMessage, list, create, update, remove, reset };
+  return { codes, loading, loaded, errorMessage, fetchEventOffers, list, create, update, remove, reset };
 });

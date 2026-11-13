@@ -33,10 +33,11 @@ Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (
 
 ### Luật dùng màu đỏ rượu `brand`
 
-Chỉ ba chỗ:
+Chỉ những chỗ sau:
 - Nút hành động mua hàng: "Đặt vé", "Thanh toán" (`bg-brand text-brand-foreground hover:bg-brand/90`).
 - Giá vé trên thẻ và trang chi tiết (`text-brand`).
 - Badge khan hiếm: "Sắp hết vé", "Còn N vé" (`bg-brand-soft text-brand`).
+- Ưu đãi ở trang sự kiện: dòng "Có ưu đãi · Giảm đến 20%" (`bg-brand-soft text-brand`). Thẻ ưu đãi trong trang thanh toán thì không dùng `brand`.
 
 Mọi nút khác dùng `primary` (đen) hoặc `outline`. Logo, tiêu đề, menu, icon **không** dùng `brand`.
 

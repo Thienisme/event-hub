@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../api/axios';
+import type { Offer } from '@/utils/offers';
 import type { TicketType } from './event';
+
+export interface OrderOffer extends Offer {
+  discountAmount: string;
+}
 
 export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
 
@@ -121,6 +126,11 @@ export const useOrderStore = defineStore('order', () => {
     return response.data.data;
   }
 
+  async function fetchOrderOffers(id: string): Promise<OrderOffer[]> {
+    const { data } = await apiClient.get<{ data: OrderOffer[] }>(`/orders/${encodeURIComponent(id)}/offers`);
+    return data.data;
+  }
+
   async function applyPromo(id: string, code: string): Promise<Order> {
     const response = await apiClient.post<{ message: string; data: Order }>(`/orders/${id}/promo`, { code });
     replaceOrder(response.data.data);
@@ -218,6 +228,7 @@ export const useOrderStore = defineStore('order', () => {
     createOrder,
     fetchMyOrders,
     fetchOrder,
+    fetchOrderOffers,
     applyPromo,
     removePromo,
     confirmOrder,

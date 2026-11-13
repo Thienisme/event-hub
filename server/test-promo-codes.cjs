@@ -11,17 +11,42 @@ const API = process.env.BASE_URL || 'http://localhost:5000/api';
 const users = [];
 let event;
 const stamp = Date.now();
+/**
+ * Bộ test này gửi hơn 100 request, vượt apiRateLimiter (100/phút) nếu chạy liền một mạch.
+ * Tự đếm request trong cửa sổ 60 giây (không dựa vào header RateLimit-*, vì orderRateLimiter
+ * ghi đè header đó trên route đặt vé). Gần chạm 85 thì chờ hết cửa sổ, để các loạt 10 request
+ * đồng thời (tranh chấp mã) luôn đủ hạn mức và thật sự chạy cùng lúc. Gặp 429 thì chờ rồi thử lại.
+ */
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const WINDOW_MS = 61_000, BUDGET = 85;
+let windowStart = Date.now(), sent = 0, quotaWait = null;
+async function takeQuota() {
+  for (;;) {
+    if (quotaWait) { await quotaWait; continue; }
+    if (Date.now() - windowStart >= WINDOW_MS) { windowStart = Date.now(); sent = 0; }
+    if (sent < BUDGET) { sent++; return; }
+    quotaWait = pause(windowStart + WINDOW_MS - Date.now()).then(() => { quotaWait = null; });
+  }
+}
+async function quotaFetch(url, options) {
+  for (let attempt = 0; ; attempt++) {
+    await takeQuota();
+    const res = await fetch(url, options);
+    if (res.status !== 429 || attempt >= 2) return res;
+    sent = BUDGET; // server báo hết: chờ sang cửa sổ mới rồi thử lại
+  }
+}
 async function user(tag) {
   const email = `promo-${tag}-${stamp}@test.local`;
   const row = await prisma.user.create({ data: { email, password: await bcrypt.hash('MatKhau123!', 4), fullName: 'Thử mã', role: 'ORGANIZER' } });
   users.push(row.id);
-  const response = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'MatKhau123!' }) });
+  const response = await quotaFetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'MatKhau123!' }) });
   const body = await response.json();
   assert.equal(response.status, 200);
   return { id: row.id, token: body.token };
 }
 async function api(who, method, path, data) {
-  const res = await fetch(`${API}${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${who.token}` }, body: data === undefined ? undefined : JSON.stringify(data) });
+  const res = await quotaFetch(`${API}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(who ? { Authorization: `Bearer ${who.token}` } : {}) }, body: data === undefined ? undefined : JSON.stringify(data) });
   return { status: res.status, body: await res.json() };
 }
 async function main() {
@@ -166,6 +191,78 @@ async function main() {
   await prisma.order.update({ where: { id: waiting[1].id }, data: { expiresAt: new Date(0) } });
   assert.equal((await apply(buyers[1], waiting[1].id, replacement.code)).status, 409);
   assert.equal((await api(buyers[1], 'DELETE', `/orders/${waiting[1].id}/promo`)).status, 409);
+  // Ưu đãi công khai: không làm lộ mã riêng hoặc trường quản trị.
+  const offersPath = `/events/${event.id}/offers`;
+  const offers = async (who, path) => {
+    const r = await api(who, 'GET', path);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    for (const item of r.body.data) {
+      assert.deepEqual(Object.keys(item).sort(),
+        ['code', 'discountType', 'discountValue', 'endsAt', 'remainingUses',
+          ...(path.startsWith('/orders/') ? ['discountAmount'] : [])].sort());
+      assert.equal(typeof item.discountValue, 'string');
+    }
+    return r.body.data;
+  };
+  const offerOrder = await book(buyers[8], event.ticketTypes[8]);
+  assert.equal(offerOrder.status, 201);
+  const orderOffersPath = `/orders/${offerOrder.body.order.id}/offers`;
+  const privatePromo = await create('PRIVATE', { maxUses: 8 });
+  assert.equal(privatePromo.isPublic, false);
+  assert.deepEqual(await offers(null, offersPath), []);
+  assert.deepEqual(await offers(buyers[8], orderOffersPath), []);
+  assert.equal((await api(owner, 'PATCH', `/promo-codes/${privatePromo.id}`, { isPublic: true })).status, 200);
+  assert.equal((await offers(null, offersPath))[0].code, privatePromo.code);
+  assert.equal((await offers(buyers[8], orderOffersPath))[0].code, privatePromo.code);
+  const high = await create('PUBLIC50', { isPublic: true, discountValue: 50 });
+  const bigFixed = await create('PUBLICFIXED', { isPublic: true, discountType: 'FIXED', discountValue: 999999 });
+  await create('PUBLICSMALL', { isPublic: true, discountType: 'FIXED', discountValue: 1000 });
+  await create('PUBLICZERO', { isPublic: true, discountValue: 1 });
+  const off = await create('PUBLICOFF', { isPublic: true });
+  assert.equal((await api(owner, 'PATCH', `/promo-codes/${off.id}`, { active: false })).status, 200);
+  await create('PUBLICFUTURE', { isPublic: true, startsAt: new Date(Date.now() + 86400000).toISOString() });
+  await create('PUBLICPAST', { isPublic: true, endsAt: new Date(Date.now() - 86400000).toISOString() });
+  const exhausted = await create('PUBLICFULL', { isPublic: true, maxUses: 1 });
+  await prisma.promoCode.update({ where: { id: exhausted.id }, data: { usedCount: 1 } });
+  const eventOffers = await offers(null, offersPath);
+  assert.deepEqual(eventOffers.map(p => p.code), ['PUBLIC50', 'PRIVATE', 'PUBLICZERO', 'PUBLICFIXED', 'PUBLICSMALL']);
+  assert.equal(eventOffers.find(p => p.code === 'PRIVATE').remainingUses, 8);
+  assert.equal(eventOffers[0].remainingUses, null);
+  assert.equal((await api(null, 'GET', '/events/missing-event/offers')).status, 404);
+  assert.equal((await api(buyers[9], 'GET', orderOffersPath)).status, 404);
+  assert.equal((await api(null, 'GET', orderOffersPath)).status, 401);
+  const orderOffers = await offers(buyers[8], orderOffersPath);
+  assert.deepEqual(orderOffers.map(p => p.code), ['PUBLICFIXED', 'PUBLIC50', 'PRIVATE', 'PUBLICZERO', 'PUBLICSMALL']);
+  assert.equal(Number(orderOffers[0].discountAmount), 150000);
+  assert.equal(Number(orderOffers.find(p => p.code === high.code).discountAmount), 75000);
+  const appliedOffer = await apply(buyers[8], offerOrder.body.order.id, high.code);
+  assert.equal(appliedOffer.status, 200);
+  assert.equal(Number(appliedOffer.body.data.discountAmount), Number(orderOffers.find(p => p.code === high.code).discountAmount));
+  assert.equal(Number(appliedOffer.body.data.totalAmount), 75000);
+  assert.ok((await offers(buyers[8], orderOffersPath)).some(p => p.code === high.code));
+  const nextOrder = await book(buyers[8], event.ticketTypes[8]);
+  assert.equal(nextOrder.status, 201);
+  assert.ok(!(await offers(buyers[8], `/orders/${nextOrder.body.order.id}/offers`)).some(p => p.code === high.code));
+  assert.equal((await apply(buyers[8], offerOrder.body.order.id, privatePromo.code)).status, 200);
+  assert.equal((await offers(null, offersPath)).find(p => p.code === privatePromo.code).remainingUses, 7);
+  assert.equal((await api(buyers[8], 'POST', `/orders/${nextOrder.body.order.id}/cancel`)).status, 200);
+  assert.deepEqual(await offers(buyers[8], `/orders/${nextOrder.body.order.id}/offers`), []);
+  assert.deepEqual(await offers(buyers[0], `${cancelledPath}/offers`), []);
+  assert.deepEqual(await offers(buyers[1], `/orders/${waiting[1].id}/offers`), []);
+  // Giá trị giảm bằng 0 không được liệt kê; ngày hết hạn gần hơn xếp trước, null cuối.
+  await prisma.order.update({ where: { id: offerOrder.body.order.id }, data: { subtotalAmount: 1 } });
+  const sooner = await create('PUBLICSOON', { isPublic: true, discountType: 'FIXED', discountValue: 2,
+    endsAt: new Date(Date.now() + 3600000).toISOString() });
+  const tinyOffers = await offers(buyers[8], orderOffersPath);
+  assert.equal(tinyOffers[0].code, sooner.code);
+  assert.ok(!tinyOffers.some(p => p.discountType === 'PERCENT'));
+  assert.ok(tinyOffers.some(p => p.code === bigFixed.code && Number(p.discountAmount) === 1));
+  for (let i = 0; i < 11; i++) {
+    await prisma.promoCode.create({ data: { eventId: event.id, code: `PUBLICEXTRA${i}`, isPublic: true,
+      discountType: 'FIXED', discountValue: 1 } });
+  }
+  assert.equal((await offers(null, offersPath)).length, 10);
+  assert.equal((await offers(buyers[8], orderOffersPath)).length, 10);
   const unused = await create('DELETE');
   assert.equal((await api(owner, 'DELETE', `/promo-codes/${unused.id}`)).status, 200);
   console.log('✅ CRUD, quyền, tiền, preview, checkout, tranh chấp và trả lượt mã giảm giá');
