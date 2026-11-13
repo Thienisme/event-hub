@@ -2,9 +2,16 @@ import { Router } from 'express';
 import { createEvent, getEvents, getEventById, updateEvent, deleteEvent } from '../controllers/event.controller';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { checkInTicket, getCheckInStats } from '../controllers/checkin.controller';
-import { validateBody, createEventSchema, checkInSchema } from '../utils/validation';
+import { validateBody, createEventSchema, checkInSchema, createPromoSchema } from '../utils/validation';
+
+import { listPromoCodes, createPromoCode } from '../controllers/promo.controller';
+
+import { getMyWaitlist } from '../controllers/waitlist.controller';
 
 const router = Router();
+router.get('/:id/waitlist/me', authenticate, getMyWaitlist);
+router.get('/:id/promo-codes', authenticate, authorize('ORGANIZER', 'ADMIN'), listPromoCodes);
+router.post('/:id/promo-codes', authenticate, authorize('ORGANIZER', 'ADMIN'), validateBody(createPromoSchema), createPromoCode);
 
 // Public Routes (Xem danh sách & chi tiết)
 router.get('/', getEvents);

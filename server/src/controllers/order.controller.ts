@@ -1,18 +1,19 @@
 import { Request, Response } from 'express';
-import { OrderStatus } from '@prisma/client';
+import { Prisma, OrderStatus } from '@prisma/client';
 import prisma from '../utils/prisma';
+import { notifyWaitlist, returnedQuantities } from '../utils/waitlistNotify';
 import { redlock } from '../config/redis';
-import { randomBytes } from 'crypto';
+import { markOrderConfirmed, emailConfirmedOrder } from '../payments/complete';
 import {
   buildExpiresAt,
   isSimulatedPaymentEnabled,
   MAX_TICKETS_PER_USER_PER_EVENT,
 } from '../config/order';
-import { returnTicketsToStock } from '../utils/orderInventory';
+import { releasePromoUsage, returnTicketsToStock } from '../utils/orderInventory';
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
 import { exceedsOrderAmount } from '../utils/validation';
-import { sendTicketEmail } from '../utils/ticketEmail';
+import { applicablePromo, computeDiscount } from '../utils/promo';
 import { parsePagination } from '../utils/pagination';
 
 /** Đơn đang chiếm vé trong kho. Đơn EXPIRED và CANCELLED đã trả vé nên không tính. */
@@ -22,7 +23,7 @@ const ORDER_INCLUDE = { tickets: true } as const;
 
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user?.userId;
-  const { ticketTypeId, quantity } = req.body;
+  const { ticketTypeId, quantity, promoCode } = req.body;
 
   if (!userId) {
     return res.status(401).json({ message: 'Người dùng chưa đăng nhập!' });
@@ -132,7 +133,7 @@ export const createOrder = async (req: Request, res: Response) => {
       // Decimal.mul: giữ phép tính trong kiểu Decimal thay vì đổi sang double.
       // Giá vé có 2 chữ số thập phân; nhân bằng số thực có thể lệch ở biên và
       // ghi vào DECIMAL(12,2) một giá trị đã bị làm tròn ngầm.
-      const totalAmount = ticketType.price.mul(quantity);
+      const subtotalAmount = ticketType.price.mul(quantity);
 
       // Ràng buộc invariant của cột `orders.totalAmount` (DECIMAL(12,2)).
       //
@@ -144,10 +145,19 @@ export const createOrder = async (req: Request, res: Response) => {
         throw new AppError('Tổng tiền của đơn hàng vượt quá giới hạn cho phép!');
       }
 
+      const promo = promoCode ? await applicablePromo(tx, ticketType.eventId, promoCode, userId) : null;
+      if (promo) {
+        const claimed = await tx.$executeRaw`UPDATE promo_codes SET usedCount = usedCount + 1
+          WHERE id = ${promo.id} AND active = 1 AND (maxUses IS NULL OR usedCount < maxUses)`;
+        if (claimed !== 1) throw new AppError('Mã giảm giá đã hết lượt sử dụng!');
+      }
+      const amounts = promo ? computeDiscount(subtotalAmount, promo)
+        : { subtotalAmount, discountAmount: new Prisma.Decimal(0), totalAmount: subtotalAmount };
       const order = await tx.order.create({
         data: {
           userId,
-          totalAmount,
+          ...amounts,
+          promoCodeId: promo?.id,
           status: 'PENDING',
           // Giữ chỗ có thời hạn: nếu quá hạn mà chưa thanh toán,
           // job nền (jobs/expireOrders.job.ts) sẽ chuyển EXPIRED và trả vé về kho.
@@ -165,6 +175,9 @@ export const createOrder = async (req: Request, res: Response) => {
 
       return { order, eventId: ticketType.eventId };
     });
+
+    void prisma.waitlistEntry.deleteMany({ where: { ticketTypeId, userId } })
+      .catch(() => console.error('[waitlist] Không thể xoá người đã đặt vé'));
 
     // 3. Nhả lock NGAY khi transaction đã commit.
     //
@@ -296,17 +309,8 @@ export const confirmOrder = async (req: Request, res: Response) => {
           throw new AppError('Đơn hàng đã hết hạn giữ chỗ, không thể thanh toán!', 409);
         }
 
-        const tickets = await tx.ticket.findMany({ where: { orderId: id }, select: { id: true } });
-        for (const ticket of tickets) {
-          await tx.ticket.update({
-            where: { id: ticket.id },
-            // 128 bit ngẫu nhiên: không đoán được, nên không suy ra được vé của người khác.
-            data: { qrCode: randomBytes(16).toString('base64url') },
-          });
-        }
-
         return {
-          order: await tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE }),
+          order: await markOrderConfirmed(tx, id),
           newlyConfirmed: true,
         };
       },
@@ -315,7 +319,7 @@ export const confirmOrder = async (req: Request, res: Response) => {
     );
 
     // Transaction đã commit; gửi nền chỉ khi lần này thực sự đổi trạng thái.
-    if (newlyConfirmed) void sendTicketEmail(order.id);
+    if (newlyConfirmed) emailConfirmedOrder(order.id);
 
     return res.json({ message: 'Thanh toán thành công!', order });
   } catch (error) {
@@ -334,7 +338,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const { order, eventIds } = await prisma.$transaction(async (tx) => {
+    const { order, eventIds, returned } = await prisma.$transaction(async (tx) => {
       const claimed = await tx.order.updateMany({
         where: { id, userId, status: 'PENDING' },
         data: { status: 'CANCELLED' },
@@ -347,7 +351,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
         });
 
         if (!current) throw new AppError('Không tìm thấy đơn hàng!', 404);
-        if (current.status === 'CANCELLED') return { order: current, eventIds: [] };
+        if (current.status === 'CANCELLED') return { order: current, eventIds: [], returned: [] };
         if (current.status === 'CONFIRMED') {
           throw new AppError('Đơn hàng đã thanh toán, không thể huỷ!', 409);
         }
@@ -355,9 +359,12 @@ export const cancelOrder = async (req: Request, res: Response) => {
       }
 
       const updated = await tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
-      return { order: updated, eventIds: await returnTicketsToStock(tx, updated.tickets) };
+      const eventIds = await returnTicketsToStock(tx, updated.tickets);
+      await releasePromoUsage(tx, updated);
+      return { order: updated, eventIds, returned: returnedQuantities(updated.tickets) };
     });
 
+    void notifyWaitlist(returned).catch(() => console.error('[waitlist] Lỗi báo vé trả lại'));
     if (eventIds.length > 0) await invalidateEventCache(eventIds);
 
     return res.json({ message: 'Đã huỷ đơn hàng!', order });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { UPLOADED_IMAGE_PATH } from './storage';
 
 /** URL banner hợp lệ: http(s) tuyệt đối, hoặc đường dẫn ảnh đã tải lên server. */
@@ -235,7 +236,13 @@ export const changePasswordSchema = z.object({
 /**
  * Schema validation cho đặt hàng.
  */
+export const promoCodeField = z.string().trim().toUpperCase()
+  .min(3, 'Mã giảm giá phải có từ 3 đến 32 ký tự!')
+  .max(32, 'Mã giảm giá phải có từ 3 đến 32 ký tự!')
+  .regex(/^[A-Z0-9_-]+$/, 'Mã giảm giá chỉ gồm chữ, số, _ và -!');
+
 export const createOrderSchema = z.object({
+  promoCode: promoCodeField.optional(),
   ticketTypeId: z.string().uuid('ID loại vé không hợp lệ!'),
   quantity: z
     .number()
@@ -307,3 +314,23 @@ export const validateBody = (schema: z.ZodSchema) => {
 export const forgotPasswordSchema = z.object({ email: z.string().trim().email('Email không hợp lệ!') });
 export const emailTokenSchema = z.object({ token: z.string().min(1, 'Liên kết không hợp lệ!').max(256, 'Liên kết không hợp lệ!') });
 export const resetPasswordSchema = emailTokenSchema.extend({ newPassword: changePasswordSchema.shape.newPassword });
+
+const promoFields = z.object({
+  code: promoCodeField,
+  discountType: z.enum(['PERCENT', 'FIXED'], { message: 'Loại giảm giá không hợp lệ!' }),
+  discountValue: z.union([z.number(), z.string()]).refine(v => {
+    try {
+      const d = new Prisma.Decimal(v);
+      return d.isFinite() && d.gt(0) && d.lte('9999999999.99') && d.decimalPlaces() <= 2;
+    } catch { return false; }
+  }, 'Giá trị giảm giá phải dương, tối đa 9.999.999.999,99 và có tối đa 2 chữ số thập phân!'),
+  maxUses: z.number({ message: 'Giới hạn lượt dùng không hợp lệ!' }).int('Giới hạn lượt dùng phải là số nguyên!').min(1, 'Giới hạn lượt dùng phải lớn hơn 0!').max(LIMITS.QUANTITY, 'Giới hạn lượt dùng vượt quá giới hạn cột số nguyên!').nullable().optional(),
+  perUserLimit: z.number({ message: 'Giới hạn theo tài khoản không hợp lệ!' }).int('Giới hạn theo tài khoản phải là số nguyên!').min(1, 'Giới hạn theo tài khoản phải lớn hơn 0!').max(LIMITS.QUANTITY, 'Giới hạn theo tài khoản vượt quá giới hạn cột số nguyên!').optional(),
+  startsAt: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian bắt đầu không hợp lệ!').nullable().optional(),
+  endsAt: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian kết thúc không hợp lệ!').nullable().optional(),
+});
+export const createPromoSchema = promoFields;
+export const updatePromoSchema = promoFields.partial().extend({ active: z.boolean({ message: 'Trạng thái mã giảm giá không hợp lệ!' }).optional() });
+export const previewPromoSchema = createOrderSchema.omit({ promoCode: true }).extend({ code: promoCodeField });
+
+export const payOrderSchema = z.object({ provider: z.enum(['VNPAY', 'MOMO'], { error: 'Cổng thanh toán không hợp lệ!' }) });

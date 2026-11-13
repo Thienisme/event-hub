@@ -33,3 +33,11 @@ export async function returnTicketsToStock(
 
   return eventIds;
 }
+
+/** Chỉ gọi sau khi thắng CAS giải phóng đơn, trong cùng transaction. */
+export async function releasePromoUsage(tx: Prisma.TransactionClient, order: { promoCodeId: string | null }) {
+  if (order.promoCodeId) {
+    await tx.$executeRaw`UPDATE promo_codes SET usedCount = usedCount - 1
+      WHERE id = ${order.promoCodeId} AND usedCount > 0`;
+  }
+}

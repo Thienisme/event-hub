@@ -15,8 +15,11 @@ import { escapeHtml } from './utils/mailer';
 import helmet from 'helmet';
 import prisma from './utils/prisma';
 import authRoutes from './routes/auth.routes';
+import waitlistRoutes from './routes/waitlist.routes';
 import eventRoutes from './routes/event.routes';
 import orderRoutes from './routes/order.routes';
+import paymentRoutes from './routes/payment.routes';
+import promoRoutes from './routes/promo.routes';
 import adminRoutes from './routes/admin.routes';
 import organizerRoutes from './routes/organizer.routes';
 import uploadRoutes from './routes/upload.routes';
@@ -121,12 +124,16 @@ if (STORAGE_DRIVER === 'db') {
 }
 
 // Áp dụng rate limiter chung cho toàn bộ API
+// Callback cổng thanh toán không phụ thuộc hạn mức request của người mua.
+app.use('/api/payments', paymentRoutes);
 app.use('/api/', apiRateLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/ticket-types', waitlistRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/promo-codes', promoRoutes);
 // Quản trị (chỉ ADMIN) và quản lý sự kiện của bản thân (ORGANIZER/ADMIN).
 app.use('/api/admin', adminRoutes);
 app.use('/api/organizer', organizerRoutes);

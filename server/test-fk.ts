@@ -23,7 +23,7 @@ async function main() {
   await prisma.order.create({
     data: {
       userId: user.id,
-      totalAmount: 100,
+      totalAmount: 100, subtotalAmount: 100,
       status: 'CONFIRMED',
       tickets: { create: [{ ticketTypeId: ticketType.id }] }
     }

@@ -1,8 +1,11 @@
 import prisma from '../utils/prisma';
+import { notifyWaitlist, returnedQuantities } from '../utils/waitlistNotify';
 import { invalidateEventCache } from '../utils/cache';
-import { returnTicketsToStock } from '../utils/orderInventory';
+import { releasePromoUsage, returnTicketsToStock } from '../utils/orderInventory';
 
 /**
+ * Cổng thanh toán đóng trước expiresAt 5 phút để IPN có thời gian tới.
+ * CAS vẫn bảo vệ tranh chấp; tiền tới sau khi trả vé sẽ được đánh dấu cần hoàn.
  * Quét các đơn PENDING đã quá `expiresAt`, chuyển sang EXPIRED và trả vé về kho.
  *
  * VÌ SAO KHÔNG CẦN REDLOCK Ở ĐÂY (khác với createOrder):
@@ -39,7 +42,8 @@ export async function releaseExpiredOrders(): Promise<number> {
       const result = await prisma.$transaction(async (tx) => {
         // Bước 1: CAS - chỉ worker thắng mới đi tiếp
         const claimed = await tx.order.updateMany({
-          where: { id: order.id, status: 'PENDING' },
+          // Kiểm lại hạn ngay tại CAS: /pay có thể vừa gia hạn sau lượt quét ở trên.
+          where: { id: order.id, status: 'PENDING', expiresAt: { lt: new Date() } },
           data: { status: 'EXPIRED' },
         });
 
@@ -47,12 +51,14 @@ export async function releaseExpiredOrders(): Promise<number> {
 
         // Bước 2: cộng trả vé trong cùng transaction
         const eventIds = await returnTicketsToStock(tx, order.tickets);
+        await releasePromoUsage(tx, order);
 
-        return { eventIds };
+        return { eventIds, returned: returnedQuantities(order.tickets) };
       });
 
       if (!result) continue; // worker khác đã xử lý đơn này
 
+      void notifyWaitlist(result.returned).catch(() => console.error('[waitlist] Lỗi báo vé hết hạn'));
       releasedCount += 1;
       result.eventIds.forEach((eventId) => touchedEventIds.add(eventId));
     } catch (error) {

@@ -68,7 +68,7 @@ const createOrderRow = (ticketTypeId, status) =>
   prisma.order.create({
     data: {
       userId: customer.id,
-      totalAmount: 100000,
+      totalAmount: 100000, subtotalAmount: 100000,
       status,
       expiresAt: new Date(Date.now() - 1000),
       tickets: { create: [{ ticketTypeId }] },
