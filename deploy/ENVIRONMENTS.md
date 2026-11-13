@@ -49,6 +49,8 @@ Service `eventhub` → **Environment**. 🔒 là bí mật: chỉ nằm trên Re
 | `BREVO_API_KEY` 🔒 | API key Brevo | Tự đặt (`sync: false`) |
 | `MAIL_FROM` | `EventHub <email đã xác thực với Brevo>` | Tự đặt (`sync: false`) |
 | `MAIL_OUTBOX_DIR` | Tuỳ chọn với driver `log`; CI dùng `/tmp/eventhub-mail-outbox`, mỗi thư một JSON chứa token | Dev/CI đặt; không public thư mục này |
+| `VNPAY_TMN_CODE` 🔒, `VNPAY_HASH_SECRET` 🔒 | Khoá VNPay sandbox. Thiếu thì ẩn cổng VNPay. Gửi URL IPN `https://eventhub-v3xy.onrender.com/api/payments/vnpay/ipn` cho VNPay | Tự đặt (`sync: false`) |
+| `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` 🔒 | Khoá MoMo; sandbox dùng bộ công khai ghi trong `docs/PAYMENTS.md` | Tự đặt (`sync: false`) |
 | `PORT` | `10000` | Render tự đặt |
 
 `DATABASE_URL` và `SEED_DEMO_PASSWORD` khai báo `sync: false`: Render chỉ hỏi một lần lúc tạo Blueprint; muốn đổi thì
