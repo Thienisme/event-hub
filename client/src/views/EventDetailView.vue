@@ -3,6 +3,8 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '../stores/event';
 import type { EventItem, TicketType } from '../stores/event';
+import { usePromoStore } from '@/stores/promo';
+import { bestOfferText, type Offer } from '@/utils/offers';
 import { useOrderStore } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { useWaitlistStore } from '../stores/waitlist';
@@ -13,7 +15,7 @@ import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert, Bell } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,6 +26,8 @@ const route = useRoute();
 const router = useRouter();
 const eventStore = useEventStore();
 const orderStore = useOrderStore();
+const promoStore = usePromoStore();
+const offers = ref<Offer[]>([]);
 const authStore = useAuthStore();
 const waitlistStore = useWaitlistStore();
 const toast = useToastStore();
@@ -162,6 +166,7 @@ const loadEvent = async (id: string) => {
   // Xoá sự kiện đang hiển thị ngay lập tức: nếu giữ lại, lúc chờ response mới
   // người dùng vẫn nhìn thấy sự kiện cũ (và tưởng là dữ liệu bị sai).
   event.value = null;
+  offers.value = [];
   quantities.value = {};
   isLoading.value = true;
 
@@ -173,7 +178,11 @@ const loadEvent = async (id: string) => {
       return;
     }
 
+    if (controller.signal.aborted) return;
     event.value = loaded;
+    void promoStore.fetchEventOffers(loaded.id, controller.signal).then(data => {
+      if (!controller.signal.aborted) offers.value = data;
+    }).catch(() => {});
 
     // Mặc định mỗi loại vé chọn 1
     quantities.value = Object.fromEntries(
@@ -397,6 +406,7 @@ const handleDelete = async () => {
               <AppAlert :message="errorMessage" type="error" />
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
               <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
+              <p v-if="offers.length" class="rounded-md bg-brand-soft px-3 py-2 text-sm text-brand"><TicketPercent class="mr-1 inline size-4" aria-hidden="true" /><strong>Có ưu đãi</strong> · {{ bestOfferText(offers) }}<span class="text-muted-foreground"> · áp dụng ở bước thanh toán</span></p>
               <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50': ticket.availableQuantity <= 0, 'opacity-60': ticket.availableQuantity <= 0 && !canJoinWaitlist(ticket) }">
                 <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p>
                 </div>

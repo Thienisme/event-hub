@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue';
+import AuthLayout from '@/components/AuthLayout.vue';
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -58,28 +60,23 @@ import { Label } from '@/components/ui/label';
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
-    <div class="w-full max-w-sm">
-      <router-link :to="{ name: 'Home' }" class="mb-6 inline-block text-sm text-muted-foreground hover:text-foreground">← Về trang chủ</router-link>
-      <h1 class="text-2xl font-bold tracking-tight">Đăng nhập EventHub</h1>
-      <p class="mt-2 text-sm text-muted-foreground">Chào mừng trở lại. Đăng nhập để tiếp tục.</p>
+  <AuthLayout title="Đăng nhập" description="Dùng email đã đăng ký để xem vé và đặt chỗ.">
       <AppAlert :message="successMessage" type="success" class="mt-4" />
       <AppAlert :message="errorMessage" type="error" class="mt-4" />
       <form class="mt-8 space-y-4" @submit.prevent="handleLogin">
         <div class="space-y-2">
           <Label for="email">Email</Label>
-          <Input id="email" v-model="email" type="email" required class="h-10 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
+          <Input id="email" v-model="email" type="email" autofocus required class="h-11 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
         </div>
         <div class="space-y-2">
           <div class="flex items-center justify-between gap-2">
             <Label for="password">Mật khẩu</Label>
             <router-link to="/forgot-password" class="text-sm text-muted-foreground hover:text-foreground">Quên mật khẩu?</router-link>
           </div>
-          <Input id="password" v-model="password" type="password" required autocomplete="current-password" placeholder="••••••••" class="h-10 bg-background shadow-none" />
+          <PasswordInput id="password" v-model="password" required autocomplete="current-password" placeholder="••••••••" class="h-11 bg-background shadow-none" />
         </div>
-        <Button type="submit" class="w-full h-10" :disabled="isLoading">{{ isLoading ? 'Đang xử lý...' : 'Đăng nhập' }}</Button>
+        <Button type="submit" class="w-full h-11" :disabled="isLoading">{{ isLoading ? 'Đang xử lý...' : 'Đăng nhập' }}</Button>
       </form>
       <p class="mt-6 text-center text-sm text-muted-foreground">Chưa có tài khoản? <router-link to="/register" class="font-medium text-foreground underline-offset-4 hover:underline">Đăng ký</router-link></p>
-    </div>
-  </div>
+  </AuthLayout>
 </template>

@@ -67,6 +67,10 @@ IPN MoMo trả `204` khi nhận.
 
 ## 3. Mã giảm giá
 
+- Mã mặc định là riêng (`isPublic: false`); nhà tổ chức bật công khai để khách tìm thấy ưu đãi, mã riêng không xuất hiện trong danh sách ưu đãi.
+- `GET /api/events/:id/offers` công khai; `GET /api/orders/:id/offers` chỉ dành cho chủ đơn, lọc thêm hạn mức tài khoản và tính số tiền giảm cho đơn.
+- Danh sách chỉ phục vụ hiển thị; áp mã vẫn qua `applicablePromo` và chốt chặn `claimPromoUsage` như cũ.
+
 - Nhà tổ chức của sự kiện hoặc admin tạo ở `/my-events/:id/promo-codes`. Mã lưu chữ HOA, khách nhập thường cũng được.
 - `PERCENT`: giảm `floor(tạm tính × % / 100)`, % là số nguyên 1..100. `FIXED`: giảm `min(số tiền, tạm tính)`.
 - Đơn lưu `subtotalAmount`, `discountAmount`, `totalAmount = subtotal − discount`, `promoCodeId`.

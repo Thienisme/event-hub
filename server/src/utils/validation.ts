@@ -319,6 +319,7 @@ export const resetPasswordSchema = emailTokenSchema.extend({ newPassword: change
 
 const promoFields = z.object({
   code: promoCodeField,
+  isPublic: z.boolean({ message: 'Trạng thái công khai không hợp lệ!' }).optional(),
   discountType: z.enum(['PERCENT', 'FIXED'], { message: 'Loại giảm giá không hợp lệ!' }),
   discountValue: z.union([z.number(), z.string()]).refine(v => {
     try {
@@ -331,7 +332,7 @@ const promoFields = z.object({
   startsAt: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian bắt đầu không hợp lệ!').nullable().optional(),
   endsAt: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian kết thúc không hợp lệ!').nullable().optional(),
 });
-export const createPromoSchema = promoFields;
+export const createPromoSchema = promoFields.extend({ isPublic: promoFields.shape.isPublic.default(false) });
 export const updatePromoSchema = promoFields.partial().extend({ active: z.boolean({ message: 'Trạng thái mã giảm giá không hợp lệ!' }).optional() });
 export const previewPromoSchema = createOrderSchema.omit({ promoCode: true }).extend({ code: promoCodeField });
 

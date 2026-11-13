@@ -2,9 +2,10 @@
 import { computed, ref, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CreditCard, Wallet, FlaskConical, CalendarDays, MapPin, Timer, LockKeyhole } from '@lucide/vue';
-import { useOrderStore, type Order, type PaymentProvider } from '@/stores/order';
+import { useOrderStore, type Order, type OrderOffer, type PaymentProvider } from '@/stores/order';
 import { useToastStore } from '@/stores/toast';
 import { formatPrice, formatDateTime } from '@/utils/format';
+import OfferCard from '@/components/OfferCard.vue';
 import DataState from '@/components/DataState.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,9 @@ const PROVIDER_ORDER: PaymentProvider[] = ['VNPAY', 'MOMO', 'MOCK'];
 const selected = ref<PaymentProvider>();
 const busy = ref(false);
 const promoBusy = ref(false);
+const offers = ref<OrderOffer[]>([]);
+const offersExpanded = ref(false);
+const visibleOffers = computed(() => offersExpanded.value ? offers.value : offers.value.slice(0, 3));
 const promoOpen = ref(false);
 const promoInput = ref('');
 const promoError = ref('');
@@ -61,14 +65,17 @@ async function load() {
   loading.value = true;
   loadError.value = '';
   order.value = null;
+  offers.value = [];
+  offersExpanded.value = false;
   promoOpen.value = false;
   promoInput.value = '';
   promoError.value = '';
   cancelOpen.value = false;
   try {
-    const [current, enabled] = await Promise.all([store.fetchOrder(String(route.params.orderId)), store.loadPaymentProviders()]);
+    const [current, enabled, available] = await Promise.all([store.fetchOrder(String(route.params.orderId)), store.loadPaymentProviders(), store.fetchOrderOffers(String(route.params.orderId)).catch(() => [])]);
     if (currentVersion !== version) return;
     order.value = current;
+    offers.value = available;
     // Cổng thật lên trước, thanh toán thử luôn ở cuối (server trả MOCK đầu tiên).
     providers.value = [...enabled].sort((a, b) => PROVIDER_ORDER.indexOf(a) - PROVIDER_ORDER.indexOf(b));
     selected.value = providers.value[0];
@@ -80,16 +87,24 @@ async function load() {
   }
 }
 watch(() => route.params.orderId, load, { immediate: true });
-async function changePromo(remove = false) {
+async function changePromo(remove = false, code = promoInput.value) {
   if (locked.value || order.value?.paymentStarted || !order.value) return;
   promoError.value = '';
-  if (!remove && !promoInput.value.trim()) { promoError.value = 'Nhập mã giảm giá trước khi áp dụng!'; return; }
+  if (!remove && !code.trim()) { promoError.value = 'Nhập mã giảm giá trước khi áp dụng!'; return; }
   promoBusy.value = true;
+  const currentVersion = version;
+  const orderId = order.value.id;
   try {
-    order.value = remove ? await store.removePromo(order.value.id) : await store.applyPromo(order.value.id, promoInput.value.trim().toUpperCase());
+    const updated = remove ? await store.removePromo(orderId) : await store.applyPromo(orderId, code.trim().toUpperCase());
+    if (currentVersion !== version) return;
+    order.value = updated;
+    const available = await store.fetchOrderOffers(orderId).catch(() => []);
+    if (currentVersion !== version) return;
+    offers.value = available;
     promoInput.value = '';
     promoOpen.value = false;
   } catch (error: any) {
+    if (currentVersion !== version) return;
     promoError.value = message(error, 'Không thể cập nhật mã giảm giá!');
     if (error.response?.status === 409) await refreshOrder().catch(() => {});
   } finally { promoBusy.value = false; }
@@ -168,13 +183,18 @@ async function cancel() {
                   <div class="flex flex-wrap justify-between gap-2 border-t border-border pt-3 text-sm"><span>Tạm tính</span><span class="tabular-nums">{{ formatPrice(order.subtotalAmount ?? order.totalAmount) }}</span></div>
                 </div>
                 <div class="min-w-0 space-y-3">
-                  <div v-if="order.promoCode" class="flex flex-wrap items-center gap-2"><span class="max-w-full break-all rounded-md border border-border bg-muted px-2 py-1 text-xs font-semibold">{{ order.promoCode }}</span><Button v-if="!order.paymentStarted" variant="ghost" size="sm" :disabled="locked" @click="changePromo(true)">Gỡ</Button></div>
-                  <!-- Đã áp mã thì chỉ còn chip + "Gỡ"; muốn đổi mã thì gỡ trước. -->
-                  <template v-if="!order.paymentStarted && !order.promoCode">
-                    <button v-if="!promoOpen" type="button" class="text-sm underline underline-offset-4 disabled:opacity-50" :disabled="locked" :aria-expanded="promoOpen" aria-controls="promo-form" @click="promoOpen = true">Có mã giảm giá?</button>
-                    <form v-else id="promo-form" class="space-y-2" @submit.prevent="changePromo()">
+                  <div v-if="order.promoCode && (order.paymentStarted || !offers.some(offer => offer.code === order?.promoCode))" class="flex flex-wrap items-center gap-2"><span class="max-w-full break-all rounded-md border border-border bg-muted px-2 py-1 text-xs font-semibold">{{ order.promoCode }}</span><Button v-if="!order.paymentStarted" variant="ghost" size="sm" :disabled="locked" @click="changePromo(true)">Gỡ</Button></div>
+                  <template v-if="!order.paymentStarted">
+                    <div v-if="offers.length" class="min-w-0 space-y-3">
+                      <h3 class="text-sm font-semibold">Ưu đãi cho đơn này</h3>
+                      <OfferCard v-for="(offer, index) in visibleOffers" :key="offer.code" :offer="offer" :active="order.promoCode === offer.code" :best="index === 0 && !order.promoCode" :disabled="locked" @apply="changePromo(false, offer.code)" @remove="changePromo(true)" />
+                      <Button v-if="!offersExpanded && offers.length > 3" variant="ghost" size="sm" @click="offersExpanded = true">Xem thêm {{ offers.length - 3 }} ưu đãi</Button>
+                    </div>
+                    <button type="button" class="text-sm underline underline-offset-4 disabled:opacity-50" :disabled="locked" :aria-expanded="promoOpen" aria-controls="promo-form" @click="promoOpen = !promoOpen">{{ offers.length ? 'Có mã khác?' : 'Bạn có mã giảm giá?' }}</button>
+                    <form v-if="promoOpen" id="promo-form" class="space-y-2" @submit.prevent="changePromo()">
                       <label for="checkout-promo" class="text-sm font-medium">Mã giảm giá</label>
                       <div class="flex min-w-0 gap-2"><Input id="checkout-promo" v-model="promoInput" type="text" autocomplete="off" maxlength="32" class="min-w-0 flex-1 uppercase" :disabled="locked" :aria-invalid="!!promoError" :aria-describedby="promoError ? 'promo-error' : undefined" /><Button type="submit" variant="outline" :disabled="locked">Áp dụng</Button></div>
+                      <p class="text-xs text-muted-foreground">Mã do nhà tổ chức gửi qua email, fanpage hoặc đối tác của sự kiện.</p>
                     </form>
                   </template>
                   <p v-if="promoError" id="promo-error" role="alert" class="break-words text-sm text-danger">{{ promoError }}</p>

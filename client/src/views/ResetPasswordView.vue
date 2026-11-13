@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue';
+import AuthLayout from '@/components/AuthLayout.vue';
 import { ref } from 'vue';
 import apiClient from '@/api/axios';
 import AppAlert from '@/components/AppAlert.vue';
@@ -28,14 +30,10 @@ async function submit() {
   } catch (err: any) { error.value = err.response?.data?.message || 'Không thể xử lý yêu cầu. Vui lòng thử lại.'; }
   finally { busy.value = false; }
 }
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 </script>
 <template>
-  <div class="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
-    <div class="w-full max-w-sm">
-      <h1 class="text-2xl font-bold tracking-tight">Đặt lại mật khẩu</h1>
-      <p class="mt-2 text-sm text-muted-foreground">Mật khẩu mới có ít nhất 8 ký tự.</p>
+  <AuthLayout title="Đặt lại mật khẩu" description="Mật khẩu mới có ít nhất 8 ký tự.">
       <div v-if="typeof route.query.token !== 'string' || !route.query.token" class="mt-8 space-y-4">
         <AppAlert message="Liên kết không hợp lệ!" type="error" />
         <router-link to="/forgot-password" class="text-sm font-medium text-foreground underline-offset-4 hover:underline">Yêu cầu liên kết mới</router-link>
@@ -44,15 +42,14 @@ import { Label } from '@/components/ui/label';
         <AppAlert :message="error" type="error" />
         <div class="space-y-2">
           <Label for="new-password">Mật khẩu mới</Label>
-          <Input id="new-password" v-model="password" type="password" required class="h-10 bg-background shadow-none" minlength="8" autocomplete="new-password" />
+          <PasswordInput id="new-password" v-model="password" required class="h-11 bg-background shadow-none" minlength="8" autocomplete="new-password" />
         </div>
         <div class="space-y-2">
           <Label for="confirmation">Nhập lại mật khẩu</Label>
-          <Input id="confirmation" v-model="confirmation" type="password" required class="h-10 bg-background shadow-none" minlength="8" autocomplete="new-password" />
+          <PasswordInput id="confirmation" v-model="confirmation" required class="h-11 bg-background shadow-none" minlength="8" autocomplete="new-password" />
         </div>
-        <Button type="submit" class="w-full h-10" :disabled="busy">{{ busy ? 'Đang xử lý...' : 'Đặt lại mật khẩu' }}</Button>
+        <Button type="submit" class="w-full h-11" :disabled="busy">{{ busy ? 'Đang xử lý...' : 'Đặt lại mật khẩu' }}</Button>
       </form>
       <p class="mt-6 text-center text-sm text-muted-foreground"><router-link to="/login" class="font-medium text-foreground underline-offset-4 hover:underline">← Về trang đăng nhập</router-link></p>
-    </div>
-  </div>
+  </AuthLayout>
 </template>

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { AppError, handleControllerError } from '../utils/errors';
-import { applicablePromo, computeDiscount } from '../utils/promo';
+import { applicablePromo, computeDiscount, publicOfferWhere, hasRemainingUses, publicOffer } from '../utils/promo';
 import { exceedsOrderAmount } from '../utils/validation';
 
 async function requireOwner(tx: Prisma.TransactionClient, eventId: string, req: Request) {
@@ -102,4 +102,17 @@ export const previewPromoCode = async (req: Request, res: Response) => {
     });
     return res.json({ message: 'Áp dụng mã giảm giá thành công!', data });
   } catch (error) { return handleControllerError(res, 'previewPromoCode', error); }
+};
+
+export const getEventOffers = async (req: Request, res: Response) => {
+  try {
+    const event = await prisma.event.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!event) throw new AppError('Không tìm thấy sự kiện!', 404);
+    const promos = await prisma.promoCode.findMany({ where: publicOfferWhere(event.id, new Date()) });
+    const data = promos.filter(hasRemainingUses).sort((a, b) =>
+      (a.discountType === b.discountType ? b.discountValue.comparedTo(a.discountValue)
+        : a.discountType === 'PERCENT' ? -1 : 1) || a.code.localeCompare(b.code)
+    ).slice(0, 10).map(publicOffer);
+    return res.json({ data });
+  } catch (error) { return handleControllerError(res, 'getEventOffers', error); }
 };

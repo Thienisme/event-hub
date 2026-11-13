@@ -33,10 +33,11 @@ Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (
 
 ### Luật dùng màu đỏ rượu `brand`
 
-Chỉ ba chỗ:
+Chỉ những chỗ sau:
 - Nút hành động mua hàng: "Đặt vé", "Thanh toán" (`bg-brand text-brand-foreground hover:bg-brand/90`).
 - Giá vé trên thẻ và trang chi tiết (`text-brand`).
 - Badge khan hiếm: "Sắp hết vé", "Còn N vé" (`bg-brand-soft text-brand`).
+- Ưu đãi ở trang sự kiện: dòng "Có ưu đãi · Giảm đến 20%" (`bg-brand-soft text-brand`). Thẻ ưu đãi trong trang thanh toán thì không dùng `brand`.
 
 Mọi nút khác dùng `primary` (đen) hoặc `outline`. Logo, tiêu đề, menu, icon **không** dùng `brand`.
 
@@ -55,7 +56,7 @@ Mọi nút khác dùng `primary` (đen) hoặc `outline`. Logo, tiêu đề, men
 
 - Lưới 4px của Tailwind. Khoảng giữa các khối lớn: `space-y-8` đến `space-y-12`; trong card: `p-5 sm:p-6`.
 - Bề rộng nội dung: `max-w-6xl mx-auto px-4 sm:px-6`. Form và trang hồ sơ: `max-w-3xl`.
-- Bo góc nhỏ (`--radius: 0.375rem`): nút và ô nhập `rounded-md`, card và ảnh `rounded-lg`. **Không dùng `rounded-2xl`, `rounded-3xl`**; `rounded-full` chỉ cho avatar và chấm trạng thái.
+- Bo góc nhỏ (`--radius: 0.375rem`): nút và ô nhập `rounded-md`, card và ảnh `rounded-lg`. **Không dùng `rounded-2xl`, `rounded-3xl`**; `rounded-full` chỉ cho avatar, chấm trạng thái và khấc cuống vé.
 - Tách khối bằng viền mảnh `border` (1px, màu `border`), không bằng bóng đổ. Bóng đổ tối đa `shadow-xs`, chỉ cho popover, dropdown và dialog.
 
 ## Thành phần
@@ -72,13 +73,41 @@ Mọi nút khác dùng `primary` (đen) hoặc `outline`. Logo, tiêu đề, men
 - `transition-colors` hoặc `transition-transform`, `duration-200`, easing mặc định. Không animation khi tải trang, không parallax.
 - Tôn trọng `motion-reduce:` cho mọi chuyển động lớn hơn đổi màu.
 
+## Dấu ấn riêng: tấm vé
+
+Thứ làm Event Hub khác một trang quản trị chung chung là **hình ảnh sự kiện và hình tấm vé**, không phải màu sắc.
+
+- **Có ảnh thì dùng ảnh.** Mọi chỗ nói về một sự kiện (thẻ sự kiện, đơn vé, tóm tắt thanh toán) hiện ảnh bìa (`bannerUrl` qua `resolveMediaUrl`), tỉ lệ cố định, `object-cover`. Ảnh lỗi hoặc không có: khối `bg-muted` cùng kích thước, không để trống trắng.
+- **Ô ngày** kiểu tờ lịch đặt góc ảnh: số ngày to `text-xl font-extrabold tabular-nums`, dòng tháng nhỏ `text-[10px] font-semibold uppercase tracking-widest`, nền `bg-background`, bo `rounded-md`. Người dùng nhìn ngày trước khi đọc chữ.
+- **Cuống vé**: phần giá, trạng thái và nút được tách khỏi phần thông tin bằng đường kẻ đứt (`border-dashed`) và hai khấc tròn ở hai đầu đường kẻ (`size-4 rounded-full bg-surface` có viền `border`, đặt tuyệt đối đè lên mép card). Dọc trên desktop, ngang trên mobile. Đây là ngoại lệ duy nhất của `rounded-full` ngoài avatar và chấm trạng thái.
+- **Trạng thái hiện bằng nội dung, không bằng viền màu**: badge trạng thái; đơn huỷ/hết hạn thì ảnh `grayscale opacity-60` và giá `text-muted-foreground`; đơn chờ thanh toán có đồng hồ đếm ngược.
+- **Dòng mô tả dưới tiêu đề trang phải mang dữ liệu thật** ("2 sự kiện sắp tới · 1 đơn chờ thanh toán"), không viết câu giới thiệu chung chung kiểu "Quản lý ... cho những trải nghiệm sắp tới". Không có gì thật để nói thì bỏ dòng đó.
+
 ## Không làm (dấu hiệu "AI làm")
+
+Người dùng nhận ra giao diện do AI làm qua những mẫu dưới đây. Gặp trong code cũ thì sửa luôn khi đang đụng tới file đó.
 
 - Màu indigo, tím, xanh dương mặc định; gradient tím-hồng; nền kem + nhấn đất nung (terracotta).
 - Glassmorphism (`backdrop-blur` + nền trong suốt), viền phát sáng, bóng đổ lớn có màu.
 - Hero căn giữa với dòng chữ gradient và hai nút; khối "tính năng" ba cột có icon trong hình tròn màu.
 - Bo góc lớn khắp nơi, card lồng card.
 - Emoji trong tiêu đề, nút và thông báo.
+- **Viền trái dày tô màu** (`border-l-2`, `border-l-4` kèm màu trạng thái) để đánh dấu card hay khối thông báo. Dùng badge, ảnh, hoặc cuống vé ở trên.
+- **Icon nằm trong ô vuông/tròn nền nhạt** (`rounded-lg bg-primary/5 p-4` bọc icon) ở trạng thái rỗng, tiêu đề khối. Trạng thái rỗng chỉ cần câu chữ rõ ràng và một nút; nếu cần hình thì icon trần `size-8 text-muted-foreground`.
+- **Trang toàn chữ khi dữ liệu có ảnh**: danh sách đơn, vé, sự kiện chỉ có tiêu đề + ngày + địa điểm xếp dọc, mọi card giống hệt nhau.
+- Mọi khối cùng một trọng lượng: không có gì to hơn để mắt bắt vào trước. Mỗi trang cần **một** điểm nhìn chính (ảnh lớn, ô ngày, tổng tiền), phần còn lại lùi lại.
+- Badge đếm số trong mọi tab, icon trước mọi dòng chữ, nhãn "Đơn giá" lặp lại dưới mỗi dòng: chi tiết thừa làm trang rối. Giữ thông tin người dùng thực sự cần ở màn hình đó.
+- Câu chữ kiểu tiếp thị chung chung ("trải nghiệm tuyệt vời", "hành trình", "khám phá ngay những ...") ở nơi người dùng đang làm việc.
+
+### Tự kiểm tra trước khi giao
+
+1. Chụp màn hình desktop (1280px) và mobile (360px), nhìn như người dùng lần đầu: có biết ngay sự kiện nào, ngày nào, cần làm gì không?
+2. Che chữ đi: còn nhận ra đây là trang bán vé sự kiện (ảnh, ô ngày, cuống vé) hay chỉ là danh sách card?
+3. Chạy lệnh tìm mẫu AI:
+
+```bash
+grep -rnE 'border-l-(2|4|8)|bg-(primary|brand|muted|accent)(/[0-9]+)? p-[3-5]"><[A-Z]|backdrop-blur|bg-gradient-to-[a-z]+ from-(indigo|purple|pink|violet)' client/src --include=*.vue | grep -v components/ui
+```
 
 ## Bảng đổi class cũ sang token
 

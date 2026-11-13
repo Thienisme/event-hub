@@ -28,6 +28,7 @@ const eventId = computed(() => String(route.params.id));
 
 /** Form tạo mã (trường nhập là chuỗi để ô input để trống được). */
 const form = reactive({
+  isPublic: false,
   code: '',
   discountType: 'PERCENT' as PromoDiscountType,
   discountValue: '',
@@ -111,6 +112,7 @@ function validateForm(): boolean {
 }
 
 function resetForm(): void {
+  form.isPublic = false;
   form.code = '';
   form.discountType = 'PERCENT';
   form.discountValue = '';
@@ -131,6 +133,7 @@ async function submitCreate() {
   creating.value = true;
   try {
     const body = {
+      isPublic: form.isPublic,
       code: form.code.trim().toUpperCase(),
       discountType: form.discountType,
       discountValue: Number(form.discountValue),
@@ -150,12 +153,26 @@ async function submitCreate() {
 }
 
 async function toggleActive(code: PromoCode) {
+  if (togglingId.value) return;
   togglingId.value = code.id;
   try {
     await promoStore.update(code.id, { active: !code.active });
     toastStore.success(code.active ? 'Đã tắt mã!' : 'Đã bật mã!');
   } catch (error: any) {
     toastStore.error(error.response?.data?.message || 'Đổi trạng thái mã thất bại!');
+  } finally {
+    togglingId.value = '';
+  }
+}
+
+async function togglePublic(code: PromoCode) {
+  if (togglingId.value) return;
+  togglingId.value = code.id;
+  try {
+    await promoStore.update(code.id, { isPublic: !code.isPublic });
+    toastStore.success(code.isPublic ? 'Đã chuyển mã thành riêng!' : 'Đã công khai mã cho khách!');
+  } catch (error: any) {
+    toastStore.error(error.response?.data?.message || 'Đổi chế độ hiển thị mã thất bại!');
   } finally {
     togglingId.value = '';
   }
@@ -223,7 +240,7 @@ onUnmounted(() => {
       <header class="space-y-2">
         <p class="flex items-center gap-2 text-sm font-medium text-primary"><Percent class="size-4" aria-hidden="true" />Ưu đãi</p>
         <h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl">Mã giảm giá</h1>
-        <p class="text-sm text-muted-foreground">Tạo và quản lý mã ưu đãi cho người mua vé của sự kiện này</p>
+        <p class="text-sm text-muted-foreground">{{ promoStore.codes.length }} mã giảm giá</p>
       </header>
 
       <!-- Form tạo mã -->
@@ -308,6 +325,10 @@ onUnmounted(() => {
             <p v-if="fieldErrors.endsAt" class="text-xs text-danger">{{ fieldErrors.endsAt }}</p>
           </div>
 
+          <div class="space-y-2 sm:col-span-2">
+            <div class="flex items-center gap-2"><input id="promo-public" v-model="form.isPublic" type="checkbox" class="size-4 accent-primary" aria-describedby="promo-public-hint" /><Label for="promo-public">Hiện công khai cho khách</Label></div>
+            <p id="promo-public-hint" class="text-xs text-muted-foreground">Khách thấy và chạm để áp ở trang thanh toán. Tắt nếu mã chỉ dành cho người bạn gửi riêng.</p>
+          </div>
           <div class="sm:col-span-2 sm:justify-self-end">
             <Button type="submit" :disabled="creating">
               <Plus class="size-4" aria-hidden="true" />{{ creating ? 'Đang tạo...' : 'Tạo mã' }}
@@ -332,7 +353,7 @@ onUnmounted(() => {
                 <div class="h-4 w-20 animate-pulse rounded bg-muted" />
                 <div class="h-3 w-28 animate-pulse rounded bg-muted" />
               </div>
-              <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
+              <div class="h-5 w-16 animate-pulse rounded-md bg-muted" />
             </div>
           </div>
         </template>
@@ -353,7 +374,7 @@ onUnmounted(() => {
               </TableHeader>
               <TableBody>
                 <TableRow v-for="code in promoStore.codes" :key="code.id">
-                  <TableCell class="px-4 py-3 font-semibold">{{ code.code }}</TableCell>
+                  <TableCell class="px-4 py-3 font-semibold">{{ code.code }} <Badge variant="outline">{{ code.isPublic ? 'Công khai' : 'Riêng' }}</Badge></TableCell>
                   <TableCell class="px-4 py-3 tabular-nums">{{ discountLabel(code) }}</TableCell>
                   <TableCell class="px-4 py-3 tabular-nums">{{ usesLabel(code) }}</TableCell>
                   <TableCell class="px-4 py-3 text-sm text-muted-foreground">
@@ -364,8 +385,9 @@ onUnmounted(() => {
                     <Badge variant="muted" v-else>Đã tắt</Badge>
                   </TableCell>
                   <TableCell class="px-4 py-3 text-right">
-                    <div class="inline-flex items-center gap-1">
-                      <Button type="button" variant="ghost" size="sm" :disabled="togglingId === code.id" @click="toggleActive(code)">
+                    <div class="inline-flex flex-wrap items-center gap-1">
+                      <Button variant="ghost" size="sm" :disabled="!!togglingId" @click="togglePublic(code)">{{ togglingId === code.id ? 'Đang xử lý...' : code.isPublic ? 'Chuyển riêng' : 'Công khai' }}</Button>
+                      <Button type="button" variant="ghost" size="sm" :disabled="!!togglingId" @click="toggleActive(code)">
                         {{ code.active ? 'Tắt' : 'Bật' }}
                       </Button>
                       <Button type="button" variant="ghost" size="sm" class="text-destructive" @click="pendingDelete = code">
@@ -383,10 +405,11 @@ onUnmounted(() => {
         <div class="space-y-3 sm:hidden">
           <Card v-for="code in promoStore.codes" :key="code.id" class="gap-3 rounded-lg border border-border bg-background p-4 shadow-none ring-0">
             <div class="flex items-center justify-between gap-3">
-              <p class="font-semibold">{{ code.code }}</p>
+              <p class="min-w-0 break-all font-semibold">{{ code.code }}</p>
               <Badge variant="success" v-if="code.active">Đang bật</Badge>
               <Badge variant="muted" v-else>Đã tắt</Badge>
             </div>
+            <Badge variant="outline">{{ code.isPublic ? 'Công khai' : 'Riêng' }}</Badge>
             <dl class="space-y-1 text-sm">
               <div class="flex justify-between gap-3">
                 <dt class="text-muted-foreground">Mức giảm</dt>
@@ -401,8 +424,9 @@ onUnmounted(() => {
                 <dd class="text-right tabular-nums">{{ periodLabel(code) }}</dd>
               </div>
             </dl>
-            <div class="flex items-center gap-2 border-t pt-3">
-              <Button type="button" variant="outline" size="sm" :disabled="togglingId === code.id" @click="toggleActive(code)">
+            <div class="flex flex-wrap items-center gap-2 border-t pt-3">
+              <Button variant="ghost" size="sm" :disabled="!!togglingId" @click="togglePublic(code)">{{ togglingId === code.id ? 'Đang xử lý...' : code.isPublic ? 'Chuyển riêng' : 'Công khai' }}</Button>
+              <Button type="button" variant="outline" size="sm" :disabled="!!togglingId" @click="toggleActive(code)">
                 {{ code.active ? 'Tắt' : 'Bật' }}
               </Button>
               <Button type="button" variant="ghost" size="sm" class="ml-auto text-destructive" @click="pendingDelete = code">

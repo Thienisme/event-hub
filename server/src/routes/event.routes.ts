@@ -4,7 +4,7 @@ import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { checkInTicket, getCheckInStats } from '../controllers/checkin.controller';
 import { validateBody, createEventSchema, checkInSchema, createPromoSchema } from '../utils/validation';
 
-import { listPromoCodes, createPromoCode } from '../controllers/promo.controller';
+import { listPromoCodes, createPromoCode, getEventOffers } from '../controllers/promo.controller';
 
 import { getMyWaitlist } from '../controllers/waitlist.controller';
 
@@ -15,6 +15,7 @@ router.post('/:id/promo-codes', authenticate, authorize('ORGANIZER', 'ADMIN'), v
 
 // Public Routes (Xem danh sách & chi tiết)
 router.get('/', getEvents);
+router.get('/:id/offers', getEventOffers);
 router.get('/:id', getEventById);
 
 // Protected Route (Chỉ ORGANIZER hoặc ADMIN mới được phép quản lý sự kiện)
