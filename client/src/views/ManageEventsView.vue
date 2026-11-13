@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import EventBanner from '@/components/EventBanner.vue';
-import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2, ScanLine, MoreHorizontal } from '@lucide/vue';
+import { Plus, Search, CalendarDays, MapPin, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal } from '@lucide/vue';
 
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -215,6 +215,10 @@ onUnmounted(() => {
                   <Button as-child size="sm" variant="outline"><router-link
                     :to="{ name: 'CheckIn', params: { id: event.id } }"
                     ><ScanLine class="size-4" aria-hidden="true" />Soát vé</router-link></Button>
+
+                  <Button as-child size="sm" variant="outline"><router-link
+                    :to="{ name: 'PromoCodes', params: { id: event.id } }"
+                    ><Percent class="size-4" aria-hidden="true" />Mã giảm giá</router-link></Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger as-child>
                       <Button type="button" variant="ghost" size="icon-sm" aria-label="Thêm thao tác"><MoreHorizontal class="size-4" aria-hidden="true" /></Button>

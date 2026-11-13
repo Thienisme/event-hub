@@ -68,6 +68,8 @@ let countdownTimer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   // Luôn về trang 1: đơn mới nhất nằm ở đó, người vừa đặt vé phải thấy ngay.
   loadOrders();
+  // Cổng thanh toán đang bật: công khai, tải một lần để render nút theo cổng.
+  orderStore.loadPaymentProviders();
   countdownTimer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
@@ -99,6 +101,9 @@ const formatCountdown = (ms: number): string => {
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
+
+/** Đơn có giảm giá: subtotalAmount/discountAmount là Decimal (chuỗi) -> ép Number. */
+const hasDiscount = (order: Order): boolean => Number(order.discountAmount) > 0;
 
 /** Id đơn đang gửi request thanh toán/huỷ -> disable nút để tránh bấm hai lần. */
 const actionOrderId = ref<string | null>(null);
@@ -151,6 +156,33 @@ const handleConfirm = async (order: Order) => {
     toastStore.success(response.message || 'Thanh toán thành công!');
   } catch (error: any) {
     await handleActionError(error, 'Thanh toán thất bại, vui lòng thử lại!');
+  } finally {
+    actionOrderId.value = null;
+  }
+};
+
+const paymentProviders = computed(() => orderStore.paymentProviders);
+
+/**
+ * Thanh toán qua VNPay/MoMo: BE trả paymentUrl -> rời trang app sang cổng
+ * thanh toán. Đơn 0đ BE xác nhận luôn và trả `order` (store đã cập nhật tại
+ * chỗ), khi đó chỉ cần báo thành công.
+ */
+const handlePay = async (order: Order, provider: 'VNPAY' | 'MOMO') => {
+  if (actionOrderId.value) return;
+
+  actionOrderId.value = order.id;
+  try {
+    const response = await orderStore.payOrder(order.id, provider);
+
+    if (response.data?.paymentUrl) {
+      window.location.href = response.data.paymentUrl;
+      return;
+    }
+
+    toastStore.success(response.message || 'Thanh toán thành công, vé đã được gửi tới email của bạn!');
+  } catch (error: any) {
+    await handleActionError(error, 'Không tạo được phiên thanh toán, vui lòng thử lại!');
   } finally {
     actionOrderId.value = null;
   }
@@ -313,14 +345,23 @@ const copyOrderId = async (id: string) => {
                 </div>
               </div>
               <div class="flex flex-wrap items-center justify-between gap-2 border-t border-dashed px-5 py-5 sm:px-6">
-                <span class="text-sm text-muted-foreground">Tổng tiền</span><span class="ml-auto text-right text-2xl font-semibold tracking-tight text-primary tabular-nums">{{ formatPrice(order.totalAmount) }}</span>
+                <span class="text-sm text-muted-foreground">Tổng tiền</span>
+                <div class="ml-auto flex flex-col items-end gap-1">
+                  <p v-if="hasDiscount(order)" class="flex flex-wrap items-center justify-end gap-x-2 text-xs tabular-nums">
+                    <span class="text-muted-foreground line-through">{{ formatPrice(order.subtotalAmount) }}</span>
+                    <span class="font-medium text-success">Giảm {{ formatPrice(order.discountAmount) }}</span>
+                  </p>
+                  <span class="text-right text-2xl font-semibold tracking-tight text-primary tabular-nums">{{ formatPrice(order.totalAmount) }}</span>
+                </div>
               </div>
               <div v-if="order.status === 'PENDING'" class="mx-5 mb-5 rounded-lg border border-warning/25 bg-warning/10 p-4 sm:mx-6 sm:mb-6">
                 <p v-if="isHoldExpired(order)" class="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Timer class="size-4 shrink-0" aria-hidden="true" />Đã hết hạn giữ chỗ</p>
                 <template v-else>
                   <p class="flex items-center gap-2 text-sm font-medium"><Timer class="size-4 shrink-0 text-warning" aria-hidden="true" /><span>Còn <span class="font-semibold tabular-nums">{{ formatCountdown(remainingMs(order)) }}</span> để thanh toán</span></p>
-                  <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Button class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán (giả lập)' }}</Button>
+                  <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button v-if="paymentProviders.includes('VNPAY')" class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handlePay(order, 'VNPAY')">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán VNPay' }}</Button>
+                    <Button v-if="paymentProviders.includes('MOMO')" class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handlePay(order, 'MOMO')">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán MoMo' }}</Button>
+                    <Button v-if="paymentProviders.includes('MOCK')" class="bg-brand text-brand-foreground hover:bg-brand/90" :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán thử' }}</Button>
                     <Button variant="outline" class="border-danger/30 bg-background text-danger hover:bg-danger/10 hover:text-danger" :disabled="actionOrderId === order.id" @click="askCancel(order)">Huỷ đơn</Button>
                   </div>
                 </template>

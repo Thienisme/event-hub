@@ -64,6 +64,13 @@ const router = createRouter({
       meta: { requiresAuth: true, organizerOnly: true },
     },
     {
+      // Quản lý mã giảm giá của một sự kiện (ORGANIZER / ADMIN)
+      path: '/my-events/:id/promo-codes',
+      name: 'PromoCodes',
+      component: () => import('@/views/PromoCodesView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
       // Tổng quan hệ thống (chỉ ADMIN)
       path: '/admin',
       name: 'AdminDashboard',
@@ -113,6 +120,13 @@ const router = createRouter({
       name: 'Privacy',
       component: () => import('@/views/PrivacyView.vue'),
       meta: { title: 'Chính sách bảo mật' },
+    },
+    {
+      // Kết quả thanh toán VNPay/MoMo: cổng chuyển về đây với query gốc.
+      // Không cần đăng nhập: chữ ký của cổng đã xác minh giao dịch ở BE.
+      path: '/payment/result',
+      name: 'PaymentResult',
+      component: () => import('@/views/PaymentResultView.vue'),
     },
     {
       // Bắt mọi đường dẫn không khớp -> tránh màn hình trắng

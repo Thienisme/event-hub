@@ -28,13 +28,31 @@ export interface Order {
   userId: string;
   /** Decimal -> serialize thành chuỗi, xem ghi chú ở TicketType.price */
   totalAmount: number | string;
+  /** Giá trước giảm (Decimal -> chuỗi), chỉ có ở đơn có áp mã giảm giá */
+  subtotalAmount?: number | string;
+  /** Mức giảm (Decimal -> chuỗi), mặc định 0 */
+  discountAmount?: number | string;
+  promoCodeId?: string | null;
   status: OrderStatus;
   expiresAt?: string | null;
   createdAt: string;
   tickets: OrderTicket[];
 }
 
-/** BE trả về: { message, order } */
+/** Các cổng thanh toán BE đang bật (GET /payments/providers) */
+export type PaymentProvider = 'MOCK' | 'VNPAY' | 'MOMO';
+
+/** POST /orders/:id/pay trả về */
+export interface PayOrderResponse {
+  message: string;
+  /** Đơn 0đ: BE xác nhận luôn và trả `order` thay vì `paymentUrl` */
+  data: {
+    paymentUrl?: string;
+    order?: Order;
+  };
+}
+
+/** POST /orders trả về: { message, order } */
 export interface CreateOrderResponse {
   message: string;
   order: Order;
@@ -67,21 +85,51 @@ export const useOrderStore = defineStore('order', () => {
   });
   const loading = ref(false);
 
+  /** Cổng thanh toán đang bật, tải một lần từ GET /payments/providers */
+  const paymentProviders = ref<PaymentProvider[]>([]);
+  const providersLoaded = ref(false);
+
   /**
    * Đặt vé. BE dùng distributed lock (Redlock) + transaction, nên có thể trả về:
    * - 201: thành công
-   * - 400: hết vé / số lượng không hợp lệ / loại vé không tồn tại
+   * - 400: hết vé / số lượng không hợp lệ / loại vé không tồn tại / mã giảm giá sai
    * - 401: chưa đăng nhập hoặc token hết hạn
    * - 403: token không hợp lệ
    * - 429: quá tải vì nhiều người cùng mua
    * Tất cả lỗi đều có dạng { message } bằng tiếng Việt -> hiển thị thẳng cho user.
    */
-  async function createOrder(ticketTypeId: string, quantity: number): Promise<CreateOrderResponse> {
+  async function createOrder(
+    ticketTypeId: string,
+    quantity: number,
+    promoCode?: string
+  ): Promise<CreateOrderResponse> {
     const response = await apiClient.post<CreateOrderResponse>('/orders', {
       ticketTypeId,
       quantity,
+      // Mã sai hoặc hết lượt -> BE trả 400 và KHÔNG tạo đơn
+      ...(promoCode ? { promoCode } : {}),
     });
     return response.data;
+  }
+
+  /**
+   * Cổng thanh toán đang bật (công khai, không cần đăng nhập). Chỉ gọi API một
+   * lần; lần sau dùng cache. Lỗi mạng/5xx -> coi như chỉ có MOCK để người dùng
+   * vẫn thanh toán được theo cách cũ.
+   */
+  async function loadPaymentProviders(): Promise<PaymentProvider[]> {
+    if (providersLoaded.value) return paymentProviders.value;
+
+    try {
+      const response = await apiClient.get<{ data: PaymentProvider[] }>('/payments/providers');
+      paymentProviders.value = response.data.data ?? [];
+    } catch {
+      paymentProviders.value = ['MOCK'];
+    } finally {
+      providersLoaded.value = true;
+    }
+
+    return paymentProviders.value;
   }
 
   /** BE trả về { message, data, pagination }, mặc định 20 đơn mỗi trang */
@@ -147,13 +195,30 @@ export const useOrderStore = defineStore('order', () => {
     return response.data;
   }
 
+  /**
+   * Bắt đầu thanh toán qua VNPay/MoMo. BE trả `paymentUrl` -> view chuyển trang
+   * bằng window.location.href. Đơn tổng 0đ BE xác nhận luôn và trả `order`,
+   * cập nhật tại chỗ như sau khi confirm.
+   */
+  async function payOrder(id: string, provider: 'VNPAY' | 'MOMO'): Promise<PayOrderResponse> {
+    const response = await apiClient.post<PayOrderResponse>(`/orders/${id}/pay`, { provider });
+
+    const order = response.data.data?.order;
+    if (order) replaceOrder(order);
+
+    return response.data;
+  }
+
   return {
     orders,
     pagination,
     loading,
+    paymentProviders,
     createOrder,
     fetchMyOrders,
     confirmOrder,
     cancelOrder,
+    loadPaymentProviders,
+    payOrder,
   };
 });
