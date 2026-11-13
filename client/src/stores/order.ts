@@ -19,7 +19,10 @@ export interface OrderTicket {
       title: string;
       startTime: string;
       location: string;
-      slug: string;
+      bannerUrl?: string | null;
+      slug?: string;
+      endTime?: string;
+      category?: string;
     };
   };
 }

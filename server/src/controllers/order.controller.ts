@@ -244,7 +244,7 @@ export const MYOrders = async (req: Request, res: Response) => {
               ticketType: {
                 include: {
                   event: {
-                    select: { title: true, startTime: true, location: true },
+                    select: { title: true, startTime: true, location: true, bannerUrl: true, slug: true, endTime: true, category: true },
                   },
                 },
               },
@@ -372,7 +372,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
 /** Dữ liệu thanh toán không bao gồm chi tiết giao dịch của cổng. */
 const CHECKOUT_INCLUDE = {
   tickets: { include: { ticketType: { include: {
-    event: { select: { title: true, startTime: true, location: true, slug: true } },
+    event: { select: { title: true, startTime: true, location: true, slug: true, bannerUrl: true, endTime: true, category: true } },
   } } } },
   promoCode: { select: { code: true } },
   _count: { select: { payments: true } },

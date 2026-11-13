@@ -360,7 +360,7 @@ onUnmounted(() => {
           <Button @click="loadEvents">Thử lại</Button>
         </Card>
         <Card v-else-if="eventStore.events.length === 0" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg px-5 py-14 text-center">
-          <div class="rounded-lg bg-muted p-4"><CalendarSearch class="size-10 text-muted-foreground" aria-hidden="true" /></div>
+          <CalendarSearch class="size-8 text-muted-foreground" aria-hidden="true" />
           <div><h3 class="text-lg font-semibold tracking-tight">{{ hasActiveFilters ? 'Không tìm thấy sự kiện phù hợp' : status === 'ended' ? 'Chưa có sự kiện nào đã kết thúc' : 'Chưa có sự kiện sắp diễn ra' }}</h3><p class="mt-2 text-sm leading-6 text-muted-foreground">{{ hasActiveFilters ? 'Thử từ khoá khác, mở rộng khoảng ngày hoặc xoá bộ lọc để xem thêm sự kiện.' : 'Quay lại sau để khám phá những trải nghiệm mới từ các nhà tổ chức.' }}</p></div>
           <Button v-if="hasActiveFilters" variant="outline" @click="searchQuery = ''; clearFilters(); Object.assign(drafts, { from: '', to: '', minPrice: '', maxPrice: '' })">Xoá bộ lọc</Button>
         </Card>
