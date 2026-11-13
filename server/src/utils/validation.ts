@@ -241,6 +241,8 @@ export const promoCodeField = z.string().trim().toUpperCase()
   .max(32, 'Mã giảm giá phải có từ 3 đến 32 ký tự!')
   .regex(/^[A-Z0-9_-]+$/, 'Mã giảm giá chỉ gồm chữ, số, _ và -!');
 
+export const applyOrderPromoSchema = z.object({ code: promoCodeField });
+
 export const createOrderSchema = z.object({
   promoCode: promoCodeField.optional(),
   ticketTypeId: z.string().uuid('ID loại vé không hợp lệ!'),

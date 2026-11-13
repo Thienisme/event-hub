@@ -9,7 +9,7 @@ import {
   isSimulatedPaymentEnabled,
   MAX_TICKETS_PER_USER_PER_EVENT,
 } from '../config/order';
-import { releasePromoUsage, returnTicketsToStock } from '../utils/orderInventory';
+import { claimPromoUsage, releasePromoUsage, returnTicketsToStock } from '../utils/orderInventory';
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
 import { exceedsOrderAmount } from '../utils/validation';
@@ -146,11 +146,7 @@ export const createOrder = async (req: Request, res: Response) => {
       }
 
       const promo = promoCode ? await applicablePromo(tx, ticketType.eventId, promoCode, userId) : null;
-      if (promo) {
-        const claimed = await tx.$executeRaw`UPDATE promo_codes SET usedCount = usedCount + 1
-          WHERE id = ${promo.id} AND active = 1 AND (maxUses IS NULL OR usedCount < maxUses)`;
-        if (claimed !== 1) throw new AppError('Mã giảm giá đã hết lượt sử dụng!');
-      }
+      if (promo) await claimPromoUsage(tx, promo.id);
       const amounts = promo ? computeDiscount(subtotalAmount, promo)
         : { subtotalAmount, discountAmount: new Prisma.Decimal(0), totalAmount: subtotalAmount };
       const order = await tx.order.create({
@@ -370,5 +366,80 @@ export const cancelOrder = async (req: Request, res: Response) => {
     return res.json({ message: 'Đã huỷ đơn hàng!', order });
   } catch (error) {
     return handleControllerError(res, 'cancelOrder', error);
+  }
+};
+
+/** Dữ liệu thanh toán không bao gồm chi tiết giao dịch của cổng. */
+const CHECKOUT_INCLUDE = {
+  tickets: { include: { ticketType: { include: {
+    event: { select: { title: true, startTime: true, location: true, slug: true } },
+  } } } },
+  promoCode: { select: { code: true } },
+  _count: { select: { payments: true } },
+} as const;
+
+type CheckoutOrder = Prisma.OrderGetPayload<{ include: typeof CHECKOUT_INCLUDE }>;
+function checkoutOrder(order: CheckoutOrder) {
+  const { promoCode, _count, ...data } = order;
+  return { ...data, promoCode: promoCode?.code ?? null, paymentStarted: _count.payments > 0 };
+}
+
+export const getOrder = async (req: Request, res: Response) => {
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId }, include: CHECKOUT_INCLUDE,
+    });
+    if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
+    return res.json({ message: 'Lấy đơn hàng thành công!', data: checkoutOrder(order) });
+  } catch (error) {
+    return handleControllerError(res, 'getOrder', error);
+  }
+};
+
+/** Khoá tài khoản trước đơn để hạn mức theo tài khoản thấy các đơn vừa commit. */
+async function changeOrderPromo(userId: string, id: string, code?: string) {
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+    const order = await tx.order.findFirst({ where: { id, userId }, include: CHECKOUT_INCLUDE });
+    if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
+    const now = new Date();
+    if (order.status !== 'PENDING' || !order.expiresAt || order.expiresAt <= now) {
+      throw new AppError('Đơn hàng không còn chờ thanh toán hoặc đã hết hạn giữ chỗ!', 409);
+    }
+    if (order._count.payments > 0) {
+      throw new AppError('Đơn đã bắt đầu thanh toán, không thể đổi mã giảm giá!', 409);
+    }
+    if (code ? order.promoCode?.code === code : !order.promoCodeId) return checkoutOrder(order);
+
+    const eventId = order.tickets[0]?.ticketType.eventId;
+    if (code && !eventId) throw new AppError('Đơn hàng không có vé để áp mã giảm giá!');
+    const promo = code ? await applicablePromo(tx, eventId!, code, userId, now, id) : null;
+    await releasePromoUsage(tx, order);
+    if (promo) await claimPromoUsage(tx, promo.id);
+    const amounts = promo ? computeDiscount(order.subtotalAmount, promo)
+      : { totalAmount: order.subtotalAmount, discountAmount: new Prisma.Decimal(0) };
+    const updated = await tx.order.update({
+      where: { id }, data: { ...amounts, promoCodeId: promo?.id ?? null }, include: CHECKOUT_INCLUDE,
+    });
+    return checkoutOrder(updated);
+  });
+}
+
+export const applyOrderPromo = async (req: Request, res: Response) => {
+  try {
+    const data = await changeOrderPromo(req.user!.userId, req.params.id, req.body.code);
+    return res.json({ message: 'Áp mã giảm giá thành công!', data });
+  } catch (error) {
+    return handleControllerError(res, 'applyOrderPromo', error);
+  }
+};
+
+export const removeOrderPromo = async (req: Request, res: Response) => {
+  try {
+    const data = await changeOrderPromo(req.user!.userId, req.params.id);
+    return res.json({ message: 'Gỡ mã giảm giá thành công!', data });
+  } catch (error) {
+    return handleControllerError(res, 'removeOrderPromo', error);
   }
 };

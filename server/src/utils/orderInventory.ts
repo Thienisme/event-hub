@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { AppError } from './errors';
 
 /**
  * Cộng trả kho cho các vé của một đơn vừa được giải phóng (hết hạn hoặc huỷ).
@@ -40,4 +41,11 @@ export async function releasePromoUsage(tx: Prisma.TransactionClient, order: { p
     await tx.$executeRaw`UPDATE promo_codes SET usedCount = usedCount - 1
       WHERE id = ${order.promoCodeId} AND usedCount > 0`;
   }
+}
+
+/** Chiếm lượt bằng cập nhật có điều kiện, trong transaction tạo hoặc đổi mã đơn. */
+export async function claimPromoUsage(tx: Prisma.TransactionClient, promoId: string) {
+  const claimed = await tx.$executeRaw`UPDATE promo_codes SET usedCount = usedCount + 1
+          WHERE id = ${promoId} AND active = 1 AND (maxUses IS NULL OR usedCount < maxUses)`;
+  if (claimed !== 1) throw new AppError('Mã giảm giá đã hết lượt sử dụng!');
 }
