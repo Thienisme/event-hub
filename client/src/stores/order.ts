@@ -13,12 +13,13 @@ export interface OrderTicket {
   qrCode?: string | null;
   checkedInAt?: string | null;
   createdAt: string;
-  /** Chỉ có ở /orders/my-orders, kèm luôn event của loại vé đó */
+  /** Có ở API đọc đơn, kèm luôn event của loại vé đó */
   ticketType?: TicketType & {
     event?: {
       title: string;
       startTime: string;
       location: string;
+      slug: string;
     };
   };
 }
@@ -28,11 +29,13 @@ export interface Order {
   userId: string;
   /** Decimal -> serialize thành chuỗi, xem ghi chú ở TicketType.price */
   totalAmount: number | string;
-  /** Giá trước giảm (Decimal -> chuỗi), chỉ có ở đơn có áp mã giảm giá */
+  /** Giá trước giảm (Decimal -> chuỗi) */
   subtotalAmount?: number | string;
   /** Mức giảm (Decimal -> chuỗi), mặc định 0 */
   discountAmount?: number | string;
   promoCodeId?: string | null;
+  promoCode?: string | null;
+  paymentStarted?: boolean;
   status: OrderStatus;
   expiresAt?: string | null;
   createdAt: string;
@@ -85,9 +88,8 @@ export const useOrderStore = defineStore('order', () => {
   });
   const loading = ref(false);
 
-  /** Cổng thanh toán đang bật, tải một lần từ GET /payments/providers */
+  /** Cổng thanh toán đang bật từ GET /payments/providers */
   const paymentProviders = ref<PaymentProvider[]>([]);
-  const providersLoaded = ref(false);
 
   /**
    * Đặt vé. BE dùng distributed lock (Redlock) + transaction, nên có thể trả về:
@@ -98,38 +100,34 @@ export const useOrderStore = defineStore('order', () => {
    * - 429: quá tải vì nhiều người cùng mua
    * Tất cả lỗi đều có dạng { message } bằng tiếng Việt -> hiển thị thẳng cho user.
    */
-  async function createOrder(
-    ticketTypeId: string,
-    quantity: number,
-    promoCode?: string
-  ): Promise<CreateOrderResponse> {
-    const response = await apiClient.post<CreateOrderResponse>('/orders', {
-      ticketTypeId,
-      quantity,
-      // Mã sai hoặc hết lượt -> BE trả 400 và KHÔNG tạo đơn
-      ...(promoCode ? { promoCode } : {}),
-    });
+  async function createOrder(ticketTypeId: string, quantity: number): Promise<CreateOrderResponse> {
+    const response = await apiClient.post<CreateOrderResponse>('/orders', { ticketTypeId, quantity });
     return response.data;
   }
 
-  /**
-   * Cổng thanh toán đang bật (công khai, không cần đăng nhập). Chỉ gọi API một
-   * lần; lần sau dùng cache. Lỗi mạng/5xx -> coi như chỉ có MOCK để người dùng
-   * vẫn thanh toán được theo cách cũ.
-   */
+  /** Chỉ hiển thị các cổng thực sự được server bật. */
   async function loadPaymentProviders(): Promise<PaymentProvider[]> {
-    if (providersLoaded.value) return paymentProviders.value;
-
-    try {
-      const response = await apiClient.get<{ data: PaymentProvider[] }>('/payments/providers');
-      paymentProviders.value = response.data.data ?? [];
-    } catch {
-      paymentProviders.value = ['MOCK'];
-    } finally {
-      providersLoaded.value = true;
-    }
-
+    const response = await apiClient.get<{ data: PaymentProvider[] }>('/payments/providers');
+    paymentProviders.value = response.data.data;
     return paymentProviders.value;
+  }
+
+  async function fetchOrder(id: string): Promise<Order> {
+    const response = await apiClient.get<{ message: string; data: Order }>(`/orders/${id}`);
+    replaceOrder(response.data.data);
+    return response.data.data;
+  }
+
+  async function applyPromo(id: string, code: string): Promise<Order> {
+    const response = await apiClient.post<{ message: string; data: Order }>(`/orders/${id}/promo`, { code });
+    replaceOrder(response.data.data);
+    return response.data.data;
+  }
+
+  async function removePromo(id: string): Promise<Order> {
+    const response = await apiClient.delete<{ message: string; data: Order }>(`/orders/${id}/promo`);
+    replaceOrder(response.data.data);
+    return response.data.data;
   }
 
   /** BE trả về { message, data, pagination }, mặc định 20 đơn mỗi trang */
@@ -216,6 +214,9 @@ export const useOrderStore = defineStore('order', () => {
     paymentProviders,
     createOrder,
     fetchMyOrders,
+    fetchOrder,
+    applyPromo,
+    removePromo,
     confirmOrder,
     cancelOrder,
     loadPaymentProviders,

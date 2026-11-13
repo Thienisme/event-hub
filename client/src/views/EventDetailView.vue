@@ -13,13 +13,12 @@ import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert, Bell, X } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, UserRound, Clock, Minus, Plus, Pencil, Trash2, Ticket, CircleAlert, Bell } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
 
 const route = useRoute();
 const router = useRouter();
@@ -100,125 +99,6 @@ const soldPercent = (ticket: TicketType) => ticket.totalQuantity > 0 ? Math.min(
 const quantities = ref<Record<string, number>>({});
 
 /**
- * Mã giảm giá dùng chung cho mọi loại vé: một mã, nhưng mức giảm tính theo
- * từng loại vé + số lượng đang chọn, nên preview trả về theo từng loại vé.
- */
-interface PromoPreview {
-  code: string;
-  discountType: 'PERCENT' | 'FIXED';
-  discountValue: number;
-  subtotalAmount: number | string;
-  discountAmount: number | string;
-  totalAmount: number | string;
-}
-
-const promoCodeInput = ref('');
-const appliedPromo = ref('');
-const promoPreviews = ref<Record<string, PromoPreview>>({});
-const promoError = ref('');
-const promoApplying = ref(false);
-let promoRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** Loại vé đang mở bán (còn vé và trong giờ bán) -> đối tượng áp mã/preview. */
-const bookableTickets = computed(() =>
-  (event.value?.ticketTypes ?? []).filter((ticket) => ticket.availableQuantity > 0 && !saleLabel(ticket))
-);
-
-const previewPromoFor = async (ticket: TicketType, code: string): Promise<PromoPreview> => {
-  const response = await apiClient.post<{ data: PromoPreview }>('/promo-codes/preview', {
-    code,
-    ticketTypeId: ticket.id,
-    quantity: quantities.value[ticket.id] ?? 1,
-  });
-  return response.data.data;
-};
-
-const promoErrorMessage = (error: any): string =>
-  error?.response?.data?.message || 'Mã giảm giá không áp dụng được!';
-
-const applyPromo = async () => {
-  const code = promoCodeInput.value.trim().toUpperCase();
-  if (!code) {
-    promoError.value = 'Nhập mã giảm giá trước khi áp dụng!';
-    return;
-  }
-
-  promoApplying.value = true;
-  promoError.value = '';
-
-  try {
-    const targets = bookableTickets.value;
-    if (!targets.length) {
-      promoError.value = 'Sự kiện hiện không có loại vé nào áp dụng được mã này!';
-      return;
-    }
-
-    const results = await Promise.allSettled(targets.map((ticket) => previewPromoFor(ticket, code)));
-
-    const previews: Record<string, PromoPreview> = {};
-    let firstError = '';
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        previews[targets[index].id] = result.value;
-      } else if (!firstError) {
-        firstError = promoErrorMessage(result.reason);
-      }
-    });
-
-    if (!Object.keys(previews).length) {
-      promoError.value = firstError;
-      appliedPromo.value = '';
-      promoPreviews.value = {};
-      return;
-    }
-
-    appliedPromo.value = code;
-    promoCodeInput.value = code;
-    promoPreviews.value = previews;
-    if (firstError) promoError.value = firstError;
-  } finally {
-    promoApplying.value = false;
-  }
-};
-
-/** Đổi số lượng / loại vé -> tính lại preview nếu đã áp mã (debounce nhẹ). */
-const refreshPromoPreviews = async () => {
-  const code = appliedPromo.value;
-  if (!code || !event.value) return;
-
-  const targets = bookableTickets.value;
-  const results = await Promise.allSettled(targets.map((ticket) => previewPromoFor(ticket, code)));
-
-  const previews: Record<string, PromoPreview> = { ...promoPreviews.value };
-  results.forEach((result, index) => {
-    const id = targets[index].id;
-    if (result.status === 'fulfilled') previews[id] = result.value;
-    else delete previews[id];
-  });
-  promoPreviews.value = previews;
-};
-
-watch(
-  quantities,
-  () => {
-    if (!appliedPromo.value) return;
-    clearTimeout(promoRefreshTimer);
-    promoRefreshTimer = setTimeout(() => {
-      void refreshPromoPreviews();
-    }, 400);
-  },
-  { deep: true }
-);
-
-const clearPromo = () => {
-  clearTimeout(promoRefreshTimer);
-  promoCodeInput.value = '';
-  appliedPromo.value = '';
-  promoPreviews.value = {};
-  promoError.value = '';
-};
-
-/**
  * Danh sách chờ: loại vé hết vé nhưng sự kiện chưa kết thúc và còn trong
  * giờ bán -> cho user đăng ký nhận báo khi có vé trả về.
  */
@@ -279,7 +159,6 @@ const loadEvent = async (id: string) => {
   // người dùng vẫn nhìn thấy sự kiện cũ (và tưởng là dữ liệu bị sai).
   event.value = null;
   quantities.value = {};
-  clearPromo();
   isLoading.value = true;
 
   try {
@@ -332,7 +211,6 @@ onUnmounted(() => {
   eventAbort?.abort();
   clearInterval(saleTimer);
   ticketObserver?.disconnect();
-  clearTimeout(promoRefreshTimer);
 });
 
 /**
@@ -380,9 +258,8 @@ const handleBook = async (ticket: TicketType) => {
   submittingId.value = ticket.id;
 
   try {
-    await orderStore.createOrder(ticket.id, quantity, appliedPromo.value || undefined);
-    // Thành công -> sang trang "Vé của tôi", đơn mới nằm ngay đầu danh sách
-    router.push({ name: 'MyOrders' });
+    const { order } = await orderStore.createOrder(ticket.id, quantity);
+    router.push({ name: 'Checkout', params: { orderId: order.id } });
   } catch (error: any) {
     const status = error.response?.status;
 
@@ -508,31 +385,10 @@ const handleDelete = async () => {
             <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-primary" />Chọn loại vé</CardTitle></CardHeader>
             <CardContent class="space-y-4 p-5 sm:p-6">
               <AppAlert :message="errorMessage" type="error" />
-              <div v-if="authStore.isAuthenticated" class="rounded-lg border border-border bg-background p-4">
-                <label for="promo-code" class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Mã giảm giá</label>
-                <div class="mt-2 flex items-center gap-2">
-                  <Input
-                    id="promo-code"
-                    v-model="promoCodeInput"
-                    placeholder="VD: TET2026"
-                    autocomplete="off"
-                    class="uppercase"
-                    :disabled="promoApplying"
-                    @keyup.enter="applyPromo"
-                  />
-                  <Button variant="outline" class="shrink-0 rounded-md" :disabled="promoApplying" @click="applyPromo">{{ promoApplying ? 'Đang áp...' : 'Áp dụng' }}</Button>
-                  <Button v-if="appliedPromo" variant="ghost" size="icon" class="shrink-0" aria-label="Xoá mã giảm giá" @click="clearPromo"><X /></Button>
-                </div>
-                <p v-if="promoError" role="alert" class="mt-2 break-words text-sm text-danger">{{ promoError }}</p>
-                <p v-else-if="appliedPromo" class="mt-2 text-sm text-muted-foreground">Mã <span class="font-medium text-foreground">{{ appliedPromo }}</span> đã áp dụng — mức giảm hiển thị theo từng loại vé bên dưới.</p>
-              </div>
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
               <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
               <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50': ticket.availableQuantity <= 0, 'opacity-60': ticket.availableQuantity <= 0 && !canJoinWaitlist(ticket) }">
                 <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p>
-                  <p v-if="appliedPromo && promoPreviews[ticket.id] && (quantities[ticket.id] ?? 0) > 0" class="text-sm text-muted-foreground">
-                    Giảm <span class="font-medium tabular-nums text-brand">{{ formatPrice(promoPreviews[ticket.id]!.discountAmount) }}</span>, còn <span class="font-medium tabular-nums text-brand">{{ formatPrice(promoPreviews[ticket.id]!.totalAmount) }}</span>
-                  </p>
                 </div>
                 <div>
                   <div class="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
