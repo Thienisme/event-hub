@@ -18,6 +18,7 @@ const order = ref<Order | null>(null);
 const loading = ref(true);
 const loadError = ref('');
 const providers = ref<PaymentProvider[]>([]);
+const PROVIDER_ORDER: PaymentProvider[] = ['VNPAY', 'MOMO', 'MOCK'];
 const selected = ref<PaymentProvider>();
 const busy = ref(false);
 const promoBusy = ref(false);
@@ -68,8 +69,9 @@ async function load() {
     const [current, enabled] = await Promise.all([store.fetchOrder(String(route.params.orderId)), store.loadPaymentProviders()]);
     if (currentVersion !== version) return;
     order.value = current;
-    providers.value = enabled;
-    selected.value = enabled[0];
+    // Cổng thật lên trước, thanh toán thử luôn ở cuối (server trả MOCK đầu tiên).
+    providers.value = [...enabled].sort((a, b) => PROVIDER_ORDER.indexOf(a) - PROVIDER_ORDER.indexOf(b));
+    selected.value = providers.value[0];
     if (current.status === 'CONFIRMED') await router.replace({ name: 'MyOrders' });
   } catch (error) {
     if (currentVersion === version) loadError.value = message(error, 'Không tải được thông tin thanh toán!');
@@ -86,6 +88,7 @@ async function changePromo(remove = false) {
   try {
     order.value = remove ? await store.removePromo(order.value.id) : await store.applyPromo(order.value.id, promoInput.value.trim().toUpperCase());
     promoInput.value = '';
+    promoOpen.value = false;
   } catch (error: any) {
     promoError.value = message(error, 'Không thể cập nhật mã giảm giá!');
     if (error.response?.status === 409) await refreshOrder().catch(() => {});
@@ -152,8 +155,8 @@ async function cancel() {
                 <p v-if="!providers.length" role="alert" class="text-sm text-danger">Hiện chưa có cổng thanh toán khả dụng. Vui lòng thử lại sau.</p>
               </div>
             </section>
-            <aside class="order-1 min-w-0 space-y-5 lg:order-2" aria-labelledby="summary-heading">
-              <Card class="min-w-0 gap-5 border border-border bg-background p-5 shadow-none ring-0 sm:p-6">
+            <aside class="contents min-w-0 lg:order-2 lg:block lg:space-y-5" aria-labelledby="summary-heading">
+              <Card class="order-1 min-w-0 gap-5 border border-border bg-background p-5 shadow-none ring-0 sm:p-6 lg:order-none">
                 <h2 id="summary-heading" class="text-xl font-bold tracking-tight">Tóm tắt đơn</h2>
                 <div class="min-w-0 space-y-2">
                   <h3 class="break-words font-semibold">{{ event?.title ?? 'Sự kiện' }}</h3>
@@ -166,7 +169,8 @@ async function cancel() {
                 </div>
                 <div class="min-w-0 space-y-3">
                   <div v-if="order.promoCode" class="flex flex-wrap items-center gap-2"><span class="max-w-full break-all rounded-md border border-border bg-muted px-2 py-1 text-xs font-semibold">{{ order.promoCode }}</span><Button v-if="!order.paymentStarted" variant="ghost" size="sm" :disabled="locked" @click="changePromo(true)">Gỡ</Button></div>
-                  <template v-if="!order.paymentStarted">
+                  <!-- Đã áp mã thì chỉ còn chip + "Gỡ"; muốn đổi mã thì gỡ trước. -->
+                  <template v-if="!order.paymentStarted && !order.promoCode">
                     <button v-if="!promoOpen" type="button" class="text-sm underline underline-offset-4 disabled:opacity-50" :disabled="locked" :aria-expanded="promoOpen" aria-controls="promo-form" @click="promoOpen = true">Có mã giảm giá?</button>
                     <form v-else id="promo-form" class="space-y-2" @submit.prevent="changePromo()">
                       <label for="checkout-promo" class="text-sm font-medium">Mã giảm giá</label>
@@ -178,7 +182,7 @@ async function cancel() {
                 </div>
                 <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5"><span class="font-semibold">Tổng cộng</span><span class="text-2xl font-bold text-brand tabular-nums">{{ formatPrice(order.totalAmount) }}</span></div>
               </Card>
-              <div class="space-y-3 text-center">
+              <div class="order-3 min-w-0 space-y-3 text-center lg:order-none">
                 <p class="flex items-center justify-center gap-2 text-sm"><Timer class="size-4 shrink-0" aria-hidden="true" /><span v-if="remaining > 0">Vé được giữ trong <strong class="tabular-nums">{{ countdown }}</strong></span><span v-else role="status">Hết thời gian giữ vé</span></p>
                 <Button v-if="remaining === 0" variant="outline" class="w-full" @click="router.push(eventRoute)">Chọn lại vé</Button>
                 <Button class="h-auto min-h-11 w-full whitespace-normal bg-brand py-3 text-brand-foreground hover:bg-brand/90" :disabled="locked || (!free && !selected)" @click="pay">{{ busy ? 'Đang chuyển tới cổng thanh toán...' : free ? 'Xác nhận nhận vé' : `Thanh toán ${formatPrice(order.totalAmount)}` }}</Button>
