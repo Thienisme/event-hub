@@ -27,6 +27,7 @@
     "typescript": "^5.6.3"
   },
   "scripts": {
+    "test:discovery": "node test-discovery.cjs",
     "test:promo-codes": "node test-promo-codes.cjs",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",

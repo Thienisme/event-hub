@@ -8,6 +8,7 @@ import { useAuthStore } from './stores/auth';
 import apiClient from './api/axios';
 import UserAvatar from './components/UserAvatar.vue';
 import AppToast from './components/AppToast.vue';
+import HeaderSearch from './components/HeaderSearch.vue';
 
 const resendBusy = ref(false);
 const resendMessage = ref('');
@@ -95,6 +96,8 @@ const handleLogout = () => {
           Event<span class="text-foreground">Hub</span>
         </router-link>
 
+        <HeaderSearch v-if="route.name !== 'Checkout'" class="hidden max-w-xl flex-1 md:flex" />
+
         <div class="hidden md:flex min-w-0 items-center gap-3 lg:gap-4">
           <template v-if="authStore.isAuthenticated">
             <router-link :to="{ name: 'MyOrders' }" class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" :class="linkClass('MyOrders')">
@@ -136,15 +139,16 @@ const handleLogout = () => {
               </DropdownMenuContent>
             </DropdownMenu>
           </template>
-          <Button v-else as-child><router-link :to="{ name: 'Login' }" >Đăng nhập</router-link></Button>
+          <template v-else><Button variant="ghost" as-child><router-link :to="{ name: 'Login' }">Đăng nhập</router-link></Button><Button as-child><router-link :to="{ name: 'Register' }">Đăng ký</router-link></Button></template>
         </div>
 
         <button v-if="authStore.isAuthenticated" type="button" class="md:hidden flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" :aria-label="mobileOpen ? 'Đóng menu' : 'Mở menu'" :aria-expanded="mobileOpen" aria-controls="mobile-navigation" @click="mobileOpen = !mobileOpen">
           <X v-if="mobileOpen" class="size-5" aria-hidden="true" />
           <Menu v-else class="size-5" aria-hidden="true" />
         </button>
-        <Button v-else as-child class="md:hidden shrink-0"><router-link :to="{ name: 'Login' }">Đăng nhập</router-link></Button>
+        <div v-else class="flex shrink-0 gap-1 md:hidden"><Button variant="ghost" as-child class="px-2"><router-link :to="{ name: 'Login' }">Đăng nhập</router-link></Button><Button as-child class="px-2"><router-link :to="{ name: 'Register' }">Đăng ký</router-link></Button></div>
       </nav>
+      <HeaderSearch v-if="route.name !== 'Checkout'" class="mb-3 w-full md:hidden" />
 
       <div v-if="mobileOpen && authStore.isAuthenticated" id="mobile-navigation" class="md:hidden absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto border-b border-border bg-background px-4 py-3">
         <div class="flex min-w-0 items-center gap-3 border-b border-border pb-3 mb-2">

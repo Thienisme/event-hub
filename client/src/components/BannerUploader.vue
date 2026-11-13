@@ -223,7 +223,7 @@ const onUrlInput = (event: Event) => {
     <div class="mt-3">
       <button
         type="button"
-        class="text-xs text-muted-foreground underline-offset-4 hover:underline hover:text-foreground transition-colors"
+        class="-my-2 py-2 text-xs text-muted-foreground underline-offset-4 hover:underline hover:text-foreground transition-colors"
         @click="showUrlInput = !showUrlInput"
       >
         {{ showUrlInput ? 'Ẩn ô dán URL ảnh' : 'Hoặc dán URL ảnh' }}

@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useEventStore } from '../stores/event';
+import { useEventStore, type CategoryCount, type EventHighlights } from '../stores/event';
 import { useAuthStore } from '../stores/auth';
 import EventCard from '../components/EventCard.vue';
 import FeaturedEvents from '../components/FeaturedEvents.vue';
+import EventRow from '../components/EventRow.vue';
 import DatePicker from '@/components/DatePicker.vue';
-import { Search, CalendarSearch, CircleAlert, Plus, SlidersHorizontal, X } from '@lucide/vue';
+import { CalendarSearch, CircleAlert, Plus, SlidersHorizontal, X } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EVENT_CATEGORIES } from '@/utils/categories';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -33,6 +33,40 @@ const errorMessage = ref('');
 const total = ref<number | null>(null);
 const resultsSection = ref<HTMLElement | null>(null);
 const hasActiveFilters = computed(() => searchQuery.value !== '' || Object.values(filters).some(value => value !== ''));
+const categories = ref<CategoryCount[]>([]);
+const highlights = ref<EventHighlights>({ thisWeek: [], almostSoldOut: [], newlyOnSale: [] });
+const discoveryLoading = ref(false);
+const discoveryFailed = ref(false);
+let discoveryRequested = false;
+const discoveryController = new AbortController();
+async function loadDiscovery() {
+  if (discoveryRequested || hasActiveFilters.value) return;
+  discoveryRequested = true;
+  discoveryLoading.value = true;
+  const [highlightResult] = await Promise.allSettled([
+    eventStore.fetchHighlights(discoveryController.signal),
+  ]);
+  if (discoveryController.signal.aborted) return;
+  if (highlightResult.status === 'fulfilled') highlights.value = highlightResult.value;
+  discoveryFailed.value = highlightResult.status === 'rejected';
+  discoveryLoading.value = false;
+}
+// Số sự kiện mỗi danh mục hiện ngay trên chip lọc; tải một lần, kể cả khi đang có bộ lọc.
+let categoriesRequested = false;
+async function loadCategoryCounts() {
+  if (categoriesRequested) return;
+  categoriesRequested = true;
+  try { categories.value = await eventStore.fetchCategories(discoveryController.signal); } catch { /* chip vẫn dùng được, chỉ thiếu số */ }
+}
+const categoryCount = (value: string) => categories.value.find(item => item.category === value)?.count;
+async function selectDiscovery(category?: string) {
+  if (category) filters.category = category;
+  else Object.assign(filters, { from: today, to: addDays(today, 6) });
+  currentPage.value = 1;
+  await syncQuery();
+  await nextTick();
+  resultsSection.value?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+}
 const drafts = reactive({ from: '', to: '', minPrice: '', maxPrice: '' });
 const dateInvalid = computed(() => !!drafts.from && !!drafts.to && drafts.from > drafts.to);
 const priceInvalid = computed(() => drafts.minPrice !== '' && drafts.maxPrice !== '' && Number(drafts.minPrice) > Number(drafts.maxPrice));
@@ -235,11 +269,14 @@ watch(() => route.query, (query) => {
   currentPage.value = Number.isSafeInteger(page) && page > 0 ? page : 1;
   status.value = read('status') === 'ended' ? 'ended' : 'upcoming';
   loadEvents();
+  void loadDiscovery();
+  void loadCategoryCounts();
 }, { immediate: true });
 
 // Dọn dẹp khi rời trang: nếu không, timer debounce còn treo sẽ gọi API
 // sau khi component đã bị huỷ (request "mồ côi").
 onUnmounted(() => {
+  discoveryController.abort();
   clearTimeout(searchTimer);
   inFlight?.abort();
 });
@@ -247,38 +284,36 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-surface px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-    <div class="mx-auto max-w-6xl min-w-0 space-y-10">
+    <div class="mx-auto max-w-6xl min-w-0 space-y-12">
       <header class="flex flex-wrap items-center justify-between gap-5 pt-4">
         <div class="min-w-0 space-y-3">
           <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Khám phá sự kiện</h1>
-          <p class="text-sm leading-6 text-muted-foreground sm:text-base">Tìm trải nghiệm mới, kết nối những điều bạn yêu.</p>
+          <p class="text-sm leading-6 text-muted-foreground sm:text-base">{{ total !== null && !errorMessage ? `${total.toLocaleString('vi-VN')} sự kiện ${status === 'ended' ? 'đã kết thúc' : 'sắp diễn ra'}` : 'Khám phá sự kiện' }}</p>
         </div>
         <Button v-if="authStore.isOrganizer" class="shrink-0" @click="router.push({ name: 'CreateEvent' })"><Plus class="size-4" aria-hidden="true" />Tạo sự kiện</Button>
       </header>
 
       <FeaturedEvents v-if="!hasActiveFilters && status === 'upcoming' && currentPage === 1" />
 
-      <div class="sticky top-16 z-20 min-w-0 space-y-3 border-b border-border bg-surface py-3">
-        <div class="flex min-w-0 items-center gap-2 sm:gap-3">
-          <div class="relative min-w-0 flex-1">
-            <Label for="event-search" class="sr-only">Tìm kiếm sự kiện</Label>
-            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input id="event-search" v-model="searchQuery" type="search" placeholder="Tìm sự kiện, địa điểm…" class="h-11 w-full min-w-0 bg-background pl-10" @update:model-value="handleSearchInput" />
-          </div>
-          <div class="hidden shrink-0 sm:block">
-            <Label for="filter-location" class="sr-only">Thành phố</Label>
-            <Select :model-value="filters.location || 'all'" @update:model-value="value => { filters.location = String(value) === 'all' ? '' : String(value); handleSearchInput(); }">
-              <SelectTrigger id="filter-location" class="h-11 w-40 bg-background"><SelectValue placeholder="Thành phố" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Thành phố</SelectItem>
-                <SelectItem v-for="city in ['Hà Nội', 'TP.HCM', 'Đà Nẵng']" :key="city" :value="city">{{ city }}</SelectItem>
-                <SelectItem v-if="filters.location && !['Hà Nội', 'TP.HCM', 'Đà Nẵng'].includes(filters.location)" :value="filters.location">{{ filters.location }}</SelectItem>
-              </SelectContent>
-            </Select>
+      <template v-if="!hasActiveFilters && !discoveryFailed">
+        <EventRow title="Diễn ra tuần này" :events="highlights.thisWeek" :loading="discoveryLoading" show-all @view-all="selectDiscovery()" />
+        <EventRow title="Sắp hết vé" :events="highlights.almostSoldOut" :loading="discoveryLoading" />
+        <EventRow title="Mới mở bán" :events="highlights.newlyOnSale" :loading="discoveryLoading" />
+      </template>
+      <section id="all-events" ref="resultsSection" aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded" class="scroll-mt-32 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <h2 class="text-xl sm:text-2xl font-bold tracking-tight">{{ hasActiveFilters ? 'Kết quả tìm kiếm' : 'Tất cả sự kiện' }}<span v-if="total !== null && !eventStore.loading && !errorMessage" class="ml-2 text-sm font-normal tabular-nums text-muted-foreground">({{ total.toLocaleString('vi-VN') }})</span></h2>
+          <Tabs :model-value="status" @update:model-value="changeStatus"><TabsList aria-label="Trạng thái sự kiện"><TabsTrigger value="upcoming">Sắp diễn ra</TabsTrigger><TabsTrigger value="ended">Đã kết thúc</TabsTrigger></TabsList></Tabs>
+        </div>
+      <div class="min-w-0 space-y-3 border-b border-border bg-surface py-3">
+        <div class="flex min-w-0 items-start gap-2 sm:gap-3">
+          <div class="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 pr-6 [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0 md:pr-0 md:[mask-image:none]" role="group" aria-label="Danh mục sự kiện">
+            <button type="button" :aria-pressed="filters.category === ''" class="h-9 shrink-0 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring" :class="filters.category === '' ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'" @click="filters.category = ''; handleSearchInput()">Tất cả</button>
+            <button v-for="item in EVENT_CATEGORIES" :key="item.value" type="button" :data-tone="item.value" :aria-pressed="filters.category === item.value" class="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring" :class="filters.category === item.value ? 'border-tone bg-tone-soft text-tone-ink' : 'border-border bg-background hover:bg-muted'" @click="filters.category = item.value; handleSearchInput()"><span class="size-2 rounded-full bg-tone" aria-hidden="true" />{{ item.label }}<span v-if="categoryCount(item.value) !== undefined" class="tabular-nums text-muted-foreground">{{ categoryCount(item.value) }}</span></button>
           </div>
           <Popover v-model:open="filtersOpen">
             <PopoverTrigger as-child>
-              <Button variant="outline" class="h-11 shrink-0 bg-background"><SlidersHorizontal class="size-4" aria-hidden="true" />Bộ lọc<span v-if="activeFilterCount > 0" class="flex size-5 items-center justify-center rounded-full bg-primary text-xs tabular-nums text-primary-foreground" aria-label="Số bộ lọc đang bật">{{ activeFilterCount }}</span></Button>
+              <Button variant="outline" class="h-9 shrink-0 rounded-full bg-background"><SlidersHorizontal class="size-4" aria-hidden="true" />Bộ lọc<span v-if="activeFilterCount > 0" class="flex size-5 items-center justify-center rounded-full bg-primary text-xs tabular-nums text-primary-foreground" aria-label="Số bộ lọc đang bật">{{ activeFilterCount }}</span></Button>
             </PopoverTrigger>
             <PopoverContent align="end" class="w-[22rem] max-w-[calc(100vw-2rem)] gap-0 p-0 shadow-none border border-border" aria-label="Bộ lọc sự kiện" @interact-outside="keepCalendarOpen">
               <div class="max-h-[70dvh] overflow-y-auto divide-y divide-border">
@@ -309,41 +344,21 @@ onUnmounted(() => {
                   </div>
                   <p v-if="priceInvalid" id="price-filter-error" role="alert" class="text-xs text-danger">Giá tối đa phải lớn hơn hoặc bằng giá tối thiểu.</p>
                 </div>
-                <div class="p-4 space-y-3 sm:hidden">
-                  <h3 class="text-sm font-semibold">Thành phố</h3>
-                  <div class="flex flex-wrap gap-2" role="group" aria-label="Thành phố">
-                    <button v-for="city in ['', 'Hà Nội', 'TP.HCM', 'Đà Nẵng']" :key="city" type="button" :class="[chipClass, chipState(filters.location === city)]" :aria-pressed="filters.location === city" @click="filters.location = city; handleSearchInput()">{{ city || 'Tất cả' }}</button>
-                  </div>
-                </div>
               </div>
               <div class="flex justify-between border-t border-border p-4"><Button variant="ghost" @click="resetPanel">Xoá bộ lọc</Button><Button @click="filtersOpen = false">Xong</Button></div>
             </PopoverContent>
           </Popover>
-        </div>
-        <div class="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Danh mục sự kiện">
-          <button type="button" :aria-pressed="filters.category === ''" class="h-9 shrink-0 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring" :class="filters.category === '' ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'" @click="filters.category = ''; handleSearchInput()">Tất cả</button>
-          <button v-for="item in EVENT_CATEGORIES" :key="item.value" type="button" :aria-pressed="filters.category === item.value" class="h-9 shrink-0 whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring" :class="filters.category === item.value ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'" @click="filters.category = item.value; handleSearchInput()">{{ item.label }}</button>
         </div>
         <div v-if="selectedFilters.length" class="mt-3 flex flex-wrap items-center gap-2" aria-label="Bộ lọc đang bật">
           <span v-for="item in selectedFilters" :key="item.key" class="inline-flex max-w-full items-center gap-1 h-8 rounded-full border border-border bg-background pl-3 pr-1 text-sm">
             <span class="min-w-0 truncate">{{ item.label }}</span>
             <button type="button" class="flex size-6 shrink-0 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring" :aria-label="`Xoá bộ lọc ${item.label}`" @click="removeFilter(item.key)"><X class="size-3" aria-hidden="true" /></button>
           </span>
-          <button type="button" class="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" @click="searchQuery = ''; clearFilters(); Object.assign(drafts, { from: '', to: '', minPrice: '', maxPrice: '' })">Xoá tất cả</button>
+          <button type="button" class="min-h-8 px-1 text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" @click="searchQuery = ''; clearFilters(); Object.assign(drafts, { from: '', to: '', minPrice: '', maxPrice: '' })">Xoá tất cả</button>
         </div>
       </div>
 
-      <section ref="resultsSection" aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded" class="scroll-mt-64 space-y-6">
         <p class="sr-only" role="status">{{ eventStore.loading || !loaded ? 'Đang tìm sự kiện...' : errorMessage ? 'Không tải được danh sách sự kiện.' : `Tìm thấy ${total ?? 0} sự kiện. Trang ${currentPage}.` }}</p>
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <h2 class="text-xl sm:text-2xl font-bold tracking-tight">{{ searchQuery ? 'Kết quả tìm kiếm' : 'Sự kiện dành cho bạn' }}<span v-if="total !== null && !eventStore.loading && !errorMessage" class="ml-2 text-sm font-normal tabular-nums text-muted-foreground">({{ total.toLocaleString('vi-VN') }})</span></h2>
-          <Tabs :model-value="status" @update:model-value="changeStatus">
-            <TabsList aria-label="Trạng thái sự kiện">
-              <TabsTrigger value="upcoming">Sắp diễn ra</TabsTrigger>
-              <TabsTrigger value="ended">Đã kết thúc</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
         <div v-if="eventStore.loading || !loaded" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="status" aria-label="Đang tải sự kiện">
           <Card v-for="n in 8" :key="n" aria-hidden="true" class="shadow-none ring-0 border border-border bg-background gap-0 rounded-lg py-0">
             <Skeleton class="aspect-video w-full rounded-none" />

@@ -28,6 +28,10 @@ body {
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-soft: var(--brand-soft);
+  --color-tone: var(--tone);
+  --color-tone-foreground: var(--tone-foreground);
+  --color-tone-soft: var(--tone-soft);
+  --color-tone-ink: var(--tone-ink);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -170,3 +174,25 @@ body {
     @apply bg-surface text-foreground font-sans antialiased;
   }
 }
+
+/*
+ * Màu theo danh mục sự kiện (xem DESIGN.md "Màu theo danh mục").
+ * Gắn data-tone="<EventCategory>" lên phần tử bao, rồi dùng bg-tone / text-tone-foreground
+ * (khối đặc: ô ngày), bg-tone-soft + text-tone-ink (nhãn, nền cuống vé, thẻ ưu đãi).
+ * Không có data-tone thì là tông trung tính (OTHER).
+ */
+:root, [data-tone] {
+  --tone: oklch(0.38 0.01 270);
+  --tone-foreground: #FFFFFF;
+  --tone-soft: oklch(0.96 0.004 270);
+  --tone-ink: oklch(0.38 0.01 270);
+}
+[data-tone="MUSIC"]      { --tone: oklch(0.6 0.2 0);    --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.025 0);   --tone-ink: oklch(0.48 0.18 0); }
+[data-tone="SPORTS"]     { --tone: oklch(0.66 0.18 45);  --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.03 55);   --tone-ink: oklch(0.5 0.15 45); }
+[data-tone="WORKSHOP"]   { --tone: oklch(0.82 0.15 85);  --tone-foreground: #0A0A0A; --tone-soft: oklch(0.97 0.04 90);   --tone-ink: oklch(0.5 0.11 75); }
+[data-tone="FOOD"]       { --tone: oklch(0.62 0.15 125); --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.035 125); --tone-ink: oklch(0.45 0.12 125); }
+[data-tone="CONFERENCE"] { --tone: oklch(0.56 0.12 165); --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.025 165); --tone-ink: oklch(0.44 0.1 165); }
+[data-tone="FESTIVAL"]   { --tone: oklch(0.64 0.12 205); --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.025 205); --tone-ink: oklch(0.46 0.1 210); }
+[data-tone="EXHIBITION"] { --tone: oklch(0.52 0.18 260); --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.025 260); --tone-ink: oklch(0.45 0.17 260); }
+[data-tone="THEATER"]    { --tone: oklch(0.5 0.17 335);  --tone-foreground: #FFFFFF; --tone-soft: oklch(0.96 0.025 335); --tone-ink: oklch(0.45 0.16 335); }
+.dark [data-tone], .dark[data-tone] { --tone-soft: color-mix(in oklch, var(--tone) 22%, #0A0A0A); --tone-ink: color-mix(in oklch, var(--tone) 70%, #FFFFFF); }

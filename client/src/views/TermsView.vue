@@ -91,7 +91,7 @@ const sections = [
       <p class="text-sm font-semibold mb-3">Mục lục</p>
       <ul class="grid gap-2 sm:grid-cols-2 text-sm">
         <li v-for="section in sections" :key="section.id">
-          <a :href="`#${section.id}`" class="text-foreground underline-offset-4 hover:underline">{{ section.title }}</a>
+          <a :href="`#${section.id}`" class="inline-block py-1 text-foreground underline-offset-4 hover:underline">{{ section.title }}</a>
         </li>
       </ul>
     </nav>
