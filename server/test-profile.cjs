@@ -7,6 +7,7 @@ require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const sharp = require('sharp');
 
 const prisma = new PrismaClient();
 const API = process.env.BASE_URL || 'http://localhost:5000/api';
@@ -73,6 +74,44 @@ async function testProfile(user) {
   const sneaky = await call(user.token, 'PATCH', '/auth/me', { fullName: 'Tên Mới', role: 'ADMIN', email: 'x@y.z' });
   const row = await prisma.user.findUnique({ where: { id: user.id } });
   check('không đổi được role/email qua hồ sơ', sneaky.status === 200 && row.role === 'CUSTOMER' && row.email === user.email);
+}
+
+async function testAvatar(user) {
+  console.log('\nẢnh đại diện');
+  const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#ffffff' } }).png().toBuffer();
+  async function upload(buffer, token = user.token) {
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: 'image/png' }), 'avatar.png');
+    const res = await fetch(`${API}/auth/me/avatar`, {
+      method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form,
+    });
+    return { status: res.status, body: await res.json() };
+  }
+  check('không đăng nhập không tải được avatar', (await upload(image, null)).status === 401);
+  check('từ chối file giả ảnh', (await upload(Buffer.from('khong-phai-anh'))).status === 400);
+  const result = await upload(image);
+  const url = result.body?.user?.avatarUrl;
+  try {
+    check('khách hàng tải avatar thành công, đường dẫn WEBP tương đối', result.status === 200 && /^\/uploads\/[a-f0-9-]+\.webp$/.test(url || ''));
+    const me = await call(user.token, 'GET', '/auth/me');
+    check('avatar được lưu và trả lại từ hồ sơ', me.body?.user?.avatarUrl === url && Boolean(url));
+    const loginRes = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, password: PASSWORD }) });
+    check('đăng nhập trả lại avatar', (await loginRes.json()).user?.avatarUrl === url && Boolean(url));
+    if (url) {
+      const res = await fetch(`${new URL(API).origin}${url}`);
+      check('ảnh được phục vụ dạng WEBP', res.status === 200 && res.headers.get('content-type')?.includes('image/webp'));
+    }
+    const removed = await call(user.token, 'DELETE', '/auth/me/avatar');
+    check('xoá avatar trở về null', removed.status === 200 && removed.body?.user?.avatarUrl === null);
+    check('xoá avatar lần hai vẫn thành công', (await call(user.token, 'DELETE', '/auth/me/avatar')).status === 200);
+  } finally {
+    if (url && process.env.STORAGE_DRIVER === 'db') {
+      await prisma.storedFile.deleteMany({ where: { name: url.split('/').pop() } });
+    } else if (url) {
+      const path = require('path');
+      await require('fs/promises').unlink(path.join(process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads'), path.basename(url))).catch(() => {});
+    }
+  }
 }
 
 async function testChangePassword(user) {
@@ -145,7 +184,9 @@ async function testUnauthenticated() {
 
 async function main() {
   console.log(`\n${D}Hồ sơ người dùng${X}`);
-  await testProfile(await createUser('name'));
+  const profileUser = await createUser('name');
+  await testProfile(profileUser);
+  await testAvatar(profileUser);
   await testChangePassword(await createUser('password'));
   await testConcurrentChange(await createUser('race'));
   await testUnauthenticated();

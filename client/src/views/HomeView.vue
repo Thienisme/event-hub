@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, reactive, watch, onUnmounted } from 'vue';
+import { computed, ref, reactive, watch, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '../stores/event';
 import { useAuthStore } from '../stores/auth';
@@ -31,6 +31,7 @@ const limit = ref(8);
 const totalPages = ref(1);
 const errorMessage = ref('');
 const total = ref<number | null>(null);
+const resultsSection = ref<HTMLElement | null>(null);
 const hasActiveFilters = computed(() => searchQuery.value !== '' || Object.values(filters).some(value => value !== ''));
 const drafts = reactive({ from: '', to: '', minPrice: '', maxPrice: '' });
 const dateInvalid = computed(() => !!drafts.from && !!drafts.to && drafts.from > drafts.to);
@@ -205,12 +206,13 @@ const changeStatus = (value: string | number) => {
   currentPage.value = 1;
   syncQuery();
 };
-const changePage = (page: number) => {
-  if (page < 1 || page > totalPages.value) return;
+const changePage = async (page: number) => {
+  if (page < 1 || page > totalPages.value || eventStore.loading) return;
   clearTimeout(searchTimer);
   currentPage.value = page;
-  syncQuery();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  await syncQuery();
+  await nextTick();
+  resultsSection.value?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
 };
 watch(() => route.query, (query) => {
   // `route` là toàn cục: khi rời trang chủ, query đổi theo trang mới và watcher
@@ -256,7 +258,7 @@ onUnmounted(() => {
 
       <FeaturedEvents v-if="!hasActiveFilters && status === 'upcoming' && currentPage === 1" />
 
-      <div class="sticky top-16 z-20 min-w-0 space-y-3 border-b border-border bg-surface/95 py-3">
+      <div class="sticky top-16 z-20 min-w-0 space-y-3 border-b border-border bg-surface py-3">
         <div class="flex min-w-0 items-center gap-2 sm:gap-3">
           <div class="relative min-w-0 flex-1">
             <Label for="event-search" class="sr-only">Tìm kiếm sự kiện</Label>
@@ -331,7 +333,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <section aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded" class="space-y-6">
+      <section ref="resultsSection" aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded" class="scroll-mt-64 space-y-6">
+        <p class="sr-only" role="status">{{ eventStore.loading || !loaded ? 'Đang tìm sự kiện...' : errorMessage ? 'Không tải được danh sách sự kiện.' : `Tìm thấy ${total ?? 0} sự kiện. Trang ${currentPage}.` }}</p>
         <div class="flex flex-wrap items-center justify-between gap-4">
           <h2 class="text-xl sm:text-2xl font-bold tracking-tight">{{ searchQuery ? 'Kết quả tìm kiếm' : 'Sự kiện dành cho bạn' }}<span v-if="total !== null && !eventStore.loading && !errorMessage" class="ml-2 text-sm font-normal tabular-nums text-muted-foreground">({{ total.toLocaleString('vi-VN') }})</span></h2>
           <Tabs :model-value="status" @update:model-value="changeStatus">
@@ -358,7 +361,7 @@ onUnmounted(() => {
         </Card>
         <Card v-else-if="eventStore.events.length === 0" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg px-5 py-14 text-center">
           <div class="rounded-lg bg-muted p-4"><CalendarSearch class="size-10 text-muted-foreground" aria-hidden="true" /></div>
-          <div><h3 class="text-lg font-semibold tracking-tight">{{ status === 'ended' ? 'Chưa có sự kiện nào đã kết thúc' : 'Không tìm thấy sự kiện phù hợp' }}</h3><p class="mt-2 text-sm text-muted-foreground">Thử từ khóa khác hoặc quay lại sau để khám phá sự kiện mới.</p></div>
+          <div><h3 class="text-lg font-semibold tracking-tight">{{ hasActiveFilters ? 'Không tìm thấy sự kiện phù hợp' : status === 'ended' ? 'Chưa có sự kiện nào đã kết thúc' : 'Chưa có sự kiện sắp diễn ra' }}</h3><p class="mt-2 text-sm leading-6 text-muted-foreground">{{ hasActiveFilters ? 'Thử từ khoá khác, mở rộng khoảng ngày hoặc xoá bộ lọc để xem thêm sự kiện.' : 'Quay lại sau để khám phá những trải nghiệm mới từ các nhà tổ chức.' }}</p></div>
           <Button v-if="hasActiveFilters" variant="outline" @click="searchQuery = ''; clearFilters(); Object.assign(drafts, { from: '', to: '', minPrice: '', maxPrice: '' })">Xoá bộ lọc</Button>
         </Card>
         <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -366,10 +369,10 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <nav v-if="totalPages > 1" aria-label="Phân trang sự kiện" class="flex items-center justify-center gap-2 pt-2 sm:gap-4">
-        <Button variant="outline" @click="changePage(currentPage - 1)" :disabled="currentPage === 1">Trước</Button>
+      <nav v-if="totalPages > 1 && !errorMessage" aria-label="Phân trang sự kiện" class="flex flex-wrap items-center justify-center gap-3 pt-2 sm:gap-4">
+        <Button variant="outline" class="min-h-11" @click="changePage(currentPage - 1)" :disabled="currentPage === 1 || eventStore.loading">Trang trước</Button>
         <span class="text-sm text-muted-foreground tabular-nums">Trang <strong class="font-semibold text-foreground">{{ currentPage }}</strong> / {{ totalPages }}</span>
-        <Button variant="outline" @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages">Sau</Button>
+        <Button variant="outline" class="min-h-11" @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages || eventStore.loading">Trang sau</Button>
       </nav>
     </div>
   </div>

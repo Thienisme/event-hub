@@ -4,9 +4,9 @@ import { useToastStore } from '../stores/toast';
 const toastStore = useToastStore();
 
 const typeClass: Record<string, string> = {
-  success: 'bg-success/10 text-success border-success/30',
-  error: 'bg-danger/10 text-danger border-danger/30',
-  info: 'bg-background text-muted-foreground border-border',
+  success: 'text-success border-success/30',
+  error: 'text-danger border-danger/30',
+  info: 'text-foreground border-border',
 };
 
 const typeIcon: Record<string, string> = {
@@ -22,23 +22,23 @@ const typeIcon: Record<string, string> = {
     z-index cao hơn header (z-10) để luôn nổi lên trên.
   -->
   <div
-    class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-[min(24rem,calc(100vw-2rem))]"
+    class="pointer-events-none fixed top-20 right-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 sm:top-auto sm:bottom-[max(1rem,env(safe-area-inset-bottom))]"
     role="status"
     aria-live="polite"
   >
     <TransitionGroup
-      enter-active-class="transition duration-200 ease-out"
+      enter-active-class="transition duration-200 ease-out motion-reduce:transition-none"
       enter-from-class="opacity-0 translate-y-2"
-      leave-active-class="transition duration-150 ease-in absolute"
+      leave-active-class="transition duration-150 ease-in absolute motion-reduce:transition-none"
       leave-to-class="opacity-0 translate-y-2"
     >
       <div
         v-for="toast in toastStore.toasts"
         :key="toast.id"
-        class="flex items-start gap-3 px-4 py-3 rounded-lg border shadow-xs text-sm font-medium"
+        class="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg border bg-background text-sm font-medium"
         :class="typeClass[toast.type]"
       >
-        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="mt-0.5 w-5 h-5 shrink-0" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -47,11 +47,11 @@ const typeIcon: Record<string, string> = {
           />
         </svg>
 
-        <p class="flex-1 leading-snug">{{ toast.message }}</p>
+        <p class="min-w-0 flex-1 break-words leading-6 text-foreground">{{ toast.message }}</p>
 
         <button
           type="button"
-          class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+          class="-mr-2 -my-2 flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           aria-label="Đóng thông báo"
           @click="toastStore.dismiss(toast.id)"
         >

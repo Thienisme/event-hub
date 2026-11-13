@@ -37,6 +37,7 @@ model User {
   email     String   @unique
   password  String
   fullName  String
+  avatarUrl String? @db.VarChar(191)
   role      Role     @default(CUSTOMER)
   // Tài khoản bị khoá: không đăng nhập được, và token đang cầm cũng mất tác dụng.
   isActive  Boolean  @default(true)
