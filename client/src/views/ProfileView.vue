@@ -7,6 +7,7 @@ import UserAvatar from '@/components/UserAvatar.vue';
 import { Camera, Trash2 } from '@lucide/vue';
 import { MAX_BANNER_BYTES, ALLOWED_BANNER_TYPES } from '@/utils/media';
 import { Input } from '@/components/ui/input';
+import PasswordInput from '@/components/PasswordInput.vue';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -167,15 +168,15 @@ async function savePassword() {
                 <legend class="sr-only">Thông tin đổi mật khẩu</legend>
                 <div class="space-y-2">
                   <Label for="current-password">Mật khẩu hiện tại</Label>
-                  <Input id="current-password" v-model="currentPassword" type="password" autocomplete="current-password" required />
+                  <PasswordInput id="current-password" v-model="currentPassword" autocomplete="current-password" required />
                 </div>
                 <div class="space-y-2">
                   <Label for="new-password">Mật khẩu mới</Label>
-                  <Input id="new-password" v-model="newPassword" type="password" autocomplete="new-password" minlength="8" required />
+                  <PasswordInput id="new-password" v-model="newPassword" autocomplete="new-password" minlength="8" required />
                 </div>
                 <div class="space-y-2">
                   <Label for="confirm-password">Nhập lại mật khẩu mới</Label>
-                  <Input id="confirm-password" v-model="confirmation" type="password" autocomplete="new-password" minlength="8" required />
+                  <PasswordInput id="confirm-password" v-model="confirmation" autocomplete="new-password" minlength="8" required />
                 </div>
                 <Button type="submit" :disabled="savingPassword" class="w-full sm:w-auto">{{ savingPassword ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu' }}</Button>
               </fieldset>
