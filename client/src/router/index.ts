@@ -4,13 +4,24 @@ import { useAuthStore } from '../stores/auth';
 const router = createRouter({
   // BASE_URL để build ra sub-folder (nếu có) vẫn chạy đúng
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.hash) return { el: to.hash, top: 96, behavior: 'smooth' };
+    // Cùng trang, chỉ đổi query (bộ lọc, phân trang trang chủ): giữ vị trí cuộn.
+    if (to.path === _from.path) return false;
+    return { top: 0 };
+  },
   routes: [
+    { path: '/forgot-password', name: 'ForgotPassword', component: () => import('@/views/ForgotPasswordView.vue') },
+    { path: '/reset-password', name: 'ResetPassword', component: () => import('@/views/ResetPasswordView.vue') },
+    { path: '/verify-email', name: 'VerifyEmail', component: () => import('@/views/VerifyEmailView.vue') },
     {
       path: '/',
       name: 'Home',
       component: () => import('@/views/HomeView.vue'),
     },
     {
+      // Giữ tên tham số id để tương thích link cũ; giá trị nhận cả slug và UUID.
       path: '/events/:id',
       name: 'EventDetail',
       component: () => import('@/views/EventDetailView.vue'),
@@ -28,6 +39,18 @@ const router = createRouter({
       meta: { requiresAuth: true, organizerOnly: true },
     },
     {
+      path: '/profile',
+      name: 'Profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/checkout/:orderId',
+      name: 'Checkout',
+      component: () => import('@/views/CheckoutView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/my-orders',
       name: 'MyOrders',
       component: () => import('@/views/MyOrdersView.vue'),
@@ -38,6 +61,19 @@ const router = createRouter({
       path: '/my-events',
       name: 'MyEvents',
       component: () => import('@/views/ManageEventsView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
+      path: '/my-events/:id/check-in',
+      name: 'CheckIn',
+      component: () => import('@/views/CheckInView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
+      // Quản lý mã giảm giá của một sự kiện (ORGANIZER / ADMIN)
+      path: '/my-events/:id/promo-codes',
+      name: 'PromoCodes',
+      component: () => import('@/views/PromoCodesView.vue'),
       meta: { requiresAuth: true, organizerOnly: true },
     },
     {
@@ -72,6 +108,31 @@ const router = createRouter({
       name: 'Register',
       component: () => import('@/views/RegisterView.vue'),
       meta: { guestOnly: true },
+    },
+    {
+      path: '/faq',
+      name: 'Faq',
+      component: () => import('@/views/FaqView.vue'),
+      meta: { title: 'Câu hỏi thường gặp' },
+    },
+    {
+      path: '/terms',
+      name: 'Terms',
+      component: () => import('@/views/TermsView.vue'),
+      meta: { title: 'Điều khoản sử dụng' },
+    },
+    {
+      path: '/privacy',
+      name: 'Privacy',
+      component: () => import('@/views/PrivacyView.vue'),
+      meta: { title: 'Chính sách bảo mật' },
+    },
+    {
+      // Kết quả thanh toán VNPay/MoMo: cổng chuyển về đây với query gốc.
+      // Không cần đăng nhập: chữ ký của cổng đã xác minh giao dịch ở BE.
+      path: '/payment/result',
+      name: 'PaymentResult',
+      component: () => import('@/views/PaymentResultView.vue'),
     },
     {
       // Bắt mọi đường dẫn không khớp -> tránh màn hình trắng
@@ -117,6 +178,13 @@ router.beforeEach(async (to) => {
   }
 
   return true;
+});
+
+// Tiêu đề tab: trang có meta.title thì ghép thêm tên app, còn lại trả về mặc định
+// (tránh giữ tiêu đề của trang trước sau khi chuyển trang).
+router.afterEach((to) => {
+  const title = to.meta.title;
+  document.title = typeof title === 'string' ? `${title} · EventHub` : 'EventHub';
 });
 
 export default router;

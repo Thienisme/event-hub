@@ -48,6 +48,7 @@ const DAY = 86_400_000;
 async function createEvent({ startOffset = DAY, endOffset = DAY * 2, title = 'REGRESSION' } = {}) {
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title,
       location: 'HN',
       startTime: new Date(Date.now() + startOffset),
@@ -67,7 +68,7 @@ const createOrderRow = (ticketTypeId, status) =>
   prisma.order.create({
     data: {
       userId: customer.id,
-      totalAmount: 100000,
+      totalAmount: 100000, subtotalAmount: 100000,
       status,
       expiresAt: new Date(Date.now() - 1000),
       tickets: { create: [{ ticketTypeId }] },

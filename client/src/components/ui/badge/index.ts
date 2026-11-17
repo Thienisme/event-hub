@@ -10,6 +10,8 @@ export const badgeVariants = cva(
       variant: {
         success: 'bg-success/10 text-success border-success/20',
         warning: 'bg-warning/10 text-warning border-warning/20',
+        // Badge khan hiếm ("Sắp hết vé"), xem luật màu brand trong DESIGN.md.
+        brand: 'bg-brand-soft text-brand border-brand/20',
         danger: 'bg-danger/10 text-danger border-danger/20',
         info: 'bg-info/10 text-info border-info/20',
         muted: 'bg-muted text-muted-foreground border-muted-foreground/20',

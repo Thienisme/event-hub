@@ -94,6 +94,7 @@ async function main() {
   // làm tròn.
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title: 'DIAG don hang',
       description: 'don tien',
       location: 'HN',

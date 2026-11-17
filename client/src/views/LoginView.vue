@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue';
+import AuthLayout from '@/components/AuthLayout.vue';
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import AppAlert from '../components/AppAlert.vue';
+import { Button } from '@/components/ui/button';
 
 const route = useRoute();
 const router = useRouter();
@@ -21,10 +24,12 @@ const redirectPath = computed(() => {
   return isSafeInternalPath ? target : '/';
 });
 
-// RegisterView chuyển sang đây kèm ?registered=true
-const successMessage = computed(() =>
-  route.query.registered === 'true' ? 'Đăng ký thành công! Hãy đăng nhập để tiếp tục.' : ''
-);
+// RegisterView chuyển sang đây kèm ?registered=true, ResetPasswordView kèm ?reset=true
+const successMessage = computed(() => {
+  if (route.query.registered === 'true') return 'Đăng ký thành công! Hãy đăng nhập để tiếp tục.';
+  if (route.query.reset === 'true') return 'Đặt lại mật khẩu thành công! Hãy đăng nhập bằng mật khẩu mới.';
+  return '';
+});
 
 const email = ref('');
 const password = ref('');
@@ -50,67 +55,28 @@ const handleLogin = async () => {
     isLoading.value = false;
   }
 };
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-12">
-    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-gray-500 hover:text-indigo-600">
-      ← Về trang chủ
-    </router-link>
-    <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-      <div>
-        <h2 class="text-center text-3xl font-extrabold text-gray-900">
-          Đăng nhập <span class="text-indigo-600">EventHub</span>
-        </h2>
-        <p class="mt-2 text-center text-sm text-gray-600">
-          Chưa có tài khoản?
-          <router-link to="/register" class="font-medium text-indigo-600 hover:text-indigo-500">
-            Đăng ký ngay
-          </router-link>
-        </p>
-      </div>
-
-      <AppAlert :message="successMessage" type="success" class="mb-4" />
-      <AppAlert :message="errorMessage" type="error" class="mb-4" />
-
-      <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
-        <div class="space-y-4">
-          <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              id="email"
-              v-model="email"
-              type="email"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label for="password" class="block text-sm font-medium text-gray-700">Mật khẩu</label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              placeholder="••••••••"
-            />
-          </div>
+  <AuthLayout title="Đăng nhập" description="Dùng email đã đăng ký để xem vé và đặt chỗ.">
+      <AppAlert :message="successMessage" type="success" class="mt-4" />
+      <AppAlert :message="errorMessage" type="error" class="mt-4" />
+      <form class="mt-8 space-y-4" @submit.prevent="handleLogin">
+        <div class="space-y-2">
+          <Label for="email">Email</Label>
+          <Input id="email" v-model="email" type="email" autofocus required class="h-11 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
         </div>
-
-        <div>
-          <button
-            type="submit"
-            :disabled="isLoading"
-            class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
-          >
-            <span v-if="isLoading">Đang xử lý...</span>
-            <span v-else>Đăng nhập</span>
-          </button>
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <Label for="password">Mật khẩu</Label>
+            <router-link to="/forgot-password" class="text-sm text-muted-foreground hover:text-foreground">Quên mật khẩu?</router-link>
+          </div>
+          <PasswordInput id="password" v-model="password" required autocomplete="current-password" placeholder="••••••••" class="h-11 bg-background shadow-none" />
         </div>
+        <Button type="submit" class="w-full h-11" :disabled="isLoading">{{ isLoading ? 'Đang xử lý...' : 'Đăng nhập' }}</Button>
       </form>
-    </div>
-  </div>
+      <p class="mt-6 text-center text-sm text-muted-foreground">Chưa có tài khoản? <router-link to="/register" class="font-medium text-foreground underline-offset-4 hover:underline">Đăng ký</router-link></p>
+  </AuthLayout>
 </template>

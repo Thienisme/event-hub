@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../api/axios';
+import type { EventCategory } from '../utils/categories';
 
 export interface EventOrganizer {
   id: string;
@@ -19,19 +20,33 @@ export interface TicketType {
   price: number | string;
   totalQuantity: number;
   availableQuantity: number;
+  saleStart?: string | null;
+  saleEnd?: string | null;
 }
 
 export interface EventItem {
   id: string;
+  slug?: string;
   title: string;
   description?: string | null;
   location: string;
   bannerUrl?: string | null;
+  category?: EventCategory;
   startTime: string;
   endTime: string;
   organizerId: string;
   organizer?: EventOrganizer;
   ticketTypes?: TicketType[];
+}
+
+export interface CategoryCount {
+  category: EventCategory;
+  count: number;
+}
+export interface EventHighlights {
+  thisWeek: EventItem[];
+  almostSoldOut: EventItem[];
+  newlyOnSale: EventItem[];
 }
 
 export interface EventListResponse {
@@ -73,12 +88,14 @@ export const useEventStore = defineStore('event', () => {
   // `signal` (tuỳ chọn) cho phép view huỷ request cũ khi user gõ tiếp / đổi trang,
   // tránh response về muộn ghi đè kết quả mới (race condition).
   async function fetchEvents(
-    params: { page: number; limit: number; search: string; status?: 'upcoming' | 'ended' } = { page: 1, limit: 10, search: '' },
+    params: { page: number; limit: number; search?: string; status?: 'upcoming' | 'ended'; category?: string; location?: string; from?: string; to?: string; minPrice?: string | number; maxPrice?: string | number } = { page: 1, limit: 10, search: '' },
     signal?: AbortSignal
   ): Promise<EventListResponse> {
     beginRequest();
     try {
-      const response = await apiClient.get<EventListResponse>('/events', { params: { ...params, status: params.status ?? 'upcoming' }, signal });
+      const query = Object.fromEntries(Object.entries({ ...params, status: params.status ?? 'upcoming' })
+        .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== ''));
+      const response = await apiClient.get<EventListResponse>('/events', { params: query, signal });
       events.value = response.data.data;
       return response.data;
     } finally {
@@ -101,7 +118,18 @@ export const useEventStore = defineStore('event', () => {
     }
   }
 
+  async function fetchCategories(signal?: AbortSignal): Promise<CategoryCount[]> {
+    const response = await apiClient.get<{ data: CategoryCount[] }>('/events/categories', { signal });
+    return response.data.data;
+  }
+  async function fetchHighlights(signal?: AbortSignal): Promise<EventHighlights> {
+    const response = await apiClient.get<{ data: EventHighlights }>('/events/highlights', { signal });
+    return response.data.data;
+  }
+
   return {
+    fetchCategories,
+    fetchHighlights,
     events,
     currentEvent,
     loading,

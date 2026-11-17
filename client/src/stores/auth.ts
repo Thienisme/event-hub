@@ -11,8 +11,11 @@ export type UserRole = 'CUSTOMER' | 'ORGANIZER' | 'ADMIN';
 export interface User {
   id: string;
   fullName: string;
+  avatarUrl?: string | null;
   email: string;
   role: UserRole;
+  createdAt?: string;
+  emailVerifiedAt: string | null;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -63,6 +66,37 @@ export const useAuthStore = defineStore('auth', () => {
     return profileRequest;
   }
 
+  async function updateProfile(fullName: string) {
+    const response = await apiClient.patch<{ message: string; user: User }>('/auth/me', { fullName });
+    user.value = response.data.user;
+    return response.data;
+  }
+
+  async function updateAvatar(file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    // Bỏ mặc định JSON để trình duyệt tự đặt multipart/form-data kèm boundary.
+    const { data } = await apiClient.post<{ user: User }>('/auth/me/avatar', form, {
+      headers: { 'Content-Type': undefined },
+    });
+    user.value = data.user;
+  }
+
+  async function removeAvatar() {
+    const { data } = await apiClient.delete<{ user: User }>('/auth/me/avatar');
+    user.value = data.user;
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const response = await apiClient.post<{ message: string; token: string }>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    token.value = response.data.token;
+    localStorage.setItem('token', response.data.token);
+    return response.data;
+  }
+
   // Đăng xuất
   function logout() {
     user.value = null;
@@ -77,6 +111,10 @@ export const useAuthStore = defineStore('auth', () => {
     isOrganizer,
     isAdmin,
     login,
+    updateProfile,
+    updateAvatar,
+    removeAvatar,
+    changePassword,
     fetchProfile,
     ensureProfile,
     logout,

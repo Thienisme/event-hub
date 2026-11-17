@@ -1,8 +1,11 @@
 # CD build ARM native rồi triển khai qua SSH; CI kiểm thử nằm ở ci.yml.
+#
+# Dành cho hướng tự thuê VPS ARM64 (chưa dùng). Bản demo đang chạy trên Render,
+# Render tự build từ Dockerfile ở gốc nên không cần workflow này. Vì vậy chỉ
+# chạy khi bấm tay (tab Actions -> Deploy ARM64 -> Run workflow), không chạy mỗi
+# lần push main nữa.
 name: Deploy ARM64
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # Chỉ một workflow deploy chạy tại một thời điểm, không huỷ SSH đang chạy.

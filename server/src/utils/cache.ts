@@ -1,3 +1,4 @@
+import type { EventFilters } from './eventFilters';
 import { randomUUID } from 'crypto';
 import { cacheClient } from '../config/redis';
 
@@ -73,11 +74,13 @@ export function listCacheKey(
   page: number,
   limit: number,
   search: string,
-  status: 'upcoming' | 'ended'
+  status: 'upcoming' | 'ended',
+  filters: EventFilters = {}
 ): string {
   // Cache TTL 60s nên sự kiện vừa kết thúc có thể còn ở tab "Sắp diễn ra"
   // tối đa 60s, chấp nhận được.
-  return `events:list:v${version}:page=${page}:limit=${limit}:status=${status}:search=${search}`;
+  return `events:list:v${version}:${JSON.stringify([page, limit, search, status,
+    filters.category, filters.location, filters.from, filters.to, filters.minPrice, filters.maxPrice])}`;
 }
 
 export function detailCacheKey(eventId: string): string {

@@ -50,6 +50,7 @@ async function createUser(tag) {
 async function createEvent(organizerId, totalQuantity = 500) {
   const event = await prisma.event.create({
     data: {
+      slug: `su-kien-${require('crypto').randomUUID()}`,
       title: 'LIFECYCLE',
       location: 'HN',
       startTime: new Date(Date.now() + DAY),

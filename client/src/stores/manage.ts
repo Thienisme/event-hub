@@ -12,9 +12,11 @@ export interface ManagedTicketType {
 
 export interface ManagedEvent {
   id: string;
+  slug?: string;
   title: string;
   location: string;
   bannerUrl?: string | null;
+  category?: string;
   startTime: string;
   endTime: string;
   createdAt: string;

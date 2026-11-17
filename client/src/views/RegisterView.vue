@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import PasswordInput from '@/components/PasswordInput.vue';
+import AuthLayout from '@/components/AuthLayout.vue';
 import { ref } from 'vue';
+import { Check } from '@lucide/vue';
 import { useRouter } from 'vue-router';
 import apiClient from '../api/axios';
 import AppAlert from '../components/AppAlert.vue';
+import { Button } from '@/components/ui/button';
 
 const router = useRouter();
 
@@ -37,74 +41,29 @@ const handleRegister = async () => {
     isLoading.value = false;
   }
 };
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-12">
-    <router-link :to="{ name: 'Home' }" class="mb-4 w-full max-w-md text-sm text-gray-500 hover:text-indigo-600">
-      ← Về trang chủ
-    </router-link>
-    <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-      <div>
-        <h2 class="text-center text-3xl font-extrabold text-gray-900">
-          Tạo tài khoản <span class="text-indigo-600">EventHub</span>
-        </h2>
-        <p class="mt-2 text-center text-sm text-gray-600">
-          Đã có tài khoản?
-          <router-link to="/login" class="font-medium text-indigo-600 hover:text-indigo-500">
-            Đăng nhập
-          </router-link>
-        </p>
-      </div>
-
-      <AppAlert :message="errorMessage" type="error" class="mb-4" />
-
-      <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Họ và tên</label>
-            <input
-              v-model="fullName"
-              type="text"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              placeholder="Nguyễn Văn A"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              v-model="email"
-              type="email"
-              required
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Mật khẩu</label>
-            <input
-              v-model="password"
-              type="password"
-              required
-              minlength="8"
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              placeholder="•••••••• (tối thiểu 8 ký tự)"
-            />
-          </div>
+  <AuthLayout title="Tạo tài khoản" description="Đặt vé và nhận mã QR ngay trong tài khoản của bạn.">
+      <AppAlert :message="errorMessage" type="error" class="mt-4" />
+      <form class="mt-8 space-y-4" @submit.prevent="handleRegister">
+        <div class="space-y-2">
+          <Label for="full-name">Họ và tên</Label>
+          <Input id="full-name" v-model="fullName" type="text" required class="h-11 bg-background shadow-none" placeholder="Nguyễn Văn A" autocomplete="name" />
         </div>
-
-        <button
-          type="submit"
-          :disabled="isLoading"
-          class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
-        >
-          <span v-if="isLoading">Đang tạo tài khoản...</span>
-          <span v-else>Đăng ký</span>
-        </button>
+        <div class="space-y-2">
+          <Label for="email">Email</Label>
+          <Input id="email" v-model="email" type="email" required class="h-11 bg-background shadow-none" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="space-y-2">
+          <Label for="password">Mật khẩu</Label>
+          <PasswordInput id="password" v-model="password" required class="h-11 bg-background shadow-none" minlength="8" autocomplete="new-password" placeholder="••••••••" aria-describedby="password-hint" />
+        </div>
+        <p id="password-hint" class="flex items-center gap-1.5 text-xs" :class="password.length >= 8 ? 'text-success' : 'text-muted-foreground'"><Check class="size-3.5" aria-hidden="true" />Mật khẩu có ít nhất 8 ký tự.</p>
+        <Button type="submit" class="w-full h-11" :disabled="isLoading">{{ isLoading ? 'Đang tạo tài khoản...' : 'Đăng ký' }}</Button>
       </form>
-    </div>
-  </div>
+      <p class="mt-6 text-center text-sm text-muted-foreground">Đã có tài khoản? <router-link to="/login" class="font-medium text-foreground underline-offset-4 hover:underline">Đăng nhập</router-link></p>
+  </AuthLayout>
 </template>

@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import TicketDate from '@/components/TicketDate.vue';
+import { categoryLabel } from '@/utils/categories';
+import { resolveMediaUrl } from '@/utils/media';
 import OrderStatusBadge from '@/components/OrderStatusBadge.vue';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useOrderStore } from '../stores/order';
 import type { Order, OrderStatus, OrderTicket } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { formatPrice, formatDateTime } from '../utils/format';
-import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle } from '@lucide/vue';
+import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle, QrCode, ChevronDown } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +29,7 @@ const toastStore = useToastStore();
 const errorMessage = ref('');
 
 // Xem ghi chú ở HomeView: thiếu cờ này thì lần render đầu (trước onMounted)
-// sẽ nháy lên "Bạn chưa có đơn vé nào" dù user đang có đơn.
+// sẽ nháy lên "Bạn chưa có vé nào" dù user đang có đơn.
 const loaded = ref(false);
 
 const loadOrders = async (page?: number, limit?: number) => {
@@ -54,7 +57,7 @@ const loadOrders = async (page?: number, limit?: number) => {
 const changePage = (page: number) => {
   if (page < 1 || page > orderStore.pagination.totalPages || orderStore.loading) return;
   loadOrders(page, orderStore.pagination.limit);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 };
 
 /**
@@ -100,6 +103,9 @@ const formatCountdown = (ms: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
+/** Đơn có giảm giá: subtotalAmount/discountAmount là Decimal (chuỗi) -> ép Number. */
+const hasDiscount = (order: Order): boolean => Number(order.discountAmount) > 0;
+
 /** Id đơn đang gửi request thanh toán/huỷ -> disable nút để tránh bấm hai lần. */
 const actionOrderId = ref<string | null>(null);
 
@@ -142,20 +148,6 @@ const handleActionError = async (error: any, fallback: string) => {
   }
 };
 
-const handleConfirm = async (order: Order) => {
-  if (actionOrderId.value) return;
-
-  actionOrderId.value = order.id;
-  try {
-    const response = await orderStore.confirmOrder(order.id);
-    toastStore.success(response.message || 'Thanh toán thành công!');
-  } catch (error: any) {
-    await handleActionError(error, 'Thanh toán thất bại, vui lòng thử lại!');
-  } finally {
-    actionOrderId.value = null;
-  }
-};
-
 const askCancel = (order: Order) => {
   if (actionOrderId.value) return;
   cancelTarget.value = order;
@@ -181,7 +173,7 @@ const handleCancel = async () => {
 };
 
 /** Mã QR đang xem lớn trong hộp thoại. */
-const selectedQr = ref<{ qrCode: string; label: string } | null>(null);
+const selectedQr = ref<{ qrCode: string; label: string; filename: string } | null>(null);
 
 const openQr = (order: Order, ticket: OrderTicket) => {
   if (!ticket.qrCode) return;
@@ -190,6 +182,7 @@ const openQr = (order: Order, ticket: OrderTicket) => {
   selectedQr.value = {
     qrCode: ticket.qrCode,
     label: `${ticket.ticketType?.name ?? 'Vé'} · Vé ${position}/${order.tickets.length}`,
+    filename: `eventhub-${order.id.slice(0, 8)}-ve-${position}.png`,
   };
 };
 
@@ -225,6 +218,38 @@ const groupTickets = (order: Order): TicketLine[] => {
 
   return Array.from(grouped.values());
 };
+const eventOf = (order: Order) => order.tickets[0]?.ticketType?.event;
+const failedImages = ref(new Set<string>());
+const imageOf = (order: Order) => failedImages.value.has(order.id) ? null : resolveMediaUrl(eventOf(order)?.bannerUrl);
+const isClosed = (order: Order) => ['CANCELLED', 'EXPIRED'].includes(displayStatus(order));
+const upcomingOrders = computed(() => orderStore.orders
+  .filter(order => order.status === 'CONFIRMED' && new Date(eventOf(order)?.startTime ?? '').getTime() > now.value)
+  .sort((a, b) => new Date(eventOf(a)!.startTime).getTime() - new Date(eventOf(b)!.startTime).getTime()));
+const nextOrder = computed(() => upcomingOrders.value[0]);
+const summary = computed(() => {
+  const upcoming = new Set(upcomingOrders.value.map(order => eventOf(order)?.slug ?? `${eventOf(order)?.title}|${eventOf(order)?.startTime}`)).size;
+  const pending = orderStore.orders.filter(order => displayStatus(order) === 'PENDING').length;
+  return [upcoming ? `${upcoming} sự kiện sắp tới` : '', pending ? `${pending} đơn chờ thanh toán` : ''].filter(Boolean).join(' · ');
+});
+const nextCountdown = computed(() => {
+  if (!nextOrder.value) return '';
+  const start = new Date(eventOf(nextOrder.value)!.startTime);
+  const today = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  if (today.format(start) === today.format(now.value)) return 'Hôm nay';
+  const hours = (start.getTime() - now.value) / 3600000;
+  return hours < 24 ? `còn ${Math.ceil(hours)} giờ` : `còn ${Math.ceil(hours / 24)} ngày`;
+});
+const revealNextQr = async () => {
+  if (!nextOrder.value) return;
+  const id = nextOrder.value.id;
+  expandedOrders.value[id] = true;
+  await nextTick();
+  document.getElementById(`order-${id}`)?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+};
+const expandedOrders = ref<Record<string, boolean>>({});
+const defaultExpandedId = computed(() => nextOrder.value?.id);
+const isQrExpanded = (id: string) => expandedOrders.value[id] ?? id === defaultExpandedId.value;
+const toggleQr = (id: string) => { expandedOrders.value[id] = !isQrExpanded(id); };
 const activeTab = ref('all');
 const matchesTab = (order: Order, tab: string) => {
   const status = displayStatus(order);
@@ -237,11 +262,6 @@ const statusTabs = computed(() => [
   { value: 'closed', label: 'Đã huỷ/Hết hạn' },
 ].map(tab => ({ ...tab, count: orderStore.orders.filter(order => matchesTab(order, tab.value)).length })));
 const visibleOrders = computed(() => orderStore.orders.filter(order => matchesTab(order, activeTab.value)));
-const ticketBorder = (order: Order) => ({
-  PENDING: 'border-l-warning', CONFIRMED: 'border-l-success',
-  CANCELLED: 'border-l-danger', EXPIRED: 'border-l-muted-foreground',
-})[displayStatus(order)];
-
 const copyOrderId = async (id: string) => {
   try {
     await navigator.clipboard.writeText(id);
@@ -254,85 +274,105 @@ const copyOrderId = async (id: string) => {
 
 <template>
   <main class="min-h-screen bg-surface px-4 py-8 text-foreground sm:px-6 sm:py-12">
-    <div class="mx-auto max-w-4xl space-y-6">
+    <div class="mx-auto max-w-6xl space-y-8">
       <header>
-        <h1 class="text-3xl font-semibold tracking-tight">Vé của tôi</h1>
-        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">Quản lý đơn đặt vé, thanh toán và lưu mã QR cho những trải nghiệm sắp tới.</p>
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Vé của tôi</h1>
+        <p v-if="loaded && !orderStore.loading && !errorMessage && summary" class="mt-2 text-sm text-muted-foreground">{{ summary }}</p>
       </header>
 
       <Tabs v-model="activeTab" class="min-w-0 gap-5">
-        <TabsList aria-label="Lọc đơn theo trạng thái" class="grid h-auto! w-full grid-cols-2 gap-1 rounded-xl p-1 sm:grid-cols-4">
+        <TabsList aria-label="Lọc đơn theo trạng thái" class="grid h-auto! w-full grid-cols-2 gap-1 rounded-lg p-1 sm:grid-cols-4">
           <TabsTrigger v-for="tab in statusTabs" :key="tab.value" :value="tab.value" class="min-w-0 gap-1.5 px-2 py-2.5 text-xs sm:text-sm">
-            {{ tab.label }} <Badge variant="secondary" class="px-1.5 tabular-nums">{{ tab.count }}</Badge>
+            {{ tab.label }} <span class="text-muted-foreground tabular-nums">{{ tab.count }}</span>
           </TabsTrigger>
         </TabsList>
-        <p class="text-xs text-muted-foreground">Số đếm và bộ lọc áp dụng cho các đơn trên trang hiện tại.</p>
+        <p v-if="orderStore.pagination.totalPages > 1" class="text-xs text-muted-foreground">Số đếm tính trên các đơn của trang này.</p>
         <TabsContent :value="activeTab" class="min-w-0 space-y-5">
           <div v-if="orderStore.loading || !loaded" role="status" aria-label="Đang tải vé" class="space-y-5">
-            <Card v-for="n in 3" :key="n" class="gap-5 rounded-2xl border border-l-4 border-l-muted-foreground p-5 shadow-sm">
-              <div class="flex justify-between gap-4"><Skeleton class="h-6 w-3/5" /><Skeleton class="h-6 w-20" /></div>
-              <Skeleton class="h-4 w-2/5" /><Skeleton class="h-12 w-full" />
-              <div class="flex justify-end border-t border-dashed pt-5"><Skeleton class="h-8 w-32" /></div>
-            </Card>
+            <div v-for="n in 3" :key="n" class="grid rounded-lg border bg-background sm:grid-cols-[176px_minmax(0,1fr)_200px]">
+              <Skeleton class="aspect-[16/9] w-full rounded-t-lg sm:aspect-auto sm:min-h-40 sm:rounded-l-lg sm:rounded-tr-none" />
+              <div class="space-y-4 p-5"><Skeleton class="h-3 w-20" /><Skeleton class="h-6 w-4/5" /><Skeleton class="h-4 w-3/5" /><Skeleton class="h-4 w-2/5" /></div>
+              <div class="space-y-4 border-t border-dashed p-5 sm:border-t-0 sm:border-l"><Skeleton class="h-5 w-24" /><Skeleton class="h-8 w-32" /><Skeleton class="h-10 w-full" /></div>
+            </div>
           </div>
-          <Card v-else-if="errorMessage" role="alert" class="items-center rounded-2xl border p-8 text-center shadow-sm">
+          <Card v-else-if="errorMessage" role="alert" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg p-8 text-center">
             <AlertCircle class="size-10 text-danger" aria-hidden="true" />
             <div><h2 class="font-semibold">Không tải được danh sách vé</h2><p class="mt-2 break-words text-sm text-muted-foreground">{{ errorMessage }}</p></div>
             <Button @click="loadOrders(orderStore.pagination.page, orderStore.pagination.limit)">Thử lại</Button>
           </Card>
-          <Card v-else-if="visibleOrders.length === 0" class="items-center rounded-2xl border px-5 py-12 text-center shadow-sm">
-            <div class="rounded-2xl bg-primary/5 p-4"><Ticket class="size-9 text-primary" aria-hidden="true" /></div>
-            <div><h2 class="text-lg font-semibold tracking-tight">{{ orderStore.orders.length === 0 ? 'Bạn chưa có đơn vé nào' : 'Chưa có đơn vé ở trạng thái này' }}</h2>
-              <p class="mt-2 text-sm text-muted-foreground">{{ orderStore.orders.length === 0 ? 'Khám phá sự kiện yêu thích và đặt vé cho trải nghiệm tiếp theo.' : 'Chọn trạng thái khác hoặc khám phá thêm các sự kiện đang mở bán.' }}</p></div>
+          <Card v-else-if="visibleOrders.length === 0" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg px-5 py-12 text-center">
+            <div><h2 class="text-lg font-semibold tracking-tight">{{ orderStore.orders.length === 0 ? 'Bạn chưa có vé nào' : 'Không có đơn nào ở mục này' }}</h2>
+              <p class="mt-2 text-sm text-muted-foreground">{{ orderStore.orders.length === 0 ? 'Vé đã đặt sẽ xuất hiện ở đây.' : 'Chọn mục khác để xem các đơn đã đặt.' }}</p></div>
             <Button @click="router.push({ name: 'Home' })">Khám phá sự kiện</Button>
           </Card>
           <div v-else class="space-y-5">
-            <Card v-for="order in visibleOrders" :key="order.id" class="gap-0 rounded-2xl border border-l-4 py-0 shadow-sm transition-shadow hover:shadow-md" :class="ticketBorder(order)">
-              <header class="flex flex-col gap-4 p-5 sm:flex-row sm:justify-between sm:p-6">
-                <div class="min-w-0 space-y-2">
-                  <h2 class="break-words text-lg font-semibold tracking-tight">{{ order.tickets[0]?.ticketType?.event?.title || 'Sự kiện' }}</h2>
-                  <p v-if="order.tickets[0]?.ticketType?.event?.startTime" class="flex items-start gap-2 text-sm text-muted-foreground"><CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ formatDateTime(order.tickets[0]!.ticketType!.event!.startTime) }}</p>
-                  <p v-if="order.tickets[0]?.ticketType?.event?.location" class="flex items-start gap-2 break-words text-sm text-muted-foreground"><MapPin class="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{{ order.tickets[0]?.ticketType?.event?.location }}</span></p>
-                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                    <span class="font-mono">#{{ order.id.slice(0, 8).toUpperCase() }}</span>
+            <section v-if="activeTab === 'all' && nextOrder" :data-tone="eventOf(nextOrder)?.category" class="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border bg-background p-4 sm:flex-nowrap" aria-label="Sự kiện sắp tới">
+              <TicketDate :value="eventOf(nextOrder)?.startTime" :category="eventOf(nextOrder)?.category" class="shrink-0" />
+              <div class="min-w-0 flex-1 space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">Sắp tới · {{ nextCountdown }}</p>
+                <h2 class="line-clamp-1 font-semibold">{{ eventOf(nextOrder)?.title }}</h2>
+                <p class="line-clamp-1 text-sm text-muted-foreground">{{ formatDateTime(eventOf(nextOrder)?.startTime) }} · {{ eventOf(nextOrder)?.location }}</p>
+              </div>
+              <Button class="w-full shrink-0 sm:w-auto" @click="revealNextQr"><QrCode class="size-4" aria-hidden="true" />Mở mã QR</Button>
+            </section>
+            <article v-for="order in visibleOrders" :data-tone="isClosed(order) ? undefined : eventOf(order)?.category" :id="`order-${order.id}`" :key="order.id" class="group relative min-w-0 scroll-mt-6 rounded-lg border bg-background">
+              <div class="grid min-w-0 sm:grid-cols-[176px_minmax(0,1fr)_200px]">
+                <div class="relative aspect-[2/1] min-h-40 overflow-hidden rounded-t-lg bg-muted sm:aspect-auto sm:rounded-l-lg sm:rounded-tr-none">
+                  <img v-if="imageOf(order)" :src="imageOf(order)!" alt="" loading="lazy" class="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] motion-reduce:transform-none" :class="{ 'grayscale opacity-60': isClosed(order) }" @error="failedImages.add(order.id)" />
+                  <div v-else class="absolute inset-0 flex items-center justify-center" :class="{ 'grayscale opacity-60': isClosed(order) }"><Ticket class="size-6 text-muted-foreground" aria-hidden="true" /></div>
+                  <TicketDate :value="eventOf(order)?.startTime" :category="isClosed(order) ? undefined : eventOf(order)?.category" class="absolute left-3 top-3" />
+                </div>
+                <div class="flex min-w-0 flex-col gap-3 p-5">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">{{ categoryLabel(eventOf(order)?.category ?? 'OTHER') }}</p>
+                  <h2 class="break-words text-lg font-semibold tracking-tight">
+                    <RouterLink v-if="eventOf(order)?.slug" :to="`/events/${eventOf(order)?.slug}`" class="underline-offset-4 hover:underline">{{ eventOf(order)?.title }}</RouterLink>
+                    <template v-else>{{ eventOf(order)?.title || 'Sự kiện' }}</template>
+                  </h2>
+                  <p v-if="eventOf(order)?.startTime" class="flex items-start gap-2 text-sm text-muted-foreground"><CalendarDays class="mt-0.5 size-4 shrink-0" aria-hidden="true" />{{ formatDateTime(eventOf(order)?.startTime) }}</p>
+                  <p v-if="eventOf(order)?.location" class="flex min-w-0 items-start gap-2 text-sm text-muted-foreground"><MapPin class="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{{ eventOf(order)?.location }}</span></p>
+                  <p class="break-words text-sm">{{ groupTickets(order).map(line => `${line.name} × ${line.quantity}`).join(' · ') }}</p>
+                  <div class="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span class="tabular-nums">#{{ order.id.slice(0, 8).toUpperCase() }}</span>
                     <Button variant="ghost" size="icon" class="size-7" :aria-label="`Sao chép mã đơn ${order.id.slice(0, 8).toUpperCase()}`" title="Sao chép mã đơn" @click="copyOrderId(order.id)"><Copy class="size-3.5" aria-hidden="true" /></Button>
                     <span>Đặt lúc {{ formatDateTime(order.createdAt) }}</span>
                   </div>
                 </div>
-                <div class="shrink-0"><OrderStatusBadge :status="displayStatus(order)" /></div>
-              </header>
-              <div class="space-y-4 px-5 pb-5 sm:px-6">
-                <div v-for="line in groupTickets(order)" :key="line.id" class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 text-sm">
-                  <div class="min-w-0"><p class="break-words font-medium">{{ line.name }} × {{ line.quantity }}</p><p class="mt-1 text-xs text-muted-foreground tabular-nums">Đơn giá {{ formatPrice(line.price) }}</p></div>
-                  <p class="text-right font-medium tabular-nums">{{ formatPrice(Number(line.price) * line.quantity) }}</p>
+                <div class="relative flex min-w-0 flex-col gap-4 rounded-b-lg border-t border-dashed border-tone/30 bg-tone-soft p-5 sm:rounded-bl-none sm:rounded-r-lg sm:border-t-0 sm:border-l">
+                  <span aria-hidden="true" class="absolute -left-2 -top-2 size-4 rounded-full border bg-surface" />
+                  <span aria-hidden="true" class="absolute -right-2 -top-2 size-4 rounded-full border bg-surface sm:-bottom-2 sm:-left-2 sm:top-auto sm:right-auto" />
+                  <div class="flex flex-wrap items-center gap-2"><OrderStatusBadge :status="displayStatus(order)" /><Badge v-if="route.query.order === order.id" variant="outline">Vừa đặt</Badge></div>
+                  <div>
+                    <p v-if="hasDiscount(order)" class="flex flex-wrap gap-x-2 text-xs tabular-nums"><span class="text-muted-foreground line-through">{{ formatPrice(order.subtotalAmount) }}</span><span class="text-success">Giảm {{ formatPrice(order.discountAmount) }}</span></p>
+                    <p class="break-words text-2xl font-bold tabular-nums" :class="{ 'text-muted-foreground': isClosed(order) }">{{ formatPrice(order.totalAmount) }}</p>
+                  </div>
+                  <div v-if="order.status === 'PENDING'" class="mt-auto space-y-2">
+                    <p v-if="isHoldExpired(order)" class="text-sm text-muted-foreground">Đã hết thời gian giữ vé</p>
+                    <template v-else>
+                      <p class="flex items-start gap-2 text-sm"><Timer class="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" /><span>Giữ vé còn <span class="font-semibold tabular-nums">{{ formatCountdown(remainingMs(order)) }}</span></span></p>
+                      <Button class="min-h-10 w-full bg-brand text-brand-foreground hover:bg-brand/90" :disabled="!!actionOrderId" @click="router.push({ name: 'Checkout', params: { orderId: order.id } })">Thanh toán</Button>
+                      <Button variant="ghost" size="sm" class="min-h-10 w-full text-danger hover:text-danger" :disabled="!!actionOrderId" @click="askCancel(order)">Huỷ đơn</Button>
+                    </template>
+                  </div>
+                  <Button v-else-if="order.status === 'CONFIRMED'" variant="outline" class="mt-auto min-h-10 w-full" :aria-expanded="isQrExpanded(order.id)" :aria-controls="`order-tickets-${order.id}`" @click="toggleQr(order.id)"><QrCode class="size-4" aria-hidden="true" />Xem {{ order.tickets.length }} vé<ChevronDown class="size-4 transition-transform duration-200 motion-reduce:transition-none" :class="{ 'rotate-180': isQrExpanded(order.id) }" aria-hidden="true" /></Button>
+                  <Button v-else-if="eventOf(order)?.slug" variant="ghost" as-child class="mt-auto min-h-10 w-full"><RouterLink :to="`/events/${eventOf(order)?.slug}`">Xem sự kiện</RouterLink></Button>
                 </div>
               </div>
-              <div class="flex flex-wrap items-center justify-between gap-2 border-t border-dashed px-5 py-5 sm:px-6">
-                <span class="text-sm text-muted-foreground">Tổng tiền</span><span class="ml-auto text-right text-2xl font-semibold tracking-tight text-primary tabular-nums">{{ formatPrice(order.totalAmount) }}</span>
-              </div>
-              <div v-if="order.status === 'PENDING'" class="mx-5 mb-5 rounded-xl border border-warning/25 bg-warning/10 p-4 sm:mx-6 sm:mb-6">
-                <p v-if="isHoldExpired(order)" class="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Timer class="size-4 shrink-0" aria-hidden="true" />Đã hết hạn giữ chỗ</p>
-                <template v-else>
-                  <p class="flex items-center gap-2 text-sm font-medium"><Timer class="size-4 shrink-0 text-warning" aria-hidden="true" /><span>Còn <span class="font-mono font-semibold tabular-nums">{{ formatCountdown(remainingMs(order)) }}</span> để thanh toán</span></p>
-                  <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Button :disabled="actionOrderId === order.id" @click="handleConfirm(order)">{{ actionOrderId === order.id ? 'Đang xử lý...' : 'Thanh toán (giả lập)' }}</Button>
-                    <Button variant="outline" class="border-danger/30 bg-card text-danger hover:bg-danger/10 hover:text-danger" :disabled="actionOrderId === order.id" @click="askCancel(order)">Huỷ đơn</Button>
-                  </div>
-                </template>
-              </div>
-              <section v-if="order.status === 'CONFIRMED'" class="border-t bg-surface/60 p-5 sm:p-6">
+              <section v-if="order.status === 'CONFIRMED'" v-show="isQrExpanded(order.id)" :id="`order-tickets-${order.id}`" class="rounded-b-lg border-t bg-surface p-5 sm:p-6">
                 <h3 class="font-semibold">Mã QR vào cổng</h3>
                 <p class="mt-1 text-xs leading-relaxed text-muted-foreground">Xuất trình mã này khi soát vé. Mỗi vé có một mã riêng.</p>
                 <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                  <div v-for="(ticket, index) in order.tickets" :key="ticket.id" class="flex min-w-0 flex-col items-center rounded-xl border bg-card p-3">
+                  <div v-for="(ticket, index) in order.tickets" :key="ticket.id" class="flex min-w-0 flex-col items-center rounded-lg border bg-background p-3">
                     <p class="mb-2 text-xs font-medium">Vé {{ index + 1 }}</p>
+                    <Badge variant="outline" class="mb-3 h-auto max-w-full whitespace-normal py-1 text-center leading-snug" :class="ticket.checkedInAt ? 'border-success/30 bg-success/10 text-success' : 'text-muted-foreground'">
+                      {{ ticket.checkedInAt ? `Đã check-in lúc ${formatDateTime(ticket.checkedInAt)}` : 'Chưa check-in' }}
+                    </Badge>
                     <QrCodeImage v-if="ticket.qrCode" :value="ticket.qrCode" :size="132" />
                     <p v-else class="py-6 text-center text-xs text-muted-foreground">Chưa có mã QR</p>
                     <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
                   </div>
                 </div>
               </section>
-            </Card>
+            </article>
           </div>
         </TabsContent>
       </Tabs>
@@ -349,11 +389,11 @@ const copyOrderId = async (id: string) => {
 
     <ConfirmDialog :open="cancelTarget !== null" title="Huỷ đơn hàng?" :message="cancelMessage" confirm-label="Huỷ đơn" cancel-label="Giữ lại" danger :loading="cancelLoading" @cancel="cancelTarget = null" @confirm="handleCancel" />
     <Dialog :open="selectedQr !== null" @update:open="(open) => { if (!open) selectedQr = null; }">
-      <DialogContent class="max-w-sm rounded-2xl">
+      <DialogContent class="max-w-sm rounded-lg">
         <template v-if="selectedQr">
           <DialogHeader><DialogTitle class="break-words pr-6">{{ selectedQr.label }}</DialogTitle><DialogDescription>Xuất trình mã QR này tại cổng soát vé.</DialogDescription></DialogHeader>
-          <QrCodeImage :value="selectedQr.qrCode" :size="288" />
-          <p class="break-all text-center font-mono text-xs text-muted-foreground">{{ selectedQr.qrCode }}</p>
+          <QrCodeImage :value="selectedQr.qrCode" :size="288" :download-name="selectedQr.filename" />
+          <p class="break-all text-center text-xs text-muted-foreground">{{ selectedQr.qrCode }}</p>
           <Button variant="outline" class="w-full" @click="selectedQr = null">Đóng</Button>
         </template>
       </DialogContent>

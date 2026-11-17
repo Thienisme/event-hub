@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { UPLOADED_IMAGE_PATH } from './storage';
 
 /** URL banner hợp lệ: http(s) tuyệt đối, hoặc đường dẫn ảnh đã tải lên server. */
@@ -68,6 +69,10 @@ export const loginSchema = z.object({
  */
 export const LIMITS = {
   TITLE: 255,
+  // users.fullName là VARCHAR(191) mặc định của Prisma.
+  FULL_NAME: 191,
+  // bcrypt chỉ dùng 72 byte đầu: dài hơn thì phần sau bị bỏ qua âm thầm.
+  PASSWORD_BYTES: 72,
   DESCRIPTION: 5000,
   LOCATION: 255,
   BANNER_URL: 500,
@@ -110,6 +115,9 @@ export const exceedsOrderAmount = (price: number, quantity: number): boolean => 
 };
 
 export const createEventSchema = z.object({
+  category: z.enum(['MUSIC', 'SPORTS', 'CONFERENCE', 'WORKSHOP', 'THEATER', 'EXHIBITION', 'FESTIVAL', 'FOOD', 'OTHER'], {
+    message: 'Danh mục sự kiện không hợp lệ!',
+  }).optional(),
   title: z
     .string()
     .trim()
@@ -135,9 +143,12 @@ export const createEventSchema = z.object({
     .optional()
     .nullable(),
   startTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian bắt đầu không hợp lệ!'),
-  endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),  ticketTypes: z
+  endTime: z.string().refine((val) => !isNaN(Date.parse(val)), 'Thời gian kết thúc không hợp lệ!'),
+  ticketTypes: z
     .array(
       z.object({
+        saleStart: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian mở bán không hợp lệ!').nullable().optional(),
+        saleEnd: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian ngừng bán không hợp lệ!').nullable().optional(),
         id: z.string().uuid('ID loại vé không hợp lệ!').optional(),
         name: z
           .string()
@@ -182,6 +193,11 @@ export const createEventSchema = z.object({
   // object chứ không phải `refine` riêng cho từng field (mỗi field không biết
   // giá trị của field kia).
   .superRefine((data, ctx) => {
+    data.ticketTypes?.forEach((ticket, index) => {
+      if (ticket.saleEnd && ((ticket.saleStart && Date.parse(ticket.saleEnd) <= Date.parse(ticket.saleStart)) || Date.parse(ticket.saleEnd) > Date.parse(data.endTime))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ticketTypes', index, 'saleEnd'], message: 'Thời gian ngừng bán phải sau mở bán và không sau khi sự kiện kết thúc!' });
+      }
+    });
     const start = Date.parse(data.startTime);
     const end = Date.parse(data.endTime);
 
@@ -194,10 +210,41 @@ export const createEventSchema = z.object({
     }
   });
 
+const fullNameField = z
+  .string({ message: 'Họ và tên không hợp lệ!' })
+  .trim()
+  .min(2, 'Họ và tên phải có ít nhất 2 ký tự!')
+  .max(LIMITS.FULL_NAME, `Họ và tên không được vượt quá ${LIMITS.FULL_NAME} ký tự!`);
+
+/** Schema đổi hồ sơ: hiện chỉ có tên. */
+export const updateProfileSchema = z.object({ fullName: fullNameField });
+
+/** Schema đổi mật khẩu. Mật khẩu không trim: khoảng trắng là một phần mật khẩu. */
+export const changePasswordSchema = z.object({
+  currentPassword: z
+    .string({ message: 'Vui lòng nhập mật khẩu hiện tại!' })
+    .min(1, 'Vui lòng nhập mật khẩu hiện tại!'),
+  newPassword: z
+    .string({ message: 'Mật khẩu mới không hợp lệ!' })
+    .min(8, 'Mật khẩu mới phải có ít nhất 8 ký tự!')
+    .refine(
+      (value) => Buffer.byteLength(value, 'utf8') <= LIMITS.PASSWORD_BYTES,
+      `Mật khẩu mới không được dài quá ${LIMITS.PASSWORD_BYTES} byte!`
+    ),
+});
+
 /**
  * Schema validation cho đặt hàng.
  */
+export const promoCodeField = z.string().trim().toUpperCase()
+  .min(3, 'Mã giảm giá phải có từ 3 đến 32 ký tự!')
+  .max(32, 'Mã giảm giá phải có từ 3 đến 32 ký tự!')
+  .regex(/^[A-Z0-9_-]+$/, 'Mã giảm giá chỉ gồm chữ, số, _ và -!');
+
+export const applyOrderPromoSchema = z.object({ code: promoCodeField });
+
 export const createOrderSchema = z.object({
+  promoCode: promoCodeField.optional(),
   ticketTypeId: z.string().uuid('ID loại vé không hợp lệ!'),
   quantity: z
     .number()
@@ -210,6 +257,18 @@ export const createOrderSchema = z.object({
       LIMITS.MAX_ORDER_QUANTITY,
       `Số lượng vé trong một đơn không được vượt quá ${LIMITS.MAX_ORDER_QUANTITY}!`
     ),
+});
+
+/**
+ * Schema validation cho soát vé. Mã QR do server sinh là 22 ký tự base64url
+ * (128 bit); trần 64 chỉ để chặn chuỗi rác dài, không ràng buộc định dạng.
+ */
+export const checkInSchema = z.object({
+  qrCode: z
+    .string({ message: 'Mã vé không hợp lệ!' })
+    .trim()
+    .min(1, 'Mã vé không được để trống!')
+    .max(64, 'Mã vé không hợp lệ!'),
 });
 
 /**
@@ -254,3 +313,27 @@ export const validateBody = (schema: z.ZodSchema) => {
     }
   };
 };
+export const forgotPasswordSchema = z.object({ email: z.string().trim().email('Email không hợp lệ!') });
+export const emailTokenSchema = z.object({ token: z.string().min(1, 'Liên kết không hợp lệ!').max(256, 'Liên kết không hợp lệ!') });
+export const resetPasswordSchema = emailTokenSchema.extend({ newPassword: changePasswordSchema.shape.newPassword });
+
+const promoFields = z.object({
+  code: promoCodeField,
+  isPublic: z.boolean({ message: 'Trạng thái công khai không hợp lệ!' }).optional(),
+  discountType: z.enum(['PERCENT', 'FIXED'], { message: 'Loại giảm giá không hợp lệ!' }),
+  discountValue: z.union([z.number(), z.string()]).refine(v => {
+    try {
+      const d = new Prisma.Decimal(v);
+      return d.isFinite() && d.gt(0) && d.lte('9999999999.99') && d.decimalPlaces() <= 2;
+    } catch { return false; }
+  }, 'Giá trị giảm giá phải dương, tối đa 9.999.999.999,99 và có tối đa 2 chữ số thập phân!'),
+  maxUses: z.number({ message: 'Giới hạn lượt dùng không hợp lệ!' }).int('Giới hạn lượt dùng phải là số nguyên!').min(1, 'Giới hạn lượt dùng phải lớn hơn 0!').max(LIMITS.QUANTITY, 'Giới hạn lượt dùng vượt quá giới hạn cột số nguyên!').nullable().optional(),
+  perUserLimit: z.number({ message: 'Giới hạn theo tài khoản không hợp lệ!' }).int('Giới hạn theo tài khoản phải là số nguyên!').min(1, 'Giới hạn theo tài khoản phải lớn hơn 0!').max(LIMITS.QUANTITY, 'Giới hạn theo tài khoản vượt quá giới hạn cột số nguyên!').optional(),
+  startsAt: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian bắt đầu không hợp lệ!').nullable().optional(),
+  endsAt: z.string().refine(v => !isNaN(Date.parse(v)), 'Thời gian kết thúc không hợp lệ!').nullable().optional(),
+});
+export const createPromoSchema = promoFields.extend({ isPublic: promoFields.shape.isPublic.default(false) });
+export const updatePromoSchema = promoFields.partial().extend({ active: z.boolean({ message: 'Trạng thái mã giảm giá không hợp lệ!' }).optional() });
+export const previewPromoSchema = createOrderSchema.omit({ promoCode: true }).extend({ code: promoCodeField });
+
+export const payOrderSchema = z.object({ provider: z.enum(['VNPAY', 'MOMO'], { error: 'Cổng thanh toán không hợp lệ!' }) });

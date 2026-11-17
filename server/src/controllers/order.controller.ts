@@ -1,17 +1,19 @@
 import { Request, Response } from 'express';
-import { OrderStatus } from '@prisma/client';
+import { Prisma, OrderStatus } from '@prisma/client';
 import prisma from '../utils/prisma';
+import { notifyWaitlist, returnedQuantities } from '../utils/waitlistNotify';
 import { redlock } from '../config/redis';
-import { randomBytes } from 'crypto';
+import { markOrderConfirmed, emailConfirmedOrder } from '../payments/complete';
 import {
   buildExpiresAt,
   isSimulatedPaymentEnabled,
   MAX_TICKETS_PER_USER_PER_EVENT,
 } from '../config/order';
-import { returnTicketsToStock } from '../utils/orderInventory';
+import { claimPromoUsage, releasePromoUsage, returnTicketsToStock } from '../utils/orderInventory';
 import { invalidateEventCache } from '../utils/cache';
 import { AppError, handleControllerError, logUnexpectedError } from '../utils/errors';
 import { exceedsOrderAmount } from '../utils/validation';
+import { applicablePromo, computeDiscount, publicOfferWhere, hasRemainingUses, publicOffer } from '../utils/promo';
 import { parsePagination } from '../utils/pagination';
 
 /** Đơn đang chiếm vé trong kho. Đơn EXPIRED và CANCELLED đã trả vé nên không tính. */
@@ -21,7 +23,7 @@ const ORDER_INCLUDE = { tickets: true } as const;
 
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user?.userId;
-  const { ticketTypeId, quantity } = req.body;
+  const { ticketTypeId, quantity, promoCode } = req.body;
 
   if (!userId) {
     return res.status(401).json({ message: 'Người dùng chưa đăng nhập!' });
@@ -79,8 +81,12 @@ export const createOrder = async (req: Request, res: Response) => {
       // request thứ hai bị block, và khi được chạy thì điều kiện WHERE
       // được đánh giá lại trên dữ liệu ĐÃ COMMIT của request thứ nhất.
       // Đây là compare-and-swap: khoá row là cơ chế, không phải mẹo.
+      const saleNow = new Date();
       const reserved = await tx.ticketType.updateMany({
-        where: { id: ticketTypeId, availableQuantity: { gte: quantity } },
+        where: { id: ticketTypeId, availableQuantity: { gte: quantity }, AND: [
+          { OR: [{ saleStart: null }, { saleStart: { lte: saleNow } }] },
+          { OR: [{ saleEnd: null }, { saleEnd: { gt: saleNow } }] },
+        ] },
         data: {
           availableQuantity: {
             decrement: quantity,
@@ -88,17 +94,21 @@ export const createOrder = async (req: Request, res: Response) => {
         },
       });
 
-      // count === 0 nghĩa là KHÔNG còn đủ vé tại thời điểm ghi,
-      // chứ không phải tại thời điểm đọc.
+      // Đọc có khoá để lấy phiên bản hiện tại, tránh snapshot REPEATABLE READ
+      // cũ nếu ban tổ chức vừa sửa thời gian bán trong lúc request chờ giữ vé.
       if (reserved.count === 0) {
-        const current = await tx.ticketType.findUnique({
-          where: { id: ticketTypeId },
-          select: { availableQuantity: true },
-        });
+        const [current] = await tx.$queryRaw<Array<{
+          availableQuantity: number; saleStart: Date | null; saleEnd: Date | null;
+        }>>`SELECT availableQuantity, saleStart, saleEnd FROM ticket_types WHERE id = ${ticketTypeId} FOR UPDATE`;
 
         if (!current) {
           throw new AppError('Loại vé không tồn tại!');
         }
+
+        if (current.saleStart && current.saleStart > saleNow) {
+          throw new AppError('Loại vé này chưa mở bán!', 409, { saleStart: current.saleStart });
+        }
+        if (current.saleEnd && current.saleEnd <= saleNow) throw new AppError('Loại vé này đã ngừng bán!', 409);
 
         // AppError chứ không phải Error: câu này được viết để người dùng đọc,
         // nên nó là loại DUY NHẤT được phép ra client nguyên văn.
@@ -123,7 +133,7 @@ export const createOrder = async (req: Request, res: Response) => {
       // Decimal.mul: giữ phép tính trong kiểu Decimal thay vì đổi sang double.
       // Giá vé có 2 chữ số thập phân; nhân bằng số thực có thể lệch ở biên và
       // ghi vào DECIMAL(12,2) một giá trị đã bị làm tròn ngầm.
-      const totalAmount = ticketType.price.mul(quantity);
+      const subtotalAmount = ticketType.price.mul(quantity);
 
       // Ràng buộc invariant của cột `orders.totalAmount` (DECIMAL(12,2)).
       //
@@ -135,10 +145,15 @@ export const createOrder = async (req: Request, res: Response) => {
         throw new AppError('Tổng tiền của đơn hàng vượt quá giới hạn cho phép!');
       }
 
+      const promo = promoCode ? await applicablePromo(tx, ticketType.eventId, promoCode, userId) : null;
+      if (promo) await claimPromoUsage(tx, promo.id);
+      const amounts = promo ? computeDiscount(subtotalAmount, promo)
+        : { subtotalAmount, discountAmount: new Prisma.Decimal(0), totalAmount: subtotalAmount };
       const order = await tx.order.create({
         data: {
           userId,
-          totalAmount,
+          ...amounts,
+          promoCodeId: promo?.id,
           status: 'PENDING',
           // Giữ chỗ có thời hạn: nếu quá hạn mà chưa thanh toán,
           // job nền (jobs/expireOrders.job.ts) sẽ chuyển EXPIRED và trả vé về kho.
@@ -156,6 +171,9 @@ export const createOrder = async (req: Request, res: Response) => {
 
       return { order, eventId: ticketType.eventId };
     });
+
+    void prisma.waitlistEntry.deleteMany({ where: { ticketTypeId, userId } })
+      .catch(() => console.error('[waitlist] Không thể xoá người đã đặt vé'));
 
     // 3. Nhả lock NGAY khi transaction đã commit.
     //
@@ -226,7 +244,7 @@ export const MYOrders = async (req: Request, res: Response) => {
               ticketType: {
                 include: {
                   event: {
-                    select: { title: true, startTime: true, location: true },
+                    select: { title: true, startTime: true, location: true, bannerUrl: true, slug: true, endTime: true, category: true },
                   },
                 },
               },
@@ -266,7 +284,7 @@ export const confirmOrder = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const order = await prisma.$transaction(
+    const { order, newlyConfirmed } = await prisma.$transaction(
       async (tx) => {
         const claimed = await tx.order.updateMany({
           where: { id, userId, status: 'PENDING', expiresAt: { gt: new Date() } },
@@ -280,27 +298,24 @@ export const confirmOrder = async (req: Request, res: Response) => {
           });
 
           if (!current) throw new AppError('Không tìm thấy đơn hàng!', 404);
-          if (current.status === 'CONFIRMED') return current;
+          if (current.status === 'CONFIRMED') return { order: current, newlyConfirmed: false };
           if (current.status === 'CANCELLED') {
             throw new AppError('Đơn hàng đã bị huỷ, không thể thanh toán!', 409);
           }
           throw new AppError('Đơn hàng đã hết hạn giữ chỗ, không thể thanh toán!', 409);
         }
 
-        const tickets = await tx.ticket.findMany({ where: { orderId: id }, select: { id: true } });
-        for (const ticket of tickets) {
-          await tx.ticket.update({
-            where: { id: ticket.id },
-            // 128 bit ngẫu nhiên: không đoán được, nên không suy ra được vé của người khác.
-            data: { qrCode: randomBytes(16).toString('base64url') },
-          });
-        }
-
-        return tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
+        return {
+          order: await markOrderConfirmed(tx, id),
+          newlyConfirmed: true,
+        };
       },
       // Một đơn có tới MAX_ORDER_QUANTITY vé, mỗi vé một câu UPDATE.
       { timeout: 15_000 }
     );
+
+    // Transaction đã commit; gửi nền chỉ khi lần này thực sự đổi trạng thái.
+    if (newlyConfirmed) emailConfirmedOrder(order.id);
 
     return res.json({ message: 'Thanh toán thành công!', order });
   } catch (error) {
@@ -319,7 +334,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const { order, eventIds } = await prisma.$transaction(async (tx) => {
+    const { order, eventIds, returned } = await prisma.$transaction(async (tx) => {
       const claimed = await tx.order.updateMany({
         where: { id, userId, status: 'PENDING' },
         data: { status: 'CANCELLED' },
@@ -332,7 +347,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
         });
 
         if (!current) throw new AppError('Không tìm thấy đơn hàng!', 404);
-        if (current.status === 'CANCELLED') return { order: current, eventIds: [] };
+        if (current.status === 'CANCELLED') return { order: current, eventIds: [], returned: [] };
         if (current.status === 'CONFIRMED') {
           throw new AppError('Đơn hàng đã thanh toán, không thể huỷ!', 409);
         }
@@ -340,13 +355,118 @@ export const cancelOrder = async (req: Request, res: Response) => {
       }
 
       const updated = await tx.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE });
-      return { order: updated, eventIds: await returnTicketsToStock(tx, updated.tickets) };
+      const eventIds = await returnTicketsToStock(tx, updated.tickets);
+      await releasePromoUsage(tx, updated);
+      return { order: updated, eventIds, returned: returnedQuantities(updated.tickets) };
     });
 
+    void notifyWaitlist(returned).catch(() => console.error('[waitlist] Lỗi báo vé trả lại'));
     if (eventIds.length > 0) await invalidateEventCache(eventIds);
 
     return res.json({ message: 'Đã huỷ đơn hàng!', order });
   } catch (error) {
     return handleControllerError(res, 'cancelOrder', error);
   }
+};
+
+/** Dữ liệu thanh toán không bao gồm chi tiết giao dịch của cổng. */
+const CHECKOUT_INCLUDE = {
+  tickets: { include: { ticketType: { include: {
+    event: { select: { title: true, startTime: true, location: true, slug: true, bannerUrl: true, endTime: true, category: true } },
+  } } } },
+  promoCode: { select: { code: true } },
+  _count: { select: { payments: true } },
+} as const;
+
+type CheckoutOrder = Prisma.OrderGetPayload<{ include: typeof CHECKOUT_INCLUDE }>;
+function checkoutOrder(order: CheckoutOrder) {
+  const { promoCode, _count, ...data } = order;
+  return { ...data, promoCode: promoCode?.code ?? null, paymentStarted: _count.payments > 0 };
+}
+
+export const getOrder = async (req: Request, res: Response) => {
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId }, include: CHECKOUT_INCLUDE,
+    });
+    if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
+    return res.json({ message: 'Lấy đơn hàng thành công!', data: checkoutOrder(order) });
+  } catch (error) {
+    return handleControllerError(res, 'getOrder', error);
+  }
+};
+
+/** Khoá tài khoản trước đơn để hạn mức theo tài khoản thấy các đơn vừa commit. */
+async function changeOrderPromo(userId: string, id: string, code?: string) {
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+    const order = await tx.order.findFirst({ where: { id, userId }, include: CHECKOUT_INCLUDE });
+    if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
+    const now = new Date();
+    if (order.status !== 'PENDING' || !order.expiresAt || order.expiresAt <= now) {
+      throw new AppError('Đơn hàng không còn chờ thanh toán hoặc đã hết hạn giữ chỗ!', 409);
+    }
+    if (order._count.payments > 0) {
+      throw new AppError('Đơn đã bắt đầu thanh toán, không thể đổi mã giảm giá!', 409);
+    }
+    if (code ? order.promoCode?.code === code : !order.promoCodeId) return checkoutOrder(order);
+
+    const eventId = order.tickets[0]?.ticketType.eventId;
+    if (code && !eventId) throw new AppError('Đơn hàng không có vé để áp mã giảm giá!');
+    const promo = code ? await applicablePromo(tx, eventId!, code, userId, now, id) : null;
+    await releasePromoUsage(tx, order);
+    if (promo) await claimPromoUsage(tx, promo.id);
+    const amounts = promo ? computeDiscount(order.subtotalAmount, promo)
+      : { totalAmount: order.subtotalAmount, discountAmount: new Prisma.Decimal(0) };
+    const updated = await tx.order.update({
+      where: { id }, data: { ...amounts, promoCodeId: promo?.id ?? null }, include: CHECKOUT_INCLUDE,
+    });
+    return checkoutOrder(updated);
+  });
+}
+
+export const applyOrderPromo = async (req: Request, res: Response) => {
+  try {
+    const data = await changeOrderPromo(req.user!.userId, req.params.id, req.body.code);
+    return res.json({ message: 'Áp mã giảm giá thành công!', data });
+  } catch (error) {
+    return handleControllerError(res, 'applyOrderPromo', error);
+  }
+};
+
+export const removeOrderPromo = async (req: Request, res: Response) => {
+  try {
+    const data = await changeOrderPromo(req.user!.userId, req.params.id);
+    return res.json({ message: 'Gỡ mã giảm giá thành công!', data });
+  } catch (error) {
+    return handleControllerError(res, 'removeOrderPromo', error);
+  }
+};
+
+export const getOrderOffers = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const order = await prisma.order.findFirst({ where: { id: req.params.id, userId },
+      include: { tickets: { include: { ticketType: true } } } });
+    if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
+    const now = new Date();
+    const eventId = order.tickets[0]?.ticketType.eventId;
+    if (order.status !== 'PENDING' || !order.expiresAt || order.expiresAt <= now || !eventId) {
+      return res.json({ data: [] });
+    }
+    const promos = (await prisma.promoCode.findMany({ where: publicOfferWhere(eventId, now) })).filter(hasRemainingUses);
+    const usage = await prisma.order.groupBy({ by: ['promoCodeId'],
+      where: { userId, id: { not: order.id }, status: { in: ['PENDING', 'CONFIRMED'] },
+        promoCodeId: { in: promos.map(p => p.id) } }, _count: { _all: true } });
+    const counts = new Map(usage.map(row => [row.promoCodeId, row._count._all]));
+    const data = promos.filter(p => (counts.get(p.id) ?? 0) < p.perUserLimit)
+      .map(p => ({ promo: p, discountAmount: computeDiscount(order.subtotalAmount, p).discountAmount }))
+      .filter(p => p.discountAmount.gt(0))
+      .sort((a, b) => b.discountAmount.comparedTo(a.discountAmount)
+        || (a.promo.endsAt?.getTime() ?? Infinity) - (b.promo.endsAt?.getTime() ?? Infinity)
+        || a.promo.code.localeCompare(b.promo.code))
+      .slice(0, 10).map(p => ({ ...publicOffer(p.promo), discountAmount: p.discountAmount.toString() }));
+    return res.json({ data });
+  } catch (error) { return handleControllerError(res, 'getOrderOffers', error); }
 };

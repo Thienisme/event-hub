@@ -5,6 +5,8 @@
 > Tài liệu trích dẫn theo tên file và tên hàm, không theo số dòng vì số dòng đổi sau mỗi lần sửa.
 > Nếu có chỗ khác với code, hãy lấy code làm chuẩn.
 >
+> **Cho AI:** file này rất dài (~30k token). Đừng đọc nguyên file: chạy `grep -n '^##' PROJECT_NOTES.md` để tìm mục, rồi chỉ đọc khoảng dòng cần.
+>
 > Đi kèm: **`TRICK.md`** — bản tóm tắt để ôn tập và luyện trả lời trick
 > (thứ tự học, câu hỏi bẫy, số liệu phải nhớ, gap của project, checklist trước PV).
 

@@ -14,8 +14,8 @@ Hướng dẫn deploy từng bước: [`deploy/cloud/README.md`](../deploy/cloud
  ① Code trên nhánh feat/...
         │ git push + mở Pull Request
         ▼
- ② GitHub Actions chạy ci.yml (CI): máy ảo trắng → dựng MySQL, Redis → 10 bộ test → build client → ✅/❌ trên PR
-        │ Merge vào main (khi ✅)
+ ② GitHub Actions chạy ci.yml (CI): máy ảo trắng → dựng MySQL, Redis → ~20 bộ test → build client → ✅/❌ trên PR (~3,5 phút)
+        │ Merge vào main (branch protection: chỉ merge được khi ✅)
         ▼
  ③ GitHub gửi webhook cho Render: "main vừa có commit mới"
         ▼
@@ -24,16 +24,18 @@ Hướng dẫn deploy từng bước: [`deploy/cloud/README.md`](../deploy/cloud
       → Render gọi /api/health: 200 thì chuyển người dùng sang bản mới; lỗi thì giữ bản cũ
         ▼
  ⑤ https://eventhub-v3xy.onrender.com chạy bản mới
-    GitHub Actions keepalive.yml gọi /api/health mỗi 10 phút để Render free không ngủ
+    UptimeRobot gọi /api/health mỗi 5 phút để Render free không ngủ, web chết thì gửi email
+    (GitHub Actions keepalive.yml chỉ còn là dự phòng)
 ```
 
 | Việc | Ai làm | Nhờ file nào |
 |---|---|---|
 | Kiểm tra code (CI) | GitHub Actions | `.github/workflows/ci.yml` |
+| Chặn merge khi CI đỏ, cấm push thẳng `main` | GitHub branch protection | Settings → Branches (cấu hình trên GitHub, không nằm trong repo) |
 | Báo có code mới | GitHub (webhook) | GitHub App của Render (cài khi đăng ký bằng GitHub) |
 | Build + deploy (CD) | Render | `Dockerfile`, `render.yaml` |
 | Cập nhật cấu trúc database | Chính container lúc khởi động | `CMD` trong `Dockerfile` |
-| Giữ web không ngủ | GitHub Actions theo lịch | `.github/workflows/keepalive.yml` |
+| Giữ web không ngủ, báo khi web chết | UptimeRobot (dự phòng: GitHub Actions theo lịch) | Monitor trên UptimeRobot; `.github/workflows/keepalive.yml` |
 | Giữ bí mật | Render Environment, TiDB | không nằm trong code |
 
 ---
@@ -76,6 +78,11 @@ File chứa bí mật (`.env`, `.env.*.local`, `.env.home`, `.env.prod`) phải 
 - `render.yaml` mô tả hạ tầng bằng văn bản: 1 web Docker gói free ở Singapore, 1 Key Value (Redis), các biến môi trường, tự deploy khi có commit. Render đọc và tự dựng. Dựng lại = bấm lại; ai đọc repo cũng biết hạ tầng gồm gì.
 - `healthCheckPath: /api/health` là **cổng kiểm soát**: bản mới phải trả 200 mới được nhận người dùng. Đây là **zero-downtime deploy**: chạy bản mới song song, chỉ chuyển khi bản mới khoẻ.
 
+### 2.7. Branch protection: biến CI từ "tín hiệu" thành "cái khoá"
+CD tự deploy mọi commit vào `main`. Không có branch protection thì vẫn merge được PR khi CI đỏ, hoặc push thẳng `main` không qua CI, và lỗi lên thẳng production.
+`main` của dự án bắt buộc: phải qua PR, hai check `Server (typecheck + integration tests)` và `Client (build)` phải ✅, áp dụng cả admin, cấm force-push và xoá nhánh.
+Lưu ý: tên check bắt buộc là **tên job** trong `ci.yml`. Đổi tên job mà quên sửa trong Settings → Branches thì PR treo mãi ở "Expected — Waiting for status".
+
 ---
 
 ## 3. Các thành phần đang chạy
@@ -86,7 +93,7 @@ File chứa bí mật (`.env`, `.env.*.local`, `.env.home`, `.env.prod`) phải 
 | Redis (Redlock, cache) | Render Key Value free | 25MB, không lưu bền (mất khi khởi động lại: chấp nhận được vì chỉ là cache/khoá) |
 | MySQL | TiDB Cloud Starter | Tương thích MySQL, **bắt buộc TLS**, free 5GB |
 | Ảnh banner | Lưu trong database (bảng `stored_files`) | Ổ đĩa Render free bị xoá mỗi lần deploy/ngủ |
-| Giữ web thức | GitHub Actions `keepalive.yml` | Cron mỗi 10 phút; GitHub có thể chạy trễ vài phút |
+| Giữ web thức | UptimeRobot (free, mỗi 5 phút) | Kiêm giám sát: web chết thì gửi email. `keepalive.yml` chỉ còn dự phòng vì lịch GitHub chạy trễ hàng giờ (sự cố 10) |
 
 **Vì sao chọn bộ này** (sau khi thử nhiều hướng):
 
@@ -94,7 +101,7 @@ File chứa bí mật (`.env`, `.env.*.local`, `.env.home`, `.env.prod`) phải 
 |---|---|
 | Oracle Cloud Always Free (VPS ARM) | Từ chối thẻ ảo khi đăng ký |
 | Máy nhà + Cloudflare Quick Tunnel | Chạy được, nhưng link đổi mỗi lần khởi động lại → không demo từ xa được (code giữ ở nhánh `feat/home-deploy`) |
-| Vercel + Render + Upstash + Cloudinary + UptimeRobot | Quá nhiều tài khoản |
+| Vercel + Render + Upstash + Cloudinary + UptimeRobot | Quá nhiều tài khoản (về sau vẫn thêm riêng UptimeRobot để giữ thức, xem sự cố 10) |
 | **Render + TiDB Cloud** | 2 tài khoản, 0đ, link cố định, chạy 24/7 |
 
 Bài học: chọn hạ tầng là **đánh đổi** giữa chi phí, độ phức tạp, độ tin cậy và mức "học được". Không có lựa chọn hoàn hảo.
@@ -113,6 +120,9 @@ Bài học: chọn hạ tầng là **đánh đổi** giữa chi phí, độ ph�
 | 6 | Backup lỗi `SAVEPOINT sp does not exist` | TiDB không giống MySQL 100%; `mysqldump --single-transaction` dùng SAVEPOINT | Dịch vụ "tương thích X" không phải X; phải chạy thử trên dịch vụ thật |
 | 7 | Script đếm thời gian chờ treo 60 giây trên macOS | Tiến trình chạy nền giữ stdout, `$(...)` phải chờ nó | Script phải test đúng môi trường đích (bash 3.2 trên Mac khác bash Linux) |
 | 8 | File secret `.env.home` không nằm trong `.gitignore` | Quên khai báo | Mỗi file secret mới → thêm `.gitignore` ngay và kiểm tra bằng `git check-ignore -v <file>` |
+| 9 | CI mất ~9 phút, càng thêm test càng chậm | Bước test 551 giây nhưng chỉ ~1 phút chạy thật: rate limit 100 request/phút theo IP áp cả lên CI (mọi test gọi từ `127.0.0.1`), `run-all-tests.cjs` phải chờ cửa sổ reset 8 lần | **Đo trước khi sửa:** xem thời gian từng bước (`gh api .../jobs`) rồi đọc log bước chậm nhất. Cấu hình bảo vệ production (rate limit, timeout) nên đọc từ biến môi trường có mặc định an toàn (`API_RATE_LIMIT_MAX`); CI đặt cao → còn ~3,5 phút (PR #23) |
+| 10 | Đặt keepalive mỗi 10 phút mà Render vẫn ngủ | Lịch `schedule` của GitHub Actions là việc ưu tiên thấp: thực tế chạy cách nhau 3–8 tiếng | Xem **lịch sử chạy thật** (`gh run list`), đừng tin cấu hình. Việc cần đúng giờ dùng dịch vụ chuyên (UptimeRobot), được thêm cả cảnh báo khi web chết |
+| 11 | `gh pr create` báo `must be a collaborator` | Máy đăng nhập hai tài khoản GitHub, tài khoản đang active chỉ có quyền đọc repo | `gh auth status` xem tài khoản nào active; dùng token tài khoản chủ repo cho từng lệnh: `GH_TOKEN=$(gh auth token --user <tên>) gh ...` |
 
 ---
 
@@ -156,6 +166,7 @@ git checkout -b feat/ten-tinh-nang          # nhánh mới cho mỗi việc
 gh pr create                                  # mở PR
 gh pr checks <số>                             # xem CI của PR
 gh run list --limit 5                         # các lần chạy GitHub Actions
+gh api repos/<chủ>/<repo>/actions/runs/<id>/jobs --jq '.jobs[].steps[] | "\(.name): \(((.completed_at|fromdate)-(.started_at|fromdate)))s"'   # thời gian từng bước, tìm bước chậm
 
 # Docker
 docker compose up -d                          # bật MySQL + Redis cho dev
@@ -180,12 +191,15 @@ curl https://eventhub-v3xy.onrender.com/api/health
 8. Backup của bạn thế nào? Làm sao biết bản backup dùng được?
 9. Push-based deploy (GitHub đẩy vào server qua SSH) khác pull-based (server tự kéo bản mới) thế nào?
 10. Vì sao dịch vụ "tương thích MySQL" vẫn có thể làm hỏng app? Cho ví dụ.
+11. CI của bạn từng chậm thế nào, bạn tìm nguyên nhân và sửa ra sao? (Kể sự cố 9: đo từng bước, rate limit, biến môi trường.)
+12. Branch protection là gì? Vì sao cần nó khi đã có CI?
+13. Vì sao không nên dựa vào cron của GitHub Actions cho việc cần đúng giờ?
 
 ---
 
 ## 9. Bài tập tự làm
 
-- [ ] Bật **branch protection** cho `main`: bắt buộc CI ✅ mới cho merge (Settings → Branches). Sau đó CI không chỉ là tín hiệu mà là cái khoá.
+- [x] Bật **branch protection** cho `main`: bắt buộc CI ✅ mới cho merge (Settings → Branches). Sau đó CI không chỉ là tín hiệu mà là cái khoá. *(Đã làm 17/11/2026, xem mục 2.7.)*
 - [ ] Thêm `buildFilter` vào `render.yaml` để thay đổi chỉ ở `docs/`, `*.md` không kích hoạt deploy.
 - [ ] Tự chạy backup và thử khôi phục vào `eventhub_verify`, đối chiếu số dòng.
 - [ ] Cố tình làm một deploy lỗi (ví dụ đổi tạm `DATABASE_URL` sai) rồi đọc log, xác nhận Render giữ bản cũ; sau đó sửa lại.

@@ -68,6 +68,12 @@ export const authenticate = async (
       return res.status(403).json({ message: 'Tài khoản đã bị khoá!' });
     }
 
+    // Mật khẩu đã đổi sau khi cấp token -> token này bị thu hồi. Message phải
+    // chứa chữ "token": client dựa vào đó để coi là hết phiên (api/axios.ts).
+    if ((decoded.tv ?? 0) !== state.tokenVersion) {
+      return res.status(403).json({ message: 'Token đã hết hiệu lực, vui lòng đăng nhập lại!' });
+    }
+
     // Role LẤY TỪ DB, không phải role trong token (token có thể đã cũ).
     req.user.currentRole = state.role;
     // Email cũng lấy từ DB: nhật ký quản trị cần "ai đã làm" mà không tốn

@@ -16,7 +16,7 @@ defineProps<{
     v-if="message"
     :class="[
       'p-3 rounded-lg text-sm font-medium',
-      type === 'error' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-green-50 text-green-600 border border-green-200'
+      type === 'error' ? 'bg-danger/10 text-danger border border-danger/30' : 'bg-success/10 text-success border border-success/30'
     ]"
   >
     {{ message }}

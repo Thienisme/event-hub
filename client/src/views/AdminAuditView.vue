@@ -84,11 +84,11 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-surface py-8 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+    <div class="max-w-6xl mx-auto space-y-6">
       <!-- Đầu trang -->
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-semibold text-foreground tracking-tight">Nhật ký quản trị</h1>
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">Nhật ký quản trị</h1>
           <p class="mt-1 text-sm text-muted-foreground">
             Mọi thao tác đổi vai trò, khoá và mở khoá tài khoản đều được ghi lại
           </p>
@@ -103,7 +103,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Bảng -->
-      <Card class="bg-card border border-border rounded-2xl gap-0 py-0 shadow-sm overflow-hidden">
+      <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 py-0 overflow-hidden">
         <DataState
           :loading="adminStore.auditLoading"
           :loaded="adminStore.auditLoaded"
@@ -126,7 +126,7 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <div class="md:hidden grid gap-3 p-4"><article v-for="log in adminStore.auditLogs" :key="log.id" class="rounded-xl border bg-card p-4 shadow-sm space-y-3 min-w-0">
+          <div class="md:hidden grid gap-3 p-4"><article v-for="log in adminStore.auditLogs" :key="log.id" class="rounded-lg border bg-background p-4 space-y-3 min-w-0">
                   <div class="min-w-0 break-words">
                     <Badge variant="outline">{{ actionLabel(log) }}</Badge>
                   </div>

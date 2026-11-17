@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { createEventSlug } from '../src/utils/slug';
+import { PrismaClient, Prisma, EventCategory } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import sharp from 'sharp';
 import Redis from 'ioredis';
@@ -54,7 +55,7 @@ type EventInput = {
   startTime: Date;
   endTime: Date;
   imageUrl: string;
-  category: string;
+  category: EventCategory;
   color1: string;
   color2: string;
   tickets: TicketKind[];
@@ -76,7 +77,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(14, 19, 30),
     endTime: new Date(vnLater(14, 19, 30).getTime() + 2 * 3_600_000 + 30 * 60_000),
     imageUrl: 'https://images.unsplash.com/photo-1506026667107-3350a4c8eca6?w=1600&q=80&auto=format&fit=crop',
-    category: 'Đêm nhạc acoustic',
+    category: 'MUSIC',
     color1: '#7c3aed',
     color2: '#2563eb',
     tickets: [{ name: 'Vé thường', price: 250_000, quantity: 300 }],
@@ -94,7 +95,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(7, 9, 0),
     endTime: new Date(vnLater(7, 9, 0).getTime() + 3 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1649252504348-235b14c9cdb5?w=1600&q=80&auto=format&fit=crop',
-    category: 'Workshop thiết kế',
+    category: 'WORKSHOP',
     color1: '#0ea5e9',
     color2: '#0f766e',
     tickets: [{ name: 'Vé tham gia', price: 350_000, quantity: 50 }],
@@ -111,7 +112,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(30, 5, 0),
     endTime: new Date(vnLater(30, 5, 0).getTime() + 4 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1745790289741-12a211a8325d?w=1600&q=80&auto=format&fit=crop',
-    category: 'Giải chạy marathon',
+    category: 'SPORTS',
     color1: '#f59e0b',
     color2: '#b45309',
     tickets: [
@@ -132,7 +133,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(45, 10, 0),
     endTime: new Date(vnLater(45, 10, 0).getTime() + 8 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1748596161714-4049199ae770?w=1600&q=80&auto=format&fit=crop',
-    category: 'Lễ hội ẩm thực',
+    category: 'FOOD',
     color1: '#e11d48',
     color2: '#be123c',
     tickets: [{ name: 'Vé miễn phí', price: 0, quantity: 1_500 }],
@@ -150,7 +151,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(21, 20, 0),
     endTime: new Date(vnLater(21, 20, 0).getTime() + 2 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1686656420217-7f42dfb2bd2f?w=1600&q=80&auto=format&fit=crop',
-    category: 'Stand-up comedy',
+    category: 'THEATER',
     color1: '#db2777',
     color2: '#7c3aed',
     tickets: [{ name: 'Vé ghế thường', price: 180_000, quantity: 200 }],
@@ -168,7 +169,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(60, 8, 0),
     endTime: new Date(vnLater(60, 8, 0).getTime() + 6 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1653987255814-3b4c05832660?w=1600&q=80&auto=format&fit=crop',
-    category: 'Triển lãm nghệ thuật',
+    category: 'EXHIBITION',
     color1: '#10b981',
     color2: '#047857',
     tickets: [{ name: 'Vé tham quan', price: 120_000, quantity: 400 }],
@@ -186,7 +187,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(10, 19, 30),
     endTime: new Date(vnLater(10, 19, 30).getTime() + 3 * 3_600_000 + 20 * 60_000),
     imageUrl: 'https://images.unsplash.com/photo-1758550445758-165aeab5b26e?w=1600&q=80&auto=format&fit=crop',
-    category: 'Concert',
+    category: 'MUSIC',
     color1: '#ef4444',
     color2: '#b91c1c',
     tickets: [
@@ -207,7 +208,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(3, 8, 30),
     endTime: new Date(vnLater(3, 8, 30).getTime() + 4 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1762968274962-20c12e6e8ecd?w=1600&q=80&auto=format&fit=crop',
-    category: 'Hội thảo công nghệ',
+    category: 'CONFERENCE',
     color1: '#3b82f6',
     color2: '#1d4ed8',
     tickets: [{ name: 'Vé miễn phí', price: 0, quantity: 300 }],
@@ -225,7 +226,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(17, 14, 0),
     endTime: new Date(vnLater(17, 14, 0).getTime() + 2 * 3_600_000 + 30 * 60_000),
     imageUrl: 'https://images.unsplash.com/photo-1621865091587-42f462729948?w=1600&q=80&auto=format&fit=crop',
-    category: 'Workshop pha chế cà phê',
+    category: 'WORKSHOP',
     color1: '#a16207',
     color2: '#713f12',
     tickets: [{ name: 'Vé thực hành', price: 220_000, quantity: 30 }],
@@ -243,7 +244,7 @@ const EVENTS: EventInput[] = [
     startTime: vnLater(50, 8, 0),
     endTime: new Date(vnLater(50, 8, 0).getTime() + 7 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1652299077928-1c4488e30cb4?w=1600&q=80&auto=format&fit=crop',
-    category: 'Hội chợ sách',
+    category: 'FESTIVAL',
     color1: '#166534',
     color2: '#0f172a',
     tickets: [{ name: 'Vé vào hội', price: 0, quantity: 1_000 }],
@@ -261,7 +262,7 @@ const EVENTS: EventInput[] = [
     startTime: new Date(vnNow().getTime() - 1 * 3_600_000),
     endTime: new Date(vnNow().getTime() + 5 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1752496134012-0836f4917b99?w=1600&q=80&auto=format&fit=crop',
-    category: 'Festival âm nhạc ngoài trời',
+    category: 'MUSIC',
     color1: '#f59e0b',
     color2: '#d97706',
     tickets: [
@@ -282,7 +283,7 @@ const EVENTS: EventInput[] = [
     startTime: new Date(vnNow().getTime() - 7 * 86_400_000 - 3 * 3_600_000),
     endTime: new Date(vnNow().getTime() - 7 * 86_400_000 + 1 * 3_600_000),
     imageUrl: 'https://images.unsplash.com/photo-1503095396549-807759245b35?w=1600&q=80&auto=format&fit=crop',
-    category: 'Kịch',
+    category: 'THEATER',
     color1: '#4338ca',
     color2: '#3730a3',
     tickets: [{ name: 'Vé ghế', price: 280_000, quantity: 450 }],
@@ -445,12 +446,13 @@ async function main() {
   for (const acc of ACCOUNTS) {
     const u = await prisma.user.upsert({
       where: { email: acc.email },
-      update: { password: passwordHash, role: acc.role, fullName: acc.fullName, isActive: true },
+      update: { password: passwordHash, role: acc.role, fullName: acc.fullName, emailVerifiedAt: new Date(), isActive: true },
       create: {
         email: acc.email,
         password: passwordHash,
         role: acc.role,
         fullName: acc.fullName,
+        emailVerifiedAt: new Date(),
         isActive: true,
       },
       select: { id: true, email: true, role: true, fullName: true },
@@ -493,9 +495,11 @@ async function main() {
     console.log(`  banner ${input.title}: ${source}`);
     const event = await prisma.event.create({
       data: {
+        slug: createEventSlug(input.title),
         title: input.title,
         description: input.description,
         location: input.location,
+        category: input.category,
         bannerUrl: url,
         startTime: input.startTime,
         endTime: input.endTime,
@@ -542,7 +546,7 @@ async function main() {
       await tx.order.create({
         data: {
           userId: customer,
-          totalAmount,
+          totalAmount, subtotalAmount: totalAmount,
           status: 'CONFIRMED',
           expiresAt: null,
           tickets: {
@@ -576,7 +580,7 @@ async function main() {
     await tx.order.create({
       data: {
         userId: customer,
-        totalAmount: pendingTotal,
+        totalAmount: pendingTotal, subtotalAmount: pendingTotal,
         status: 'PENDING',
         expiresAt: tenMinLater,
         tickets: {

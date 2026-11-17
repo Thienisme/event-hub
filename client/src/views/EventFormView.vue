@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { Plus, Trash2 } from '@lucide/vue';
+import { ArrowLeft, Plus, Trash2 } from '@lucide/vue';
 import DateTimePicker from '@/components/DateTimePicker.vue';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { EVENT_CATEGORIES, type EventCategory } from '@/utils/categories';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -23,6 +25,8 @@ interface TicketTypeForm {
   name: string;
   price: number | string;
   totalQuantity: number;
+  saleStart?: string;
+  saleEnd?: string;
 }
 
 interface ApiResponse {
@@ -71,6 +75,7 @@ const LIMITS = {
   MAX_ORDER_AMOUNT: 9_999_999_999.99,
 } as const;
 
+const category = ref<EventCategory>('OTHER');
 const title = ref('');
 const description = ref('');
 const location = ref('');
@@ -94,6 +99,7 @@ let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Xoá sạch form trước khi nạp sự kiện khác, tránh để lại dữ liệu cũ. */
 const resetForm = () => {
+  category.value = 'OTHER';
   title.value = '';
   description.value = '';
   location.value = '';
@@ -110,6 +116,7 @@ const loadEventForEdit = async (id: string) => {
   try {
     const event = await eventStore.fetchEventById(id);
     if (event) {
+      category.value = event.category || 'OTHER';
       title.value = event.title;
       description.value = event.description || '';
       location.value = event.location;
@@ -122,6 +129,8 @@ const loadEventForEdit = async (id: string) => {
       // Bỏ id đi thì mỗi lần lưu sẽ tạo loại vé mới và xoá loại chưa bán.
       ticketTypes.value = event.ticketTypes?.map((t: TicketType) => ({
         id: t.id,
+        saleStart: t.saleStart ? toAppDateTimeInput(t.saleStart) : '',
+        saleEnd: t.saleEnd ? toAppDateTimeInput(t.saleEnd) : '',
         name: t.name,
         price: t.price,
         totalQuantity: t.totalQuantity,
@@ -187,7 +196,7 @@ const removeTicketType = (index: number) => {
 };
 
 const handleSubmit = async () => {
-  if (!title.value || !location.value || !startTime.value || !endTime.value) {
+  if (!category.value || !title.value || !location.value || !startTime.value || !endTime.value) {
     errorMessage.value = 'Vui lòng nhập đầy đủ các trường bắt buộc!';
     return;
   }
@@ -196,6 +205,11 @@ const handleSubmit = async () => {
   // báo lỗi ngay ở form thì nhanh hơn là gửi đi rồi mới nhận lỗi từ server.
   if (new Date(endTime.value).getTime() <= new Date(startTime.value).getTime()) {
     errorMessage.value = 'Thời gian kết thúc phải sau thời gian bắt đầu!';
+    return;
+  }
+
+  if (ticketTypes.value.some(t => t.saleEnd && ((t.saleStart && t.saleEnd <= t.saleStart) || t.saleEnd > endTime.value))) {
+    errorMessage.value = 'Thời gian ngừng bán phải sau mở bán và không sau khi sự kiện kết thúc!';
     return;
   }
 
@@ -218,6 +232,7 @@ const handleSubmit = async () => {
   successMessage.value = '';
 
   const payload = {
+    category: category.value,
     title: title.value,
     description: description.value || null,
     location: location.value,
@@ -229,6 +244,8 @@ const handleSubmit = async () => {
     // Ở chế độ create, mảng rỗng cũng vô hại vì createEvent chỉ tạo khi length > 0.
     ticketTypes: ticketTypes.value.map(t => ({
       id: t.id,
+      saleStart: t.saleStart ? fromAppDateTimeInput(t.saleStart) : null,
+      saleEnd: t.saleEnd ? fromAppDateTimeInput(t.saleEnd) : null,
       name: t.name,
       price: Number(t.price),
       totalQuantity: Number(t.totalQuantity),
@@ -248,7 +265,7 @@ const handleSubmit = async () => {
       if (data.event) {
         redirectTimer = setTimeout(() => {
           redirectTimer = undefined;
-          router.push({ name: 'EventDetail', params: { id: data.event!.id } });
+          router.push({ name: 'EventDetail', params: { id: data.event!.slug ?? data.event!.id } });
         }, 1500);
       }
     }
@@ -272,17 +289,17 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-surface pb-16">
-    <div class="mx-auto max-w-4xl px-4 py-8">
-      <div class="mb-4 flex justify-end">
-        <Button variant="ghost" @click="router.push({ name: 'Home' })">Quay lại</Button>
+    <div class="mx-auto max-w-3xl px-4 py-8">
+      <div class="mb-4 flex justify-start">
+        <Button variant="ghost" class="px-0 text-sm text-muted-foreground hover:text-foreground" @click="router.push({ name: 'Home' })"><ArrowLeft class="size-4" aria-hidden="true" />Quay lại</Button>
       </div>
       <AppAlert :message="errorMessage" type="error" class="mb-4" />
       <AppAlert :message="successMessage" type="success" class="mb-4" />
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-2xl">{{ isEditMode ? 'Chỉnh sửa sự kiện' : 'Tạo sự kiện mới' }}</CardTitle>
-          <CardDescription>Điền thông tin, thời gian tổ chức và các loại vé cho sự kiện của bạn.</CardDescription>
-        </CardHeader>
+      <div class="mb-8">
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">{{ isEditMode ? 'Chỉnh sửa sự kiện' : 'Tạo sự kiện mới' }}</h1>
+        <p class="mt-2 text-sm text-muted-foreground">Điền thông tin, thời gian tổ chức và các loại vé cho sự kiện của bạn.</p>
+      </div>
+      <Card class="rounded-lg border border-border bg-background shadow-none ring-0">
         <CardContent>
           <form @submit.prevent="handleSubmit" class="space-y-6">
             <section class="space-y-4" aria-labelledby="general-heading">
@@ -290,6 +307,13 @@ onUnmounted(() => {
               <div class="space-y-2">
                 <Label for="event-title">Tiêu đề *</Label>
                 <Input id="event-title" v-model="title" required :maxlength="LIMITS.TITLE" placeholder="Nhập tiêu đề sự kiện" />
+              </div>
+              <div class="space-y-2">
+                <Label for="event-category">Danh mục *</Label>
+                <Select v-model="category" required>
+                  <SelectTrigger id="event-category" class="w-full"><SelectValue placeholder="Chọn danh mục" /></SelectTrigger>
+                  <SelectContent><SelectItem v-for="item in EVENT_CATEGORIES" :key="item.value" :value="item.value">{{ item.label }}</SelectItem></SelectContent>
+                </Select>
               </div>
               <div class="space-y-2">
                 <Label for="event-description">Mô tả</Label>
@@ -326,20 +350,32 @@ onUnmounted(() => {
             <section class="space-y-4" aria-labelledby="tickets-heading">
               <h2 id="tickets-heading" class="text-sm font-semibold">Loại vé</h2>
               <div v-if="ticketTypes.length === 0" class="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">Chưa có loại vé nào</div>
-              <div v-for="(ticket, index) in ticketTypes" :key="index" class="grid grid-cols-1 items-end gap-3 rounded-lg border p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-                <div class="space-y-2">
-                  <Label :for="`ticket-name-${index}`">Tên loại vé</Label>
-                  <Input :id="`ticket-name-${index}`" v-model="ticket.name" :maxlength="LIMITS.TICKET_NAME" placeholder="VD: Vé VIP, vé thường" />
+              <div v-for="(ticket, index) in ticketTypes" :key="ticket.id ?? index" class="space-y-4 rounded-lg border p-4">
+                <div class="grid grid-cols-1 items-end gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <div class="space-y-2">
+                    <Label :for="`ticket-name-${index}`">Tên loại vé</Label>
+                    <Input :id="`ticket-name-${index}`" v-model="ticket.name" :maxlength="LIMITS.TICKET_NAME" placeholder="VD: Vé VIP, vé thường" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label :for="`ticket-price-${index}`">Giá (VNĐ)</Label>
+                    <Input :id="`ticket-price-${index}`" v-model.number="ticket.price" type="number" min="0" step="0.01" :max="LIMITS.PRICE" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label :for="`ticket-quantity-${index}`">Số lượng</Label>
+                    <Input :id="`ticket-quantity-${index}`" v-model.number="ticket.totalQuantity" type="number" min="1" :max="LIMITS.QUANTITY" />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 aria-hidden="true" /></Button>
                 </div>
-                <div class="space-y-2">
-                  <Label :for="`ticket-price-${index}`">Giá (VNĐ)</Label>
-                  <Input :id="`ticket-price-${index}`" v-model.number="ticket.price" type="number" min="0" step="0.01" :max="LIMITS.PRICE" />
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <Label :for="`ticket-sale-start-${index}`">Mở bán từ (tuỳ chọn)</Label>
+                    <Input :id="`ticket-sale-start-${index}`" v-model="ticket.saleStart" type="datetime-local" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label :for="`ticket-sale-end-${index}`">Ngừng bán lúc (tuỳ chọn)</Label>
+                    <Input :id="`ticket-sale-end-${index}`" v-model="ticket.saleEnd" type="datetime-local" :max="endTime || undefined" />
+                  </div>
                 </div>
-                <div class="space-y-2">
-                  <Label :for="`ticket-quantity-${index}`">Số lượng</Label>
-                  <Input :id="`ticket-quantity-${index}`" v-model.number="ticket.totalQuantity" type="number" min="1" :max="LIMITS.QUANTITY" />
-                </div>
-                <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 aria-hidden="true" /></Button>
               </div>
               <Button type="button" variant="outline" @click="addTicketType"><Plus aria-hidden="true" />Thêm loại vé</Button>
             </section>
