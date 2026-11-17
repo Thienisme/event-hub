@@ -25,7 +25,7 @@ Xong ở PR #16.
 
 ## Giai đoạn 2: Bán hàng thật
 
-Nhánh `feat/phase2-sales`, chưa mở PR.
+Xong ở PR #20 (giao diện thanh toán hoàn thiện ở #21).
 
 - [x] Thanh toán VNPay và MoMo (sandbox), nhận kết quả qua webhook, mỗi đơn chỉ xác nhận một lần (C). Luồng và cách test: `docs/PAYMENTS.md`
 - [x] Mã giảm giá: phần trăm hoặc số tiền, giới hạn lượt dùng, chống dùng vượt lượt khi áp cùng lúc (C)
@@ -44,14 +44,26 @@ Nhánh `feat/phase2-sales`, chưa mở PR.
 ## Giai đoạn 4: Khám phá và cộng đồng
 
 - [ ] Lưu sự kiện yêu thích, theo dõi nhà tổ chức, trang công khai của nhà tổ chức (O + C)
-- [ ] Mục "Nổi bật" và "Sắp diễn ra gần bạn" trên trang chủ (O)
+- [x] Mục "Nổi bật" trên trang chủ (#22); còn "Sắp diễn ra gần bạn" (O)
+- [ ] **Sự kiện miễn phí có duyệt đăng ký** kiểu Luma: người dùng gửi đăng ký, nhà tổ chức duyệt/từ chối từng người, được duyệt mới có vé (C)
 - [ ] Đánh giá sau sự kiện, chỉ người đã check-in mới được đánh giá (C)
 
 ## Giai đoạn 5: Nâng cao
 
-- [ ] Chuyển nhượng vé, vé cũ mất hiệu lực ngay (C)
+- [ ] **Phòng chờ ảo khi mở bán vé hot** kiểu Ticketmaster/Ticketbox: xếp hàng bằng Redis sorted set, hiện vị trí trong hàng, cấp token vào cửa có hạn vài phút, giới hạn số người mua cùng lúc; đo trước/sau bằng k6 (C, ưu tiên 2)
+- [ ] **QR động chống chụp màn hình** kiểu SafeTix/DICE: mã trên "Vé của tôi" đổi mỗi 30 giây (HMAC theo khung thời gian như TOTP), máy soát vé kiểm cả chữ ký lẫn thời gian, mã QR tĩnh cũ vẫn soát được trong giai đoạn chuyển đổi (C, ưu tiên 3)
+- [ ] Chuyển nhượng vé, vé cũ mất hiệu lực ngay; bán lại không quá giá gốc, chống hai người cùng mua lại một vé (C)
 - [ ] Sơ đồ chọn ghế (C)
 - [ ] PWA: cài lên điện thoại, soát vé khi mất mạng (C)
+
+## Chất lượng và vận hành
+
+Thứ tự đã chọn (17/11/2026): E2E → phòng chờ ảo → QR động.
+
+- [ ] **Test giao diện tự động bằng Playwright, chạy trong CI** (ưu tiên 1, đang làm): luồng đăng nhập, lọc trang chủ, đặt vé và thanh toán giả lập, soát vé, hồ sơ; job CI riêng dựng MySQL/Redis, server phục vụ bản build client, lưu báo cáo khi fail (C, Cl review)
+- [ ] Giám sát lỗi production (Sentry hoặc tương đương): lỗi tự báo kèm stack trace (C)
+- [ ] Môi trường staging hoặc bản xem trước cho từng PR, thử trên web thật trước khi merge (Cl)
+- [ ] Rate limit dùng chung qua Redis và refresh token, chuẩn bị chạy nhiều instance (C)
 
 ## Việc nhỏ còn treo
 
