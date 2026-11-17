@@ -10,6 +10,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 - **Không đọc nguyên** `PROJECT_NOTES.md` (~30k token) hay `TRICK.md`. Cần lý do thiết kế thì tìm mục bằng `grep -n '^##' PROJECT_NOTES.md` rồi chỉ đọc khoảng dòng đó. Hai file này có thể lệch với code: **lấy code làm chuẩn**.
 - Không commit, push hay tạo nhánh nếu người giao việc không yêu cầu. Chỉ sửa đúng các file được giao.
 - Không chạy test trên database thật hoặc TiDB production (xem mục Test).
+- `docs/DEVOPS-HOC-TAP.md` là sổ tay học CI/CD và deploy của chủ dự án (kèm sự cố đã gặp). Gặp sự cố CI/deploy mới đáng nhớ thì thêm một dòng vào mục 4 của file đó.
 
 ## Cần gì thì mở đâu
 
