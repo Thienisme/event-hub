@@ -20,7 +20,8 @@ Hướng dẫn deploy từng bước xem [`deploy/cloud/README.md`](cloud/README
 
 | Dịch vụ | Vai trò | Gói | Xem ở đâu |
 |---|---|---|---|
-| GitHub `Thienisme/event-hub` | Code, CI, keepalive | Free (repo public) | Tab **Actions** |
+| GitHub `Thienisme/event-hub` | Code, CI, keepalive dự phòng | Free (repo public) | Tab **Actions** |
+| UptimeRobot (đăng nhập bằng GitHub `Thienisme`) | Giữ Render thức, báo email khi web chết | Free, kiểm tra mỗi 5 phút | Dashboard → Monitoring → `eventhub-v3xy.onrender.com` |
 | Render: web service `eventhub` | Chạy image Docker (giao diện + API) | Free, 750 giờ/tháng | Dashboard → `eventhub` → Logs / Environment |
 | Render: Key Value `eventhub-redis` | Redis cho Redlock, cache | Free, 25MB, không lưu bền | Dashboard → `eventhub-redis` |
 | TiDB Cloud: cluster `Event-hub` | MySQL (tương thích) | Starter, free 5GB | SQL Editor, Networking |
@@ -60,16 +61,21 @@ Biến của GitHub (repo → Settings → Secrets and variables → Actions →
 
 | Biến | Giá trị | Dùng cho |
 |---|---|---|
-| `APP_URL` | `https://eventhub-v3xy.onrender.com` | Workflow `keepalive.yml` |
+| `APP_URL` | `https://eventhub-v3xy.onrender.com` | Workflow `keepalive.yml` (biến GitHub Actions, không phải biến Render) |
 
 ## 4. Luồng CI/CD
 
 ```
-Nhánh tính năng → mở PR → CI chạy 10 bộ test + build client
-    → CI xanh → merge vào main
+Nhánh tính năng → mở PR → CI chạy toàn bộ test tích hợp + build client (~3,5 phút)
+    → CI xanh (branch protection bắt buộc) → merge vào main
     → Render thấy commit mới trên main → build Dockerfile → prisma migrate deploy → thay bản đang chạy
-GitHub Actions "Keepalive" gọi /api/health mỗi 10 phút → Render free không ngủ
+UptimeRobot gọi /api/health mỗi 5 phút → Render free không ngủ, web chết thì gửi email
+GitHub Actions "Keepalive" (lịch 10 phút) → dự phòng
 ```
+
+- **Branch protection trên `main`:** phải qua PR, bắt buộc hai check `Server (typecheck + integration tests)` và `Client (build)` xanh, áp dụng cả admin, cấm force-push. Đổi tên job trong `ci.yml` thì sửa luôn tên check bắt buộc ở Settings → Branches, nếu không PR sẽ treo chờ check không tồn tại.
+- **Vì sao keepalive chính là UptimeRobot:** GitHub coi lịch `schedule` là việc ưu tiên thấp. Thực tế lịch 10 phút của `keepalive.yml` bị dồn thành 3–8 tiếng mới chạy một lần, nên Render vẫn ngủ. Workflow vẫn giữ làm dự phòng, không tốn gì.
+- **Giờ chạy Render:** giữ thức 24/7 tốn ~720–744 giờ/tháng, vừa với 750 giờ miễn phí khi chỉ có một web service.
 
 Workflow `deploy.yml` (build image lên GHCR, SSH vào VPS) vẫn giữ cho phương án VPS sau này;
 bước SSH tự bỏ qua khi chưa có secret `DEPLOY_HOST`.
@@ -121,7 +127,8 @@ Restore vào tên database trong DATABASE_URL được coi là production: bắt
 | Triệu chứng | Xem ở đâu | Nguyên nhân hay gặp |
 |---|---|---|
 | Deploy Failed | Render → `eventhub` → Logs, tìm dòng `Error` đầu tiên | `P1000 Authentication failed`: sai mật khẩu trong `DATABASE_URL` |
-| Web mở chậm khoảng 1 phút | Tab Actions → Keepalive | Web đang ngủ: keepalive chưa chạy hoặc thiếu biến `APP_URL` |
+| Web mở chậm khoảng 1 phút | UptimeRobot → Monitoring; sau đó tab Actions → Keepalive | Web đang ngủ: monitor UptimeRobot bị tạm dừng hoặc sai URL; keepalive dự phòng thiếu biến `APP_URL` |
+| Nhận email "Monitor is DOWN" từ UptimeRobot | Render → `eventhub` → Logs và Events | Deploy lỗi, hết giờ miễn phí trong tháng, hoặc TiDB/Redis không kết nối được |
 | Không có sự kiện nào | `/api/events` | Chưa seed (mục 5) |
 | Migration lỗi | Logs, ngay sau dòng `Applying migration` | Câu SQL TiDB chưa hỗ trợ |
 
@@ -131,4 +138,4 @@ Restore vào tên database trong DATABASE_URL được coi là production: bắt
 |---|---|
 | Oracle Cloud Always Free (VPS ARM) | Từ chối thẻ ảo khi đăng ký |
 | Máy nhà + Cloudflare Quick Tunnel | Link đổi mỗi lần khởi động lại; code vẫn giữ ở nhánh `feat/home-deploy` |
-| Vercel + Upstash + Cloudinary + UptimeRobot | Quá nhiều tài khoản; gộp lại thành Render + TiDB |
+| Vercel + Upstash + Cloudinary + UptimeRobot | Quá nhiều tài khoản; gộp lại thành Render + TiDB. Sau đó vẫn thêm UptimeRobot chỉ để giữ thức và báo lỗi, vì lịch của GitHub Actions chạy trễ |

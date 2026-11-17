@@ -168,7 +168,8 @@ Bảng đầy đủ các môi trường ở `deploy/ENVIRONMENTS.md`, các bư�
 
 - **Production demo: Render free + TiDB Cloud Starter + Render Key Value.** Một image từ `Dockerfile` ở gốc: Node phục vụ cả build Vue (`SERVE_CLIENT_DIR`) và `/api`, chạy `prisma migrate deploy` khi khởi động. Cấu hình trong `render.yaml` (Blueprint, Singapore), tự deploy khi push `main`.
 - Giữ **một web service duy nhất** (750 giờ miễn phí mỗi tháng) và image `linux/amd64`.
-- Render ngủ sau 15 phút không có request: `.github/workflows/keepalive.yml` ping `/api/health` mỗi 10 phút.
+- Render ngủ sau 15 phút không có request: UptimeRobot gọi `/api/health` mỗi 5 phút và báo email khi web chết; `.github/workflows/keepalive.yml` chỉ là dự phòng vì lịch của GitHub Actions hay chạy trễ hàng giờ.
+- `main` có branch protection: phải qua PR và hai check CI xanh. Đổi tên job trong `ci.yml` thì sửa cả tên check bắt buộc.
 - **TiDB có thể tắt `CHECK` constraint**, nên lớp chống bán quá số vé ở database có thể không có tác dụng. Chạy test trên TiDB trước khi khẳng định.
 - Backup và khôi phục: `deploy/cloud/backup-db.sh`, `deploy/cloud/restore-db.sh`. Chúng đọc `server/.env.render.local` mà không `source` file đó.
 - `deploy/*.sh`, `deploy/Caddyfile`, `deploy/docker-compose.deploy.yml` và `.github/workflows/deploy.yml` thuộc hướng VPS ARM64 trước đây, **không dùng cho Render**; `deploy.yml` chỉ chạy khi bấm tay.

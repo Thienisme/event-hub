@@ -104,7 +104,14 @@ unset DATABASE_URL SEED_DEMO_PASSWORD
 
 Chỉ seed sau khi migrate trên Render thành công. Script có thể đặt lại dữ liệu của organizer demo khi chạy lại; không chạy trên dữ liệu thật. Không dùng cờ purge. Tài khoản: `organizer@eventhub.demo`, `organizer2@eventhub.demo`, `khach@eventhub.demo`; mật khẩu là `SEED_DEMO_PASSWORD` vừa đặt. Kiểm tra có sự kiện, ảnh và thử đặt vé/thanh toán giả lập.
 
-## Bước 4 — Bật keepalive GitHub Actions
+## Bước 4 — Giữ Render thức bằng UptimeRobot
+
+1. Đăng nhập [UptimeRobot](https://uptimerobot.com/) (đăng nhập bằng GitHub được).
+2. Tạo monitor **HTTP(s)**, URL: `https://<tên-service>.onrender.com/api/health`.
+3. Monitor interval **5 minutes** (mức nhỏ nhất của gói miễn phí; phải dưới 15 phút thì Render mới không ngủ). Tích **E-mail** để nhận thư khi web chết.
+4. Sau 5–10 phút monitor phải hiện **Up**; Render Logs có `GET /api/health` lặp lại mỗi 5 phút.
+
+## Bước 4b — Keepalive GitHub Actions (dự phòng)
 
 1. Mở repo GitHub > **Settings > Secrets and variables > Actions**.
 2. Chọn tab **Variables > New repository variable**.
