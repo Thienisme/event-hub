@@ -27,6 +27,8 @@ export interface TicketType {
 export interface EventItem {
   queueEnabled?: boolean;
   queueActiveLimit?: number;
+  /** true = cổng soát vé chỉ nhận mã QR động, từ chối mã tĩnh */
+  dynamicQrOnly?: boolean;
   id: string;
   slug?: string;
   title: string;

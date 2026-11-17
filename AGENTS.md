@@ -115,6 +115,10 @@ Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không đượ
 - `POST /api/events/:id/check-in` `{ qrCode }`, trả `result`: `VALID` (200), `ALREADY_USED` (409, kèm `checkedInAt`), `NOT_FOUND` (404), `WRONG_EVENT` (409), `NOT_CONFIRMED` (409). `GET /api/events/:id/check-in/stats` đếm vé đã thanh toán và đã vào cổng.
 - Chỉ ORGANIZER của chính sự kiện hoặc ADMIN (`currentRole`). **Kiểm tra quyền trước khi tra mã QR** để người ngoài không dò được mã nào tồn tại.
 - **Chốt chặn quét trùng là `updateMany` có điều kiện `checkedInAt: null`**, ghi kèm `checkedInById`. Không đổi thành đọc rồi mới ghi. `test-checkin.cjs` bắn 20 request đồng thời cùng một mã và chỉ chấp nhận đúng 1 `VALID`.
+- QR động có dạng `EH1.<ticketId>.<step>.<sig>`; HMAC-SHA256 dùng UTF-8 của `ticket.qrCode` làm khoá, lấy 16 byte đầu rồi base64url.
+- Mỗi step dài 30 giây, nhận cửa sổ ±1 step theo đồng hồ server; `my-orders` trả `serverTime` để client bù lệch giờ.
+- `dynamicQrOnly` mặc định false nhận cả mã tĩnh và động; true chỉ nhận mã động.
+- Chữ ký đúng ngoài cửa sổ trả `QR_EXPIRED` (409); mã tĩnh đúng sự kiện chỉ nhận động trả `STATIC_QR_NOT_ALLOWED` (409). Chữ ký sai trả `NOT_FOUND`.
 
 ### Phòng chờ ảo
 

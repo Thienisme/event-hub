@@ -19,7 +19,7 @@ setZXingModuleOverrides({
   locateFile: (path: string, prefix: string) => (path.endsWith('.wasm') ? zxingWasmUrl : prefix + path),
 });
 
-type Result = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVENT' | 'NOT_CONFIRMED';
+type Result = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVENT' | 'NOT_CONFIRMED' | 'QR_EXPIRED' | 'STATIC_QR_NOT_ALLOWED';
 interface CheckInResponse {
   result?: Result;
   message: string;
@@ -133,6 +133,10 @@ function toggleCamera() {
   cameraEnabled.value = !cameraEnabled.value;
 }
 
+function isWarning(scan: CheckInResponse): boolean {
+  return scan.result === 'ALREADY_USED' || scan.result === 'QR_EXPIRED' || scan.result === 'STATIC_QR_NOT_ALLOWED';
+}
+
 function title(scan: CheckInResponse): string {
   switch (scan.result) {
     case 'VALID': return 'Hợp lệ – mời vào';
@@ -140,13 +144,15 @@ function title(scan: CheckInResponse): string {
     case 'NOT_FOUND': return 'Không tìm thấy vé';
     case 'WRONG_EVENT': return 'Vé không thuộc sự kiện này';
     case 'NOT_CONFIRMED': return 'Vé chưa được xác nhận';
+    case 'QR_EXPIRED': return 'Mã QR đã hết hạn – nhờ khách mở lại vé';
+    case 'STATIC_QR_NOT_ALLOWED': return 'Sự kiện chỉ nhận mã động – nhờ khách mở vé trên điện thoại';
     default: return 'Không thể kiểm tra vé';
   }
 }
 
 function resultClass(scan: CheckInResponse): string {
   if (scan.result === 'VALID') return 'border-success bg-success/10 text-foreground';
-  if (scan.result === 'ALREADY_USED') return 'border-warning bg-warning/10 text-foreground';
+  if (isWarning(scan)) return 'border-warning bg-warning/10 text-foreground';
   return 'border-danger bg-danger/10 text-foreground';
 }
 </script>
@@ -188,7 +194,7 @@ function resultClass(scan: CheckInResponse): string {
           <p v-if="submitting" role="status" class="font-medium">Đang kiểm tra vé...</p>
           <section aria-live="polite" aria-atomic="true">
             <Card v-if="latest" class="shadow-none ring-0 border border-border bg-background gap-3 rounded-lg p-6" :class="resultClass(latest)">
-              <h2 class="break-words text-2xl font-bold sm:text-3xl" :class="latest.result === 'VALID' ? 'text-success' : latest.result === 'ALREADY_USED' ? 'text-warning' : 'text-danger'">{{ title(latest) }}</h2>
+              <h2 class="break-words text-2xl font-bold sm:text-3xl" :class="latest.result === 'VALID' ? 'text-success' : isWarning(latest) ? 'text-warning' : 'text-danger'">{{ title(latest) }}</h2>
               <p class="break-words">{{ latest.message }}</p>
               <template v-if="latest.ticket">
                 <p v-if="latest.ticket.ticketTypeName" class="break-words text-lg font-semibold">Loại vé: {{ latest.ticket.ticketTypeName }}</p>
@@ -203,7 +209,7 @@ function resultClass(scan: CheckInResponse): string {
             <p v-if="!history.length" class="text-sm text-muted-foreground">Chưa có lượt kiểm tra nào.</p>
             <ol v-else class="space-y-3">
               <li v-for="scan in history" :key="scan.id" class="space-y-1 rounded-lg border p-3" :class="resultClass(scan)">
-                <p class="break-words font-semibold" :class="scan.result === 'VALID' ? 'text-success' : scan.result === 'ALREADY_USED' ? 'text-warning' : 'text-danger'">{{ title(scan) }}</p>
+                <p class="break-words font-semibold" :class="scan.result === 'VALID' ? 'text-success' : isWarning(scan) ? 'text-warning' : 'text-danger'">{{ title(scan) }}</p>
                 <p class="break-words text-sm">{{ scan.message }}</p>
                 <p v-if="scan.ticket" class="break-words text-sm">{{ scan.ticket.ticketTypeName }} · {{ scan.ticket.holderName }}<span v-if="scan.result === 'WRONG_EVENT'"> · {{ scan.ticket.eventTitle }}</span></p>
                 <p class="text-xs">{{ formatDateTime(scan.scannedAt) }}</p>

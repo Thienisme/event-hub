@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
-import QrCodeImage from '../components/QrCodeImage.vue';
+import DynamicTicketQr from '../components/DynamicTicketQr.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -173,16 +173,17 @@ const handleCancel = async () => {
 };
 
 /** Mã QR đang xem lớn trong hộp thoại. */
-const selectedQr = ref<{ qrCode: string; label: string; filename: string } | null>(null);
+const selectedQr = ref<{ ticketId: string; qrCode: string; label: string; dynamicQrOnly: boolean } | null>(null);
 
 const openQr = (order: Order, ticket: OrderTicket) => {
   if (!ticket.qrCode) return;
 
   const position = order.tickets.findIndex((item) => item.id === ticket.id) + 1;
   selectedQr.value = {
+    ticketId: ticket.id,
     qrCode: ticket.qrCode,
     label: `${ticket.ticketType?.name ?? 'Vé'} · Vé ${position}/${order.tickets.length}`,
-    filename: `eventhub-${order.id.slice(0, 8)}-ve-${position}.png`,
+    dynamicQrOnly: ticket.ticketType?.event?.dynamicQrOnly ?? false,
   };
 };
 
@@ -366,7 +367,7 @@ const copyOrderId = async (id: string) => {
                     <Badge variant="outline" class="mb-3 h-auto max-w-full whitespace-normal py-1 text-center leading-snug" :class="ticket.checkedInAt ? 'border-success/30 bg-success/10 text-success' : 'text-muted-foreground'">
                       {{ ticket.checkedInAt ? `Đã check-in lúc ${formatDateTime(ticket.checkedInAt)}` : 'Chưa check-in' }}
                     </Badge>
-                    <QrCodeImage v-if="ticket.qrCode" :value="ticket.qrCode" :size="132" />
+                    <DynamicTicketQr v-if="ticket.qrCode" :ticket-id="ticket.id" :qr-code="ticket.qrCode" :size="132" :offset-ms="orderStore.clockOffsetMs" />
                     <p v-else class="py-6 text-center text-xs text-muted-foreground">Chưa có mã QR</p>
                     <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
                   </div>
@@ -391,9 +392,12 @@ const copyOrderId = async (id: string) => {
     <Dialog :open="selectedQr !== null" @update:open="(open) => { if (!open) selectedQr = null; }">
       <DialogContent class="max-w-sm rounded-lg">
         <template v-if="selectedQr">
-          <DialogHeader><DialogTitle class="break-words pr-6">{{ selectedQr.label }}</DialogTitle><DialogDescription>Xuất trình mã QR này tại cổng soát vé.</DialogDescription></DialogHeader>
-          <QrCodeImage :value="selectedQr.qrCode" :size="288" :download-name="selectedQr.filename" />
-          <p class="break-all text-center text-xs text-muted-foreground">{{ selectedQr.qrCode }}</p>
+          <DialogHeader><DialogTitle class="break-words pr-6">{{ selectedQr.label }}</DialogTitle><DialogDescription>Mở màn hình này tại cổng, mã tự đổi mỗi 30 giây. Ảnh chụp màn hình sẽ không dùng được.</DialogDescription></DialogHeader>
+          <DynamicTicketQr :ticket-id="selectedQr.ticketId" :qr-code="selectedQr.qrCode" :size="288" :offset-ms="orderStore.clockOffsetMs" />
+          <div v-if="!selectedQr.dynamicQrOnly" class="space-y-1 text-center">
+            <p class="text-xs font-medium">Mã dự phòng (nhập tay tại cổng)</p>
+            <p class="break-all text-xs text-muted-foreground">{{ selectedQr.qrCode }}</p>
+          </div>
           <Button variant="outline" class="w-full" @click="selectedQr = null">Đóng</Button>
         </template>
       </DialogContent>

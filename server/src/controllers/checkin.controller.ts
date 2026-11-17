@@ -1,16 +1,19 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
+import { currentQrStep, parseDynamicQr, verifyDynamicQr } from '../utils/dynamicQr';
 import { AppError, handleControllerError } from '../utils/errors';
 
 /**
  * Kết quả soát vé. Client hiển thị theo `result`, không dựa vào message.
  *   VALID          200  vé hợp lệ, vừa được đánh dấu đã vào cổng
  *   ALREADY_USED   409  vé đã check-in trước đó (kèm thời điểm)
+ *   QR_EXPIRED    409  chữ ký đúng nhưng mã đã ngoài cửa sổ thời gian
+ *   STATIC_QR_NOT_ALLOWED 409 sự kiện chỉ nhận mã động
  *   NOT_FOUND      404  không có vé nào mang mã này
  *   WRONG_EVENT    409  vé có thật nhưng thuộc sự kiện khác
  *   NOT_CONFIRMED  409  đơn của vé chưa thanh toán (phòng xa: chỉ đơn CONFIRMED mới có QR)
  */
-export type CheckInResult = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVENT' | 'NOT_CONFIRMED';
+export type CheckInResult = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVENT' | 'NOT_CONFIRMED' | 'QR_EXPIRED' | 'STATIC_QR_NOT_ALLOWED';
 
 /**
  * Tải sự kiện và kiểm tra quyền soát vé: ORGANIZER của chính sự kiện, hoặc ADMIN.
@@ -22,7 +25,7 @@ export type CheckInResult = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVEN
 async function loadEventForStaff(req: Request) {
   const event = await prisma.event.findUnique({
     where: { id: req.params.id },
-    select: { id: true, title: true, organizerId: true },
+    select: { id: true, title: true, organizerId: true, dynamicQrOnly: true },
   });
 
   if (!event) throw new AppError('Không tìm thấy sự kiện!', 404);
@@ -36,6 +39,7 @@ async function loadEventForStaff(req: Request) {
 
 const TICKET_SELECT = {
   id: true,
+  qrCode: true,
   checkedInAt: true,
   ticketType: { select: { name: true, eventId: true, event: { select: { title: true } } } },
   order: { select: { status: true, user: { select: { fullName: true } } } },
@@ -57,10 +61,22 @@ export const checkInTicket = async (req: Request, res: Response) => {
     const event = await loadEventForStaff(req);
     const qrCode: string = req.body.qrCode;
 
-    const ticket = await prisma.ticket.findUnique({ where: { qrCode }, select: TICKET_SELECT });
+    const parsed = parseDynamicQr(qrCode);
+    const ticket = await prisma.ticket.findUnique({
+      where: parsed ? { id: parsed.ticketId } : { qrCode },
+      select: TICKET_SELECT,
+    });
 
-    if (!ticket) {
+    if (!ticket || (parsed && (!ticket.qrCode || !verifyDynamicQr(parsed, ticket.qrCode)))) {
       return res.status(404).json({ result: 'NOT_FOUND', message: 'Vé không tồn tại!' });
+    }
+
+    // Cửa sổ ±1 step chịu lệch đồng hồ và thời gian khách đứng chờ tại cổng.
+    if (parsed && Math.abs(Number(parsed.step) - currentQrStep()) > 1) {
+      return res.status(409).json({
+        result: 'QR_EXPIRED',
+        message: 'Mã QR đã hết hạn, nhờ khách mở lại vé trên điện thoại!',
+      });
     }
 
     if (ticket.ticketType.eventId !== event.id) {
@@ -77,6 +93,14 @@ export const checkInTicket = async (req: Request, res: Response) => {
       eventTitle: ticket.ticketType.event.title,
       holderName: ticket.order.user.fullName,
     };
+
+    if (!parsed && event.dynamicQrOnly) {
+      return res.status(409).json({
+        result: 'STATIC_QR_NOT_ALLOWED',
+        message: 'Sự kiện chỉ nhận mã QR động, nhờ khách mở vé trên điện thoại!',
+        ticket: info,
+      });
+    }
 
     if (ticket.order.status !== 'CONFIRMED') {
       return res.status(409).json({
