@@ -315,8 +315,9 @@ onUnmounted(() => {
             <PopoverTrigger as-child>
               <Button variant="outline" class="h-9 shrink-0 rounded-full bg-background"><SlidersHorizontal class="size-4" aria-hidden="true" />Bộ lọc<span v-if="activeFilterCount > 0" class="flex size-5 items-center justify-center rounded-full bg-primary text-xs tabular-nums text-primary-foreground" aria-label="Số bộ lọc đang bật">{{ activeFilterCount }}</span></Button>
             </PopoverTrigger>
-            <PopoverContent align="end" class="w-[22rem] max-w-[calc(100vw-2rem)] gap-0 p-0 shadow-none border border-border" aria-label="Bộ lọc sự kiện" @interact-outside="keepCalendarOpen">
-              <div class="max-h-[70dvh] overflow-y-auto divide-y divide-border">
+            <PopoverContent align="end" class="flex w-[22rem] max-w-[calc(100vw-2rem)] max-h-[min(80dvh,var(--reka-popover-content-available-height))] flex-col gap-0 p-0 shadow-none border border-border" aria-label="Bộ lọc sự kiện" @interact-outside="keepCalendarOpen">
+              <!-- Bảng co theo khoảng trống còn lại trên màn hình: phần giữa cuộn, hàng nút luôn hiện (màn hình thấp từng che mất "Xoá bộ lọc"). -->
+              <div class="min-h-0 flex-1 overflow-y-auto divide-y divide-border">
                 <div class="p-4 space-y-3">
                   <h3 class="text-sm font-semibold">Thời gian</h3>
                   <div class="flex flex-wrap gap-2" role="group" aria-label="Thời gian nhanh">
@@ -345,7 +346,7 @@ onUnmounted(() => {
                   <p v-if="priceInvalid" id="price-filter-error" role="alert" class="text-xs text-danger">Giá tối đa phải lớn hơn hoặc bằng giá tối thiểu.</p>
                 </div>
               </div>
-              <div class="flex justify-between border-t border-border p-4"><Button variant="ghost" @click="resetPanel">Xoá bộ lọc</Button><Button @click="filtersOpen = false">Xong</Button></div>
+              <div class="flex shrink-0 justify-between border-t border-border p-4"><Button variant="ghost" @click="resetPanel">Xoá bộ lọc</Button><Button @click="filtersOpen = false">Xong</Button></div>
             </PopoverContent>
           </Popover>
         </div>

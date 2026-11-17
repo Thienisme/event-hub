@@ -55,7 +55,7 @@ npm run dev
 npm run build                        # vue-tsc rồi vite build
 ```
 
-Không có linter. CI ở `.github/workflows/ci.yml` chạy trên pull request. Client chưa có test tự động.
+Không có linter. CI ở `.github/workflows/ci.yml` chạy trên pull request. Client có test E2E bằng Playwright (job CI riêng).
 
 ### Test
 
@@ -72,6 +72,15 @@ BASE_URL=http://localhost:5055/api npm run test:all   # server ở cổng khác
 - Trần 100 request/phút đọc từ `API_RATE_LIMIT_MAX` (mặc định 100). CI đặt `100000` để `run-all-tests.cjs` không phải chờ giữa các bộ; chạy test ở máy thì đặt biến này cho server tạm cũng nhanh hơn. Không đặt biến này trên production.
 - Bộ test mới cần thêm vào `SUITES` trong `run-all-tests.cjs` và `scripts` trong `package.json`.
 - `load-test*.js` chạy bằng k6. `oversell-*.cjs` tái hiện tranh chấp vé, không nằm trong `test:all`.
+
+### E2E client (Playwright)
+
+- Chỉ dùng database tạm, migrate rồi `cd server && npm run seed:demo`; server chạy `NODE_ENV=development` để bật MOCK. Không dùng database thật.
+- Chạy client dev ở 5173 và server ở 5000, rồi `cd client && E2E_API_URL=http://localhost:5000/api npm run test:e2e`. Client phải gọi đúng API server. Nếu server phục vụ cả client build: `E2E_BASE_URL=http://127.0.0.1:5000 npm run test:e2e`.
+- Dữ liệu: ba tài khoản demo, mật khẩu `E2E_PASSWORD` (mặc định `demo12345`, khớp `SEED_DEMO_PASSWORD` lúc seed). Mỗi test tự tạo đơn/QR cần dùng qua API; đổi hồ sơ phải khôi phục trong `finally`. Seed lại database tạm khi cần đặt lại tồn kho/đơn sau nhiều lượt chạy.
+- Selector ưu tiên `getByRole`, `getByLabel`, chữ tiếng Việt; không dựa vào class CSS. Chỉ thêm `data-testid` khi không có selector ổn định. Chạy tuần tự một worker vì dùng chung database.
+- Server phục vụ client build (`SERVE_CLIENT_DIR`) giữ sẵn `index.html` đã chèn thẻ OG cho `/events/:slug`: build lại client thì **khởi động lại server**, nếu không trang sự kiện trắng vì trỏ tới file JS cũ đã bị xoá.
+- `cd client && npx playwright test --list` chỉ liệt kê test, không cần server. Báo cáo trong `client/playwright-report/`, ảnh và trace trong `client/test-results/`.
 
 ## Kiến trúc
 
