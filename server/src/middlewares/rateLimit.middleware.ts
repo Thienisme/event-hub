@@ -1,12 +1,25 @@
 import rateLimit from 'express-rate-limit';
 
 /**
+ * Trần request/phút của `apiRateLimiter`, đọc từ `API_RATE_LIMIT_MAX`.
+ *
+ * Không đặt hoặc giá trị sai thì dùng 100 (giá trị production). CI đặt rất cao
+ * vì mọi bộ test gọi từ cùng một IP: với trần 100, `run-all-tests.cjs` phải
+ * đứng chờ cửa sổ 1 phút reset giữa các bộ test, CI mất ~8 phút chỉ để chờ.
+ * Các limiter còn lại (đăng nhập sai, admin, đặt vé...) giữ nguyên ở mọi môi trường.
+ */
+const parseApiRateLimitMax = (): number => {
+  const value = Number(process.env.API_RATE_LIMIT_MAX);
+  return Number.isSafeInteger(value) && value > 0 ? value : 100;
+};
+
+/**
  * Rate limiter chung cho toàn bộ API.
  * Ngăn chặn abuse và DDoS nhẹ.
  */
 export const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
-  max: 100, // tối đa 100 request/phút
+  max: parseApiRateLimitMax(), // mặc định 100 request/phút
   message: { message: 'Quá nhiều yêu cầu. Vui lòng giảm tốc độ gửi request.' },
   standardHeaders: true,
   legacyHeaders: false,
