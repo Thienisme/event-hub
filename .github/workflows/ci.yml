@@ -136,7 +136,9 @@ jobs:
 
   e2e:
     name: E2E (Playwright)
-    runs-on: ubuntu-latest
+    # Ghim bản Ubuntu: ubuntu-latest đã lên 26.04, Playwright 1.56 chưa cài được
+    # Chromium trên đó. Nâng Playwright thì thử bỏ ghim.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: client
