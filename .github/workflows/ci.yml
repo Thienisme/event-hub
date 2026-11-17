@@ -47,6 +47,9 @@ jobs:
       TZ: Asia/Ho_Chi_Minh
       BASE_URL: http://127.0.0.1:5000/api
       ORDER_SWEEP_INTERVAL_MS: "3600000"
+      # Mọi bộ test gọi từ 127.0.0.1: giữ trần 100 request/phút thì run-all-tests
+      # phải chờ cửa sổ rate limit reset giữa các bộ (~8 phút). Production vẫn là 100.
+      API_RATE_LIMIT_MAX: "100000"
       # Khoá giả cho cổng thanh toán: test tự ký callback bằng các khoá này, không gọi VNPay/MoMo thật.
       VNPAY_TMN_CODE: TESTTMN
       VNPAY_HASH_SECRET: testsecret

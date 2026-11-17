@@ -68,6 +68,7 @@ BASE_URL=http://localhost:5055/api npm run test:all   # server ở cổng khác
 
 - **Test ghi vào database mà `DATABASE_URL` trỏ tới.** Biến môi trường đã đặt sẵn được ưu tiên hơn `.env`, nên hãy trỏ sang MySQL tạm. `test-admin-race.cjs` tạm hạ quyền toàn bộ admin và chỉ chạy với host cục bộ, trừ khi đặt `ALLOW_DESTRUCTIVE_TESTS=true`.
 - Rate limit nằm trong RAM server (100 request/phút, 30 request admin/phút, 5 lần đăng nhập sai/phút). Chạy lặp sẽ nhận 429 dạng JSON `{ message }`, không phải bug: chờ khoảng 1 phút hoặc khởi động lại server.
+- Trần 100 request/phút đọc từ `API_RATE_LIMIT_MAX` (mặc định 100). CI đặt `100000` để `run-all-tests.cjs` không phải chờ giữa các bộ; chạy test ở máy thì đặt biến này cho server tạm cũng nhanh hơn. Không đặt biến này trên production.
 - Bộ test mới cần thêm vào `SUITES` trong `run-all-tests.cjs` và `scripts` trong `package.json`.
 - `load-test*.js` chạy bằng k6. `oversell-*.cjs` tái hiện tranh chấp vé, không nằm trong `test:all`.
 
