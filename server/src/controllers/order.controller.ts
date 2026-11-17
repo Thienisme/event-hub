@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Prisma, OrderStatus } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { notifyWaitlist, returnedQuantities } from '../utils/waitlistNotify';
+import { hasActivePass, releasePass } from '../utils/waitingRoom';
 import { redlock } from '../config/redis';
 import { markOrderConfirmed, emailConfirmedOrder } from '../payments/complete';
 import {
@@ -38,6 +39,15 @@ export const createOrder = async (req: Request, res: Response) => {
 
   let lock;
   try {
+    const queueTarget = await prisma.ticketType.findUnique({
+      where: { id: ticketTypeId },
+      select: { eventId: true, event: { select: { queueEnabled: true } } },
+    });
+    if (queueTarget?.event.queueEnabled && !await hasActivePass(queueTarget.eventId, userId)) {
+      return res.status(409).json({
+        message: 'Bạn cần xếp hàng trong phòng chờ trước khi đặt vé!', code: 'QUEUE_REQUIRED',
+      });
+    }
     // 1. Acquire Distributed Lock
     lock = await redlock.acquire([lockKey], ttl);
 
@@ -184,6 +194,11 @@ export const createOrder = async (req: Request, res: Response) => {
     await lock.release().catch(() => {});
     lock = undefined;
 
+    if (queueTarget?.event.queueEnabled) {
+      await releasePass(result.eventId, userId)
+        .catch(error => logUnexpectedError('createOrder:releasePass', error));
+    }
+
     // 4. Vô hiệu cache để giao diện thấy số vé mới nhất (O(1), xem utils/cache.ts).
     await invalidateEventCache(result.eventId);
 
@@ -244,7 +259,7 @@ export const MYOrders = async (req: Request, res: Response) => {
               ticketType: {
                 include: {
                   event: {
-                    select: { title: true, startTime: true, location: true, bannerUrl: true, slug: true, endTime: true, category: true },
+                    select: { title: true, startTime: true, location: true, bannerUrl: true, slug: true, endTime: true, category: true, queueEnabled: true, queueActiveLimit: true },
                   },
                 },
               },

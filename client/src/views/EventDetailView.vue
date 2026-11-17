@@ -5,6 +5,7 @@ import { useEventStore } from '../stores/event';
 import type { EventItem, TicketType } from '../stores/event';
 import { usePromoStore } from '@/stores/promo';
 import { bestOfferText, type Offer } from '@/utils/offers';
+import { useQueueStore, type QueueStatus } from '../stores/queue';
 import { useOrderStore } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { useWaitlistStore } from '../stores/waitlist';
@@ -31,6 +32,39 @@ const offers = ref<Offer[]>([]);
 const authStore = useAuthStore();
 const waitlistStore = useWaitlistStore();
 const toast = useToastStore();
+const queueStore = useQueueStore();
+const queueStatus = ref<QueueStatus | null>(null);
+const queueError = ref('');
+const queueChecking = ref(false);
+let queueRequest = 0;
+const queueActive = computed(() => queueStatus.value?.state === 'ACTIVE' && Date.parse(queueStatus.value.expiresAt) > now.value);
+const queueRemaining = computed(() => {
+  const seconds = queueStatus.value?.state === 'ACTIVE' ? Math.max(0, Math.ceil((Date.parse(queueStatus.value.expiresAt) - now.value) / 1000)) : 0;
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+});
+async function checkQueue() {
+  const version = ++queueRequest;
+  queueStatus.value = null;
+  queueError.value = '';
+  queueChecking.value = false;
+  const current = event.value;
+  if (!current?.queueEnabled || !authStore.isAuthenticated) return;
+  queueChecking.value = true;
+  try {
+    const result = await queueStore.status(current.id);
+    if (version === queueRequest && event.value?.id === current.id) queueStatus.value = result;
+  } catch (error: any) {
+    if (version === queueRequest) queueError.value = error.response?.data?.message || 'Không tải được trạng thái phòng chờ, vui lòng thử lại!';
+  } finally {
+    if (version === queueRequest) queueChecking.value = false;
+  }
+}
+function enterQueue() {
+  if (!event.value) return;
+  const target = { name: 'WaitingRoom', params: { id: event.value.id } };
+  void router.push(authStore.isAuthenticated ? target : { name: 'Login', query: { redirect: router.resolve(target).fullPath } });
+}
+
 
 const loadError = ref('');
 const errorMessage = ref('');
@@ -52,6 +86,7 @@ const deleteError = ref('');
 const event = ref<EventItem | null>(null);
 const isLoading = ref(false);
 const now = ref(Date.now());
+watch(() => [event.value?.id, event.value?.queueEnabled, authStore.isAuthenticated, route.query.queuePass], () => void checkQueue());
 const saleTimer = setInterval(() => { now.value = Date.now(); }, 1000);
 const saleLabel = (ticket: TicketType) => {
   if (ticket.saleStart && new Date(ticket.saleStart).getTime() > now.value) return `Mở bán lúc ${formatDateTime(ticket.saleStart)}`;
@@ -222,6 +257,7 @@ watch(
 
 onUnmounted(() => {
   eventAbort?.abort();
+  queueRequest++;
   clearInterval(saleTimer);
   ticketObserver?.disconnect();
 });
@@ -277,6 +313,11 @@ const handleBook = async (ticket: TicketType) => {
     router.push({ name: 'Checkout', params: { orderId: order.id } });
   } catch (error: any) {
     const status = error.response?.status;
+    if (status === 409 && error.response?.data?.code === 'QUEUE_REQUIRED') {
+      queueStatus.value = null;
+      enterQueue();
+      return;
+    }
 
     // Token hết hạn/hỏng: dọn state rồi bắt đăng nhập lại.
     // Lưu ý: interceptor của axios đã báo 401 cho main.ts xử lý (điều hướng
@@ -415,7 +456,14 @@ const handleDelete = async () => {
         <aside id="ticket-selection" ref="ticketSection" class="min-w-0 scroll-mt-20 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
           <Card class="shadow-none ring-0 border border-border bg-background gap-0 overflow-hidden rounded-lg py-0">
             <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-tone-ink" />Chọn loại vé</CardTitle><p class="mt-2 text-sm leading-6 text-muted-foreground">Chọn số lượng, đặt vé rồi thanh toán để nhận mã QR.</p></CardHeader>
-            <CardContent class="space-y-4 p-5 sm:p-6">
+            <CardContent v-if="event.queueEnabled && !queueActive" class="space-y-4 p-5 sm:p-6">
+              <p class="text-sm leading-6">Sự kiện đang có nhiều người mua. Vui lòng vào phòng chờ</p>
+              <p v-if="queueChecking" role="status" class="text-sm text-muted-foreground">Đang kiểm tra lượt mua…</p>
+              <p v-if="queueError" role="status" class="text-sm text-danger">{{ queueError }}</p>
+              <Button class="w-full" :disabled="queueChecking" @click="enterQueue">Vào phòng chờ</Button>
+            </CardContent>
+            <CardContent v-else class="space-y-4 p-5 sm:p-6">
+              <p v-if="event.queueEnabled && queueActive" role="status" class="rounded-md bg-success/10 px-3 py-2 text-sm font-medium tabular-nums text-success">Đến lượt bạn! Còn {{ queueRemaining }} để đặt vé</p>
               <AppAlert :message="errorMessage" type="error" />
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
               <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
@@ -457,7 +505,7 @@ const handleDelete = async () => {
         </aside>
       </div>
     </div>
-    <div v-if="event && !isLoading && !loadError && !isEnded && saleableTickets.length && !ticketSectionVisible" class="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+    <div v-if="event && !isLoading && !loadError && !isEnded && (!event.queueEnabled || queueActive) && saleableTickets.length && !ticketSectionVisible" class="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
         <p class="text-sm text-muted-foreground">Từ <span class="text-brand font-semibold tabular-nums">{{ lowestPrice === 0 ? 'Miễn phí' : formatPrice(lowestPrice) }}</span></p>
         <Button class="bg-brand text-brand-foreground hover:bg-brand/90" aria-controls="ticket-selection" @click="scrollToTickets">Chọn vé</Button>

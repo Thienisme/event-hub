@@ -27,6 +27,12 @@ const router = createRouter({
       component: () => import('@/views/EventDetailView.vue'),
     },
     {
+      path: '/events/:id/queue',
+      name: 'WaitingRoom',
+      component: () => import('@/views/WaitingRoomView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/events/create',
       name: 'CreateEvent',
       component: () => import('@/views/EventFormView.vue'),

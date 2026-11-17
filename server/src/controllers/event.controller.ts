@@ -58,7 +58,7 @@ const deleteReleasedOrdersOf = async (
 // 1. Tạo sự kiện mới
 export const createEvent = async (req: Request, res: Response) => {
   try {
-    const { title, description, location, category, bannerUrl, startTime, endTime, ticketTypes } = req.body;
+    const { title, description, location, category, queueEnabled, queueActiveLimit, bannerUrl, startTime, endTime, ticketTypes } = req.body;
     const organizerId = req.user?.userId;
 
     if (!organizerId) {
@@ -76,6 +76,8 @@ export const createEvent = async (req: Request, res: Response) => {
         description,
         location,
         category,
+        queueEnabled,
+        queueActiveLimit,
         bannerUrl,
         startTime: new Date(startTime),
         endTime: new Date(endTime),
@@ -277,7 +279,7 @@ export const getEventById = async (req: Request, res: Response) => {
 export const updateEvent = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { title, description, location, category, bannerUrl, startTime, endTime } = req.body;
+    const { title, description, location, category, queueEnabled, queueActiveLimit, bannerUrl, startTime, endTime } = req.body;
 
     // `undefined` (client không gửi) = KHÔNG đụng tới loại vé.
     // Mảng rỗng `[]` = người dùng đã xoá hết loại vé -> reconcile thật sự.
@@ -411,6 +413,8 @@ export const updateEvent = async (req: Request, res: Response) => {
           description,
           location,
           category,
+          queueEnabled,
+          queueActiveLimit,
           bannerUrl,
           startTime: new Date(startTime),
           endTime: new Date(endTime),

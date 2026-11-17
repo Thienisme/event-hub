@@ -361,6 +361,8 @@ export const listAllEvents = async (req: Request, res: Response) => {
         select: {
           id: true,
           title: true,
+          queueEnabled: true,
+          queueActiveLimit: true,
           location: true,
           startTime: true,
           endTime: true,
