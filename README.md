@@ -2,36 +2,51 @@
 
 Hệ thống bán vé sự kiện full-stack, tập trung vào bài toán khó nhất của lĩnh vực này: **không bán quá số vé khi nhiều người cùng mua một lúc**.
 
-> **Trạng thái:** dự án học tập, chưa sẵn sàng cho production. Thanh toán hiện là **giả lập** và mặc định tắt ở production; giao diện đã có nút thanh toán giả lập, huỷ đơn và xem mã QR. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
+**Demo:** https://eventhub-v3xy.onrender.com · tài khoản thử ở mục [Dữ liệu demo](#dữ-liệu-demo).
+
+> **Trạng thái:** dự án học tập. Thanh toán VNPay/MoMo chạy ở chế độ **sandbox**, demo còn bật thêm nút thanh toán giả lập. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại).
 
 ## Tính năng
 
 **Khách hàng**
-- Đăng ký, đăng nhập bằng JWT
-- Xem và tìm kiếm sự kiện có phân trang
-- Đặt vé, giữ chỗ 10 phút, xem lại đơn của mình (có đếm ngược)
-- Thanh toán giả lập, huỷ đơn đang giữ chỗ, xem mã QR của từng vé
+- Đăng ký, đăng nhập JWT; xác minh email, quên và đặt lại mật khẩu qua email
+- Trang hồ sơ: đổi tên, ảnh đại diện, đổi mật khẩu (mọi phiên đăng nhập cũ bị đăng xuất ngay)
+- Khám phá sự kiện: mục nổi bật, tìm kiếm, lọc theo danh mục, thành phố, khoảng ngày, khoảng giá; bộ lọc nằm trên URL nên chia sẻ được
+- Trang sự kiện có link dạng chữ (slug), ảnh xem trước khi chia sẻ, thêm vào lịch, thời gian mở bán
+- Đặt vé giữ chỗ 10 phút, trang thanh toán riêng có đồng hồ đếm ngược
+- Thanh toán **VNPay, MoMo** (sandbox) hoặc giả lập; áp **mã giảm giá**
+- Email vé sau khi thanh toán, email nhắc lịch trước sự kiện 24 giờ
+- Hết vé thì vào **danh sách chờ**, có vé trả về thì được báo email
+- "Vé của tôi": mã QR từng vé, trạng thái đã check-in
 
 **Nhà tổ chức**
-- Tạo, sửa, xoá sự kiện với nhiều loại vé
-- Tải ảnh banner lên (kéo thả, xem trước; JPG/PNG/WEBP tối đa 5MB) hoặc dán URL ảnh
-- Xem thống kê sự kiện của mình
+- Tạo, sửa, xoá sự kiện nhiều loại vé, chọn danh mục, tải banner (kéo thả, ảnh được làm sạch và nén WEBP)
+- Tạo mã giảm giá (phần trăm hoặc số tiền, giới hạn lượt, công khai hoặc ẩn)
+- **Soát vé ở cổng bằng camera quét QR** (có ô nhập mã tay dự phòng), thống kê số người đã vào
+- Thống kê doanh thu và số vé đã bán của sự kiện mình
 
 **Quản trị viên**
-- Xem tổng quan hệ thống
+- Tổng quan hệ thống, danh sách sự kiện
 - Đổi vai trò, khoá và mở khoá tài khoản, có hiệu lực ở request kế tiếp
-- Xem nhật ký thao tác quản trị
+- Nhật ký thao tác quản trị
 
 ## Điểm kỹ thuật chính
 
+Mỗi chốt chặn dưới đây có bộ test tích hợp riêng; nhiều bộ đã được kiểm chứng bằng cách tạm gỡ chốt chặn để chắc test bắt được lỗi.
+
 | Bài toán | Cách giải quyết | Mã nguồn |
 |---|---|---|
-| Bán quá số vé | `UPDATE` có điều kiện trong transaction, Redlock, và `CHECK` ở database | `server/src/controllers/order.controller.ts` |
-| Đơn hết hạn | Job nền trả vé trong transaction, an toàn khi chạy nhiều instance | `server/src/jobs/expireOrders.job.ts` |
-| Vòng đời đơn | `updateMany` có điều kiện khi confirm/cancel, hạn mức theo tài khoản, mã QR từng vé | `server/src/controllers/order.controller.ts` |
-| Tải đọc cao | Cache có version, single-flight, tự chuyển sang database khi Redis lỗi | `server/src/utils/cache.ts` |
-| Thu hồi quyền | Đọc role từ database (cache 30 giây, xoá ngay khi đổi quyền), không tin role trong JWT | `server/src/middlewares/auth.middleware.ts` |
-| Mất admin cuối cùng | `SELECT ... FOR UPDATE` trong transaction | `server/src/controllers/admin.controller.ts` |
+| Bán quá số vé khi nhiều người mua cùng lúc | `UPDATE` có điều kiện trong transaction, Redlock bên ngoài, `CHECK` ở database | `server/src/controllers/order.controller.ts` |
+| Vòng đời đơn (xác nhận, huỷ, hết hạn, thanh toán) | Mỗi đường đổi trạng thái là `updateMany` có điều kiện, nên chỉ một đường thắng; job hết hạn trả vé trong transaction | `server/src/controllers/order.controller.ts`, `server/src/jobs/expireOrders.job.ts` |
+| Thanh toán bị gọi lại nhiều lần hoặc giả mạo | Khoá dòng thanh toán `FOR UPDATE`, so số tiền với lúc tạo, kiểm chữ ký bằng `timingSafeEqual`; tiền về khi đơn đã huỷ thì đánh dấu cần hoàn tiền | `server/src/payments/`, [`docs/PAYMENTS.md`](docs/PAYMENTS.md) |
+| Mã giảm giá bị dùng vượt lượt | Chiếm lượt bằng `UPDATE` có điều kiện, trả lượt trong cùng transaction khi huỷ hoặc hết hạn | `server/src/utils/orderInventory.ts` |
+| Một vé bị quét hai lần ở cổng | `updateMany` có điều kiện "chưa check-in"; 20 lượt quét đồng thời chỉ 1 lượt hợp lệ | `server/src/controllers/checkin.controller.ts` |
+| Token cũ còn dùng được sau khi đổi mật khẩu | `tokenVersion` trong JWT, thu hồi mọi phiên ngay | `server/src/middlewares/auth.middleware.ts` |
+| Quyền cũ nằm trong token sau khi bị hạ quyền | Đọc role từ database (cache 30 giây, xoá ngay khi đổi quyền), không tin role trong JWT | `server/src/utils/userState.ts` |
+| Mất admin cuối cùng | `SELECT ... FOR UPDATE` các dòng admin trong transaction, thử lại khi deadlock | `server/src/controllers/admin.controller.ts` |
+| Tải đọc cao | Cache Redis có version (khoá gồm mọi bộ lọc), single-flight, Redis lỗi thì đọc thẳng database | `server/src/utils/cache.ts` |
+| Ảnh tải lên độc hại | Nhận diện bằng magic bytes, giải mã và encode lại, bỏ metadata, chống pixel bomb | `server/src/utils/storage.ts` |
+| Email gửi trùng khi chạy nhiều instance | Chiếm lượt gửi bằng `updateMany` có điều kiện trước khi gửi | `server/src/jobs/eventReminder.job.ts`, `server/src/utils/waitlistNotify.ts` |
 
 Phân tích chi tiết và các bug đã gặp nằm trong [`PROJECT_NOTES.md`](PROJECT_NOTES.md).
 
@@ -42,7 +57,8 @@ Phân tích chi tiết và các bug đã gặp nằm trong [`PROJECT_NOTES.md`](
 | Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, Tailwind CSS, Axios |
 | Backend | Node.js, Express, TypeScript, Prisma, Zod, JWT |
 | Dữ liệu | MySQL 8, Redis 7 (cache và Redlock) |
-| Hạ tầng | Docker Compose cho dev; Dockerfile multi-stage và GitHub Actions cho CI |
+| Thanh toán, email | VNPay, MoMo (sandbox), Brevo |
+| Hạ tầng | Docker Compose cho dev; Dockerfile multi-stage; GitHub Actions (CI); Render + TiDB Cloud (production); UptimeRobot (giám sát) |
 
 ## Cấu trúc thư mục
 
@@ -60,15 +76,18 @@ event-hub/
 │   ├── src/
 │   │   ├── config/
 │   │   ├── controllers/
-│   │   ├── jobs/           # Job trả vé của đơn hết hạn
+│   │   ├── jobs/           # Trả vé đơn hết hạn, email nhắc lịch
 │   │   ├── middlewares/
+│   │   ├── payments/       # VNPay, MoMo, xác nhận đơn sau khi trả tiền
 │   │   ├── routes/
 │   │   └── utils/
 │   ├── test-*.cjs          # Test tích hợp, cần server đang chạy
 │   └── load-test*.js       # Load test bằng k6
+├── docs/                   # Thanh toán, lộ trình, sổ tay DevOps
+├── deploy/                 # Render + TiDB, backup và khôi phục
 ├── docker-compose.yml      # MySQL và Redis cho môi trường dev
 ├── docker-compose.prod.yml # MySQL, Redis, migrate, API và client nginx
-└── .github/workflows/ci.yml
+└── .github/workflows/      # ci.yml, keepalive.yml, deploy.yml (VPS cũ)
 ```
 
 ## Cài đặt
@@ -128,7 +147,9 @@ npm run test:all   # terminal 2
 
 Server chạy ở cổng khác thì đặt `BASE_URL`, ví dụ `BASE_URL=http://localhost:5055/api npm run test:all`.
 
-`npm run test:all` chạy 10 bộ test tích hợp. GitHub Actions chạy lại toàn bộ trên mỗi pull request; client mới chỉ được build, chưa có test tự động.
+`npm run test:all` chạy 20 bộ test tích hợp (đặt vé, thanh toán, mã giảm giá, soát vé, bảo mật JWT, tranh chấp quyền admin...). Server dùng để test nên chạy với `API_RATE_LIMIT_MAX=100000`, nếu không script phải chờ rate limit giữa các bộ.
+
+GitHub Actions chạy toàn bộ trên mỗi pull request với MySQL và Redis thật (khoảng 3,5 phút). `main` có branch protection: CI chưa xanh thì không merge được, và merge vào `main` thì Render tự deploy. Client mới chỉ được build, chưa có test tự động.
 
 ## Chạy bằng Docker (production)
 
@@ -168,12 +189,16 @@ Tài khoản demo (mật khẩu mặc định `demo12345`, tuỳ chỉnh qua `SE
 
 ## Giới hạn hiện tại
 
-- Thanh toán mới là giả lập; chưa tích hợp VNPay/MoMo, chưa soát vé bằng QR và chưa huỷ được đơn đã thanh toán (không hoàn tiền).
-- Chưa có xác thực email, đặt lại mật khẩu và refresh token.
-- Hạn mức 100 vé mỗi sự kiện cho mỗi tài khoản (`MAX_TICKETS_PER_USER_PER_EVENT`), nên vẫn lách được bằng nhiều tài khoản.
+- VNPay và MoMo mới chạy sandbox; đơn đã thanh toán chưa huỷ được, tiền về sau khi đơn hết hạn chỉ được đánh dấu cần hoàn tiền (chưa có luồng hoàn tiền).
+- Mỗi đơn chỉ một loại vé; chưa chọn ghế, chưa chuyển nhượng vé.
+- Chưa có refresh token: phiên đăng nhập là JWT sống 1 ngày.
+- Hạn mức 100 vé mỗi sự kiện cho mỗi tài khoản (`MAX_TICKETS_PER_USER_PER_EVENT`), vẫn lách được bằng nhiều tài khoản.
 - Rate limit lưu trong RAM, chưa dùng chung được khi chạy nhiều instance. Đã hỗ trợ `TRUST_PROXY` khi chạy sau reverse proxy.
-- Client chưa có test tự động; CI mới build client.
-- Ảnh banner lưu trên đĩa của server: chưa dọn ảnh không còn sự kiện nào dùng, và chưa chạy được nhiều instance server (cần chuyển sang S3/MinIO, chỉ phải sửa `server/src/utils/storage.ts`).
+- TiDB có thể tắt `CHECK` constraint, nên trên production lớp chống bán quá vé ở database có thể không có tác dụng (chốt chặn chính ở code vẫn còn).
+- Render free ngủ khi không có truy cập; UptimeRobot giữ thức nhưng không bảo đảm uptime.
+- Client chưa có test tự động.
+
+Các việc tiếp theo nằm trong [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Giấy phép
 
