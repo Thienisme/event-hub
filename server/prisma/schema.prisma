@@ -100,6 +100,8 @@ model Event {
   // Mô tả sự kiện là nội dung dài, không có lý do gì cắt cụt ở 191 ký tự.
   description String?  @db.Text
   location    String   @db.VarChar(255)
+  queueEnabled Boolean @default(false)
+  queueActiveLimit Int @default(100)
   category    EventCategory @default(OTHER)
   bannerUrl   String?  @db.VarChar(500)
   startTime   DateTime

@@ -75,6 +75,8 @@ const LIMITS = {
   MAX_ORDER_AMOUNT: 9_999_999_999.99,
 } as const;
 
+const queueEnabled = ref(false);
+const queueActiveLimit = ref(100);
 const category = ref<EventCategory>('OTHER');
 const title = ref('');
 const description = ref('');
@@ -99,6 +101,8 @@ let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Xoá sạch form trước khi nạp sự kiện khác, tránh để lại dữ liệu cũ. */
 const resetForm = () => {
+  queueEnabled.value = false;
+  queueActiveLimit.value = 100;
   category.value = 'OTHER';
   title.value = '';
   description.value = '';
@@ -116,6 +120,8 @@ const loadEventForEdit = async (id: string) => {
   try {
     const event = await eventStore.fetchEventById(id);
     if (event) {
+      queueEnabled.value = event.queueEnabled ?? false;
+      queueActiveLimit.value = event.queueActiveLimit ?? 100;
       category.value = event.category || 'OTHER';
       title.value = event.title;
       description.value = event.description || '';
@@ -196,6 +202,10 @@ const removeTicketType = (index: number) => {
 };
 
 const handleSubmit = async () => {
+  if (!Number.isInteger(queueActiveLimit.value) || queueActiveLimit.value < 1 || queueActiveLimit.value > 10000) {
+    errorMessage.value = 'Số người được mua cùng lúc phải là số nguyên từ 1 đến 10000!';
+    return;
+  }
   if (!category.value || !title.value || !location.value || !startTime.value || !endTime.value) {
     errorMessage.value = 'Vui lòng nhập đầy đủ các trường bắt buộc!';
     return;
@@ -232,6 +242,8 @@ const handleSubmit = async () => {
   successMessage.value = '';
 
   const payload = {
+    queueEnabled: queueEnabled.value,
+    queueActiveLimit: queueActiveLimit.value,
     category: category.value,
     title: title.value,
     description: description.value || null,
@@ -378,6 +390,18 @@ onUnmounted(() => {
                 </div>
               </div>
               <Button type="button" variant="outline" @click="addTicketType"><Plus aria-hidden="true" />Thêm loại vé</Button>
+            </section>
+            <Separator />
+            <section class="space-y-4" aria-labelledby="queue-settings-title">
+              <h2 id="queue-settings-title" class="text-xl font-bold tracking-tight">Phòng chờ</h2>
+              <div class="flex items-start gap-3">
+                <input id="queue-enabled" v-model="queueEnabled" type="checkbox" class="mt-1 size-4 accent-primary" />
+                <Label for="queue-enabled" class="leading-6">Bật phòng chờ cho sự kiện đông người mua</Label>
+              </div>
+              <div v-if="queueEnabled" class="space-y-2">
+                <Label for="queue-active-limit">Số người được mua cùng lúc</Label>
+                <Input id="queue-active-limit" v-model.number="queueActiveLimit" type="number" min="1" max="10000" step="1" required />
+              </div>
             </section>
             <Separator />
             <Button type="submit" size="lg" class="w-full" :disabled="isLoading || isLoadingEvent || isUploadingBanner">

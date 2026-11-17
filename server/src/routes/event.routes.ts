@@ -8,7 +8,12 @@ import { listPromoCodes, createPromoCode, getEventOffers } from '../controllers/
 
 import { getMyWaitlist } from '../controllers/waitlist.controller';
 
+import { joinEventQueue, getMyQueueStatus, leaveEventQueue } from '../controllers/queue.controller';
+
 const router = Router();
+router.post('/:id/queue', authenticate, joinEventQueue);
+router.get('/:id/queue/me', authenticate, getMyQueueStatus);
+router.delete('/:id/queue', authenticate, leaveEventQueue);
 router.get('/:id/waitlist/me', authenticate, getMyWaitlist);
 router.get('/:id/promo-codes', authenticate, authorize('ORGANIZER', 'ADMIN'), listPromoCodes);
 router.post('/:id/promo-codes', authenticate, authorize('ORGANIZER', 'ADMIN'), validateBody(createPromoSchema), createPromoCode);

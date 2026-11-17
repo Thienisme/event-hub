@@ -20,6 +20,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Email vé, nhắc lịch | `server/src/utils/ticketEmail.ts`, `server/src/jobs/eventReminder.job.ts`, `server/test-ticket-email.cjs` |
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
 | Thanh toán VNPay/MoMo, mã giảm giá, danh sách chờ | `docs/PAYMENTS.md` (luồng, chốt chặn, cách test), `server/src/payments/`, `server/src/controllers/payment.controller.ts` |
+| Phòng chờ ảo | `docs/WAITING-ROOM.md`, `server/src/utils/waitingRoom.ts`, `server/src/controllers/queue.controller.ts`, `server/test-waiting-room.cjs` |
 | Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Danh mục, bộ lọc danh sách sự kiện | `server/src/utils/eventFilters.ts`, `client/src/utils/categories.ts`, `client/src/views/HomeView.vue` |
@@ -114,6 +115,13 @@ Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không đượ
 - `POST /api/events/:id/check-in` `{ qrCode }`, trả `result`: `VALID` (200), `ALREADY_USED` (409, kèm `checkedInAt`), `NOT_FOUND` (404), `WRONG_EVENT` (409), `NOT_CONFIRMED` (409). `GET /api/events/:id/check-in/stats` đếm vé đã thanh toán và đã vào cổng.
 - Chỉ ORGANIZER của chính sự kiện hoặc ADMIN (`currentRole`). **Kiểm tra quyền trước khi tra mã QR** để người ngoài không dò được mã nào tồn tại.
 - **Chốt chặn quét trùng là `updateMany` có điều kiện `checkedInAt: null`**, ghi kèm `checkedInById`. Không đổi thành đọc rồi mới ghi. `test-checkin.cjs` bắn 20 request đồng thời cùng một mã và chỉ chấp nhận đúng 1 `VALID`.
+
+### Phòng chờ ảo
+
+- Cấp lượt bằng Lua nguyên khối, lấy giờ từ Redis TIME; không tách đọc/ghi thành lệnh JS vì có thể cấp quá giới hạn.
+- Cửa trong `createOrder` trước Redlock yêu cầu ACTIVE còn hạn cho sự kiện bật phòng chờ; thiếu lượt trả 409 `QUEUE_REQUIRED`, lỗi Redis trả 503.
+- Chỉ trả lượt sau khi transaction tạo đơn thành công; lỗi trả lượt chỉ log, không làm hỏng đơn đã tạo.
+- Dùng `redisClient`, không dùng `cacheClient`; sự kiện tắt phòng chờ không truy cập Redis phòng chờ.
 
 ### Cache và Redis
 

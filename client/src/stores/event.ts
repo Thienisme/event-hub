@@ -25,6 +25,8 @@ export interface TicketType {
 }
 
 export interface EventItem {
+  queueEnabled?: boolean;
+  queueActiveLimit?: number;
   id: string;
   slug?: string;
   title: string;
