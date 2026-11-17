@@ -133,3 +133,142 @@ jobs:
 
       - name: Build client
         run: npm run build
+
+  e2e:
+    name: E2E (Playwright)
+    # Ghim bản Ubuntu: ubuntu-latest đã lên 26.04, Playwright 1.56 chưa cài được
+    # Chromium trên đó. Nâng Playwright thì thử bỏ ghim.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: client
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: eventhub_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
+
+    env:
+      # Giá trị giả, chỉ dùng trong CI. JWT_SECRET phải >= 32 ký tự.
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/eventhub_test
+      JWT_SECRET: ci-only-secret-khong-dung-cho-production-0123456789abcdef
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      MAIL_DRIVER: log
+      MAIL_OUTBOX_DIR: /tmp/eventhub-mail-outbox
+      NODE_ENV: development
+      TZ: Asia/Ho_Chi_Minh
+      BASE_URL: http://127.0.0.1:5000/api
+      ORDER_SWEEP_INTERVAL_MS: "3600000"
+      # Mọi bộ test gọi từ 127.0.0.1: giữ trần 100 request/phút thì run-all-tests
+      # phải chờ cửa sổ rate limit reset giữa các bộ (~8 phút). Production vẫn là 100.
+      API_RATE_LIMIT_MAX: "100000"
+      # Khoá giả cho cổng thanh toán: test tự ký callback bằng các khoá này, không gọi VNPay/MoMo thật.
+      VNPAY_TMN_CODE: TESTTMN
+      VNPAY_HASH_SECRET: testsecret
+      MOMO_PARTNER_CODE: MOMO
+      MOMO_ACCESS_KEY: testaccess
+      MOMO_SECRET_KEY: testmomosecret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Cài dependency server
+        working-directory: server
+        run: npm ci
+
+      - name: Áp dụng migration
+        working-directory: server
+        run: npx prisma migrate deploy
+
+      # Database riêng của job, seed lại đầy đủ tài khoản và sự kiện demo.
+      - name: Tạo dữ liệu demo
+        working-directory: server
+        run: npm run seed:demo
+
+      - name: Build server
+        working-directory: server
+        run: npm run build
+
+      - name: Cài dependency client
+        run: npm ci
+
+      # Node phục vụ cả client và API cùng origin, không cần Vite dev server.
+      - name: Build client
+        env:
+          VITE_API_BASE_URL: /api
+        run: npm run build
+
+      - name: Khởi động server và chờ sẵn sàng
+        working-directory: server
+        run: |
+          SERVE_CLIENT_DIR="$GITHUB_WORKSPACE/client/dist" node dist/app.js > /tmp/eventhub-e2e-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS "$BASE_URL/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/eventhub-e2e-server.log
+          exit 1
+
+      # Đổi cache khi phiên bản khoá trong lockfile thay đổi.
+      - name: Lấy phiên bản Playwright
+        id: playwright-version
+        run: node -p '"version=" + JSON.parse(require("node:fs").readFileSync("package-lock.json", "utf8")).packages["node_modules/@playwright/test"].version' >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
+
+      # Luôn cài thư viện hệ thống, kể cả khi binary Chromium đã có trong cache.
+      - name: Chuẩn bị Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Chạy E2E
+        env:
+          E2E_BASE_URL: http://127.0.0.1:5000
+        run: npm run test:e2e
+
+      - name: Lưu báo cáo khi lỗi
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            client/playwright-report/
+            client/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: In log server khi lỗi
+        if: failure()
+        run: cat /tmp/eventhub-e2e-server.log || true
