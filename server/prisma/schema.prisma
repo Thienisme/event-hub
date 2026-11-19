@@ -57,6 +57,9 @@ model User {
   orders    Order[]
   auditLogs AdminAuditLog[] @relation("AuditActor")
   checkedInTickets Ticket[] @relation("TicketCheckedInBy")
+  heldTickets      Ticket[] @relation("TicketHolder")
+  transfersSent     TicketTransfer[] @relation("TransferFrom")
+  transfersReceived TicketTransfer[] @relation("TransferTo")
 
   @@index([role])
   @@index([isActive])
@@ -177,15 +180,39 @@ model Ticket {
   checkedInAt  DateTime?
   // Người quét vé. SetNull: xoá tài khoản nhân viên không được làm mất lịch sử soát vé.
   checkedInById String?
+  // Người đang giữ vé sau khi được chuyển nhượng. NULL = người mua (order.userId).
+  // Chỉ đổi bằng `updateMany` có điều kiện qrCode + holderId cũ (xem ticket.controller).
+  holderId      String?
   createdAt    DateTime   @default(now())
 
   order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
   checkedInBy  User?      @relation("TicketCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  holder       User?      @relation("TicketHolder", fields: [holderId], references: [id], onDelete: Restrict)
+  transfers    TicketTransfer[]
 
   @@index([checkedInById])
+  @@index([holderId])
 
   @@map("tickets")
+}
+
+// Lịch sử chuyển nhượng vé. Một dòng cho mỗi lần đổi người giữ.
+model TicketTransfer {
+  id         String   @id @default(uuid())
+  ticketId   String
+  fromUserId String
+  toUserId   String
+  createdAt  DateTime @default(now())
+
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromUser User   @relation("TransferFrom", fields: [fromUserId], references: [id], onDelete: Restrict)
+  toUser   User   @relation("TransferTo", fields: [toUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@map("ticket_transfers")
 }
 
 // Lưu ảnh trong database vì ổ đĩa của Render free không bền vững.

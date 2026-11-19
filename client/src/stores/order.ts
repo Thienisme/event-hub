@@ -18,6 +18,9 @@ export interface OrderTicket {
   qrCode?: string | null;
   checkedInAt?: string | null;
   createdAt: string;
+  /** true = người mua đã chuyển vé này cho người khác (qrCode bị ẩn) */
+  transferred?: boolean;
+  transferredTo?: { fullName: string } | null;
   /** Có ở API đọc đơn, kèm luôn event của loại vé đó */
   ticketType?: TicketType & {
     event?: {
@@ -81,6 +84,29 @@ export interface OrderPagination {
   totalPages: number;
 }
 
+/** Vé người khác mua rồi chuyển cho mình (GET /orders/my-orders -> receivedTickets). */
+export interface ReceivedTicket {
+  id: string;
+  qrCode: string | null;
+  checkedInAt: string | null;
+  ticketType: {
+    name: string;
+    price: number | string;
+    event: {
+      id: string;
+      title: string;
+      slug: string;
+      startTime: string;
+      endTime: string;
+      location: string;
+      bannerUrl?: string | null;
+      category?: string;
+      dynamicQrOnly?: boolean;
+    };
+  };
+  fromUser: { fullName: string };
+}
+
 /** GET /orders/my-orders: cùng dạng phân trang với danh sách sự kiện của admin */
 export interface OrderListResponse {
   message: string;
@@ -88,10 +114,12 @@ export interface OrderListResponse {
   pagination: OrderPagination;
   /** Giờ hiện tại của server (ISO) -> bù lệch đồng hồ cho mã QR động */
   serverTime?: string;
+  receivedTickets?: ReceivedTicket[];
 }
 
 export const useOrderStore = defineStore('order', () => {
   const orders = ref<Order[]>([]);
+  const receivedTickets = ref<ReceivedTicket[]>([]);
   const pagination = ref<OrderPagination>({
     total: 0,
     page: 1,
@@ -162,6 +190,7 @@ export const useOrderStore = defineStore('order', () => {
         params: { page, limit },
       });
       orders.value = response.data.data;
+      receivedTickets.value = response.data.receivedTickets ?? [];
       pagination.value = response.data.pagination;
       const serverTime = response.data.serverTime;
       clockOffsetMs.value = serverTime ? Date.parse(serverTime) - Date.now() : 0;
@@ -233,8 +262,22 @@ export const useOrderStore = defineStore('order', () => {
     return response.data;
   }
 
+  /**
+   * Chuyển một vé cho tài khoản khác. Thành công thì tải lại danh sách: vé đã
+   * chuyển mất qrCode, vé được nhận cũng thay đổi.
+   */
+  async function transferTicket(ticketId: string, email: string) {
+    const response = await apiClient.post<{ message: string; transfer: { ticketId: string; toUser: { fullName: string; email: string } } }>(
+      `/tickets/${ticketId}/transfer`, { email },
+    );
+    await fetchMyOrders(pagination.value.page, pagination.value.limit);
+    return response.data.transfer;
+  }
+
   return {
     orders,
+    receivedTickets,
+    transferTicket,
     pagination,
     loading,
     clockOffsetMs,
