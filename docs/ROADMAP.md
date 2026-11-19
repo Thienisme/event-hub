@@ -51,7 +51,7 @@ Xong ở PR #20 (giao diện thanh toán hoàn thiện ở #21).
 ## Giai đoạn 5: Nâng cao
 
 - [x] **Phòng chờ ảo khi mở bán vé hot** kiểu Ticketmaster/Ticketbox: xếp hàng bằng Redis sorted set, hiện vị trí trong hàng, cấp token vào cửa có hạn vài phút, giới hạn số người mua cùng lúc; đo bằng k6 (C, ưu tiên 2). Xong ở PR phòng chờ ảo; thiết kế: `docs/WAITING-ROOM.md`
-- [ ] **QR động chống chụp màn hình** kiểu SafeTix/DICE: mã trên "Vé của tôi" đổi mỗi 30 giây (HMAC theo khung thời gian như TOTP), máy soát vé kiểm cả chữ ký lẫn thời gian, mã QR tĩnh cũ vẫn soát được trong giai đoạn chuyển đổi (C, ưu tiên 3)
+- [x] **QR động chống chụp màn hình** kiểu SafeTix/DICE: mã trên "Vé của tôi" đổi mỗi 30 giây (HMAC theo khung thời gian như TOTP, khoá là mã vé), máy soát vé kiểm cả chữ ký lẫn thời gian, mã QR tĩnh cũ vẫn soát được trừ khi sự kiện bật "Chỉ nhận mã QR động" (C server, O client, Cl review)
 - [ ] Chuyển nhượng vé, vé cũ mất hiệu lực ngay; bán lại không quá giá gốc, chống hai người cùng mua lại một vé (C)
 - [ ] Sơ đồ chọn ghế (C)
 - [ ] PWA: cài lên điện thoại, soát vé khi mất mạng (C)

@@ -77,6 +77,7 @@ const LIMITS = {
 
 const queueEnabled = ref(false);
 const queueActiveLimit = ref(100);
+const dynamicQrOnly = ref(false);
 const category = ref<EventCategory>('OTHER');
 const title = ref('');
 const description = ref('');
@@ -103,6 +104,7 @@ let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 const resetForm = () => {
   queueEnabled.value = false;
   queueActiveLimit.value = 100;
+  dynamicQrOnly.value = false;
   category.value = 'OTHER';
   title.value = '';
   description.value = '';
@@ -122,6 +124,7 @@ const loadEventForEdit = async (id: string) => {
     if (event) {
       queueEnabled.value = event.queueEnabled ?? false;
       queueActiveLimit.value = event.queueActiveLimit ?? 100;
+      dynamicQrOnly.value = event.dynamicQrOnly ?? false;
       category.value = event.category || 'OTHER';
       title.value = event.title;
       description.value = event.description || '';
@@ -244,6 +247,7 @@ const handleSubmit = async () => {
   const payload = {
     queueEnabled: queueEnabled.value,
     queueActiveLimit: queueActiveLimit.value,
+    dynamicQrOnly: dynamicQrOnly.value,
     category: category.value,
     title: title.value,
     description: description.value || null,
@@ -401,6 +405,17 @@ onUnmounted(() => {
               <div v-if="queueEnabled" class="space-y-2">
                 <Label for="queue-active-limit">Số người được mua cùng lúc</Label>
                 <Input id="queue-active-limit" v-model.number="queueActiveLimit" type="number" min="1" max="10000" step="1" required />
+              </div>
+            </section>
+            <Separator />
+            <section class="space-y-4" aria-labelledby="dynamic-qr-title">
+              <h2 id="dynamic-qr-title" class="text-xl font-bold tracking-tight">Soát vé</h2>
+              <div class="flex items-start gap-3">
+                <input id="dynamic-qr-only" v-model="dynamicQrOnly" type="checkbox" class="mt-1 size-4 accent-primary" />
+                <div class="space-y-1">
+                  <Label for="dynamic-qr-only" class="leading-6">Chỉ nhận mã QR động</Label>
+                  <p class="text-xs text-muted-foreground">Mã tĩnh in trong email sẽ không soát được. Bật khi khách đã quen mở vé trên điện thoại.</p>
+                </div>
               </div>
             </section>
             <Separator />

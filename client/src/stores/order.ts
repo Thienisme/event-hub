@@ -28,6 +28,8 @@ export interface OrderTicket {
       slug?: string;
       endTime?: string;
       category?: string;
+      /** true = cổng chỉ nhận mã QR động, mã tĩnh bị từ chối */
+      dynamicQrOnly?: boolean;
     };
   };
 }
@@ -84,6 +86,8 @@ export interface OrderListResponse {
   message: string;
   data: Order[];
   pagination: OrderPagination;
+  /** Giờ hiện tại của server (ISO) -> bù lệch đồng hồ cho mã QR động */
+  serverTime?: string;
 }
 
 export const useOrderStore = defineStore('order', () => {
@@ -95,6 +99,13 @@ export const useOrderStore = defineStore('order', () => {
     totalPages: 0,
   });
   const loading = ref(false);
+
+  /**
+   * Lệch đồng hồ server (ms) = Date.parse(serverTime) - Date.now(), lấy từ
+   * response my-orders mới nhất. Mã QR động tính step theo giờ server; thiếu
+   * bù này đồng hồ lệch có thể gây 409 "Mã QR đã hết hạn".
+   */
+  const clockOffsetMs = ref(0);
 
   /** Cổng thanh toán đang bật từ GET /payments/providers */
   const paymentProviders = ref<PaymentProvider[]>([]);
@@ -152,6 +163,8 @@ export const useOrderStore = defineStore('order', () => {
       });
       orders.value = response.data.data;
       pagination.value = response.data.pagination;
+      const serverTime = response.data.serverTime;
+      clockOffsetMs.value = serverTime ? Date.parse(serverTime) - Date.now() : 0;
       return response.data;
     } finally {
       loading.value = false;
@@ -224,6 +237,7 @@ export const useOrderStore = defineStore('order', () => {
     orders,
     pagination,
     loading,
+    clockOffsetMs,
     paymentProviders,
     createOrder,
     fetchMyOrders,

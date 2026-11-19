@@ -1,10 +1,10 @@
 /**
  * Soát vé QR: quyền truy cập, trạng thái vé, quét đồng thời và thống kê.
  * Yêu cầu: server đang chạy, cùng DATABASE_URL với script này (database test).
- * Dùng: npm run test:checkin. Tổng cộng 43 request API khi chạy thành công.
+ * Dùng: npm run test:checkin.
  */
 require('dotenv').config();
-const { randomUUID } = require('crypto');
+const { randomUUID, createHmac } = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
@@ -85,6 +85,15 @@ async function book(customer, event, quantity, confirm = true) {
 const scan = (user, event, qrCode) => request(user.token, `/events/${event.id}/check-in`, 'POST', { qrCode });
 const ticketRow = (ticket) => prisma.ticket.findUnique({ where: { id: ticket.id } });
 const untouched = (ticket) => ticket?.checkedInAt === null && ticket?.checkedInById === null;
+
+// Tự tính theo hợp đồng, không dùng helper của server để tránh kiểm thử lặp lại code.
+function dynamicQr(ticket, delta = 0) {
+  const step = Math.floor(Date.now() / 30000) + delta;
+  const message = `EH1.${ticket.id}.${step}`;
+  const sig = createHmac('sha256', Buffer.from(ticket.qrCode, 'utf8'))
+    .update(message).digest().subarray(0, 16).toString('base64url');
+  return `${message}.${sig}`;
+}
 
 async function main() {
   console.log(`\n${D}Soát vé QR${X}`);
@@ -172,6 +181,70 @@ async function main() {
   check('organizer khác xem stats -> 403', forbiddenStats.status === 403, `nhận ${forbiddenStats.status}`);
   const missingStats = await request(organizer.token, `/events/${absentEvent.id}/check-in/stats`);
   check('stats sự kiện không tồn tại -> 404', missingStats.status === 404, `nhận ${missingStats.status}`);
+
+  console.log(`\n${D}7. QR động và chế độ chỉ nhận mã động${X}`);
+  const dynamicEvent = await createEvent(organizer.id);
+  const dynamicOrder = await book(customer, dynamicEvent, 5);
+  const [current, previous, next, strict, race] = dynamicOrder.tickets;
+  const currentCode = dynamicQr(current);
+  const dynamicValid = await scan(organizer, dynamicEvent, currentCode);
+  check('QR động hiện tại -> VALID', dynamicValid.status === 200 && dynamicValid.body?.result === 'VALID');
+  const dynamicAgain = await scan(organizer, dynamicEvent, currentCode);
+  check('QR động quét lại -> ALREADY_USED', dynamicAgain.status === 409 && dynamicAgain.body?.result === 'ALREADY_USED');
+  for (const [ticket, delta] of [[previous, -1], [next, 1]]) {
+    const result = await scan(organizer, dynamicEvent, dynamicQr(ticket, delta));
+    check(`QR động step ${delta} -> VALID`, result.status === 200 && result.body?.result === 'VALID');
+  }
+  for (const delta of [-3, 3]) {
+    const result = await scan(organizer, dynamicEvent, dynamicQr(strict, delta));
+    check(`QR động step ${delta} -> QR_EXPIRED`, result.status === 409 &&
+      result.body?.result === 'QR_EXPIRED' &&
+      result.body?.message === 'Mã QR đã hết hạn, nhờ khách mở lại vé trên điện thoại!');
+  }
+  const code = dynamicQr(strict);
+  const sigIndex = code.lastIndexOf('.') + 1;
+  const tampered = code.slice(0, sigIndex) + (code[sigIndex] === 'A' ? 'B' : 'A') + code.slice(sigIndex + 1);
+  const badSig = await scan(organizer, dynamicEvent, tampered);
+  check('chữ ký sai giống mã không tồn tại', badSig.status === 404 &&
+    badSig.body?.result === missing.body?.result && badSig.body?.message === missing.body?.message);
+  const missingDynamic = await scan(organizer, dynamicEvent, dynamicQr({ id: randomUUID(), qrCode: 'unknown' }));
+  check('ticketId không tồn tại -> NOT_FOUND', missingDynamic.status === 404 &&
+    missingDynamic.body?.result === missing.body?.result && missingDynamic.body?.message === missing.body?.message);
+  const noQrTicket = pending.tickets[0];
+  await prisma.ticket.update({ where: { id: noQrTicket.id }, data: { qrCode: null } });
+  const noQr = await scan(organizer, event, dynamicQr({ ...noQrTicket, qrCode: 'unknown' }));
+  check('vé chưa có qrCode -> NOT_FOUND', noQr.status === 404 && noQr.body?.result === missing.body?.result &&
+    noQr.body?.message === missing.body?.message);
+  const malformed = await scan(organizer, dynamicEvent, code.replace('EH1.', 'EH1.invalid.'));
+  check('sai định dạng -> NOT_FOUND', malformed.status === 404 && malformed.body?.result === missing.body?.result &&
+    malformed.body?.message === missing.body?.message);
+  const dynamicWrong = await scan(organizer, dynamicEvent, dynamicQr(foreign));
+  check('QR động khác sự kiện -> WRONG_EVENT', dynamicWrong.status === 409 && dynamicWrong.body?.result === 'WRONG_EVENT');
+  const dynamicDenied = await scan(stranger, dynamicEvent, dynamicQr(strict));
+  const unknownDenied = await scan(stranger, dynamicEvent, dynamicQr({ id: randomUUID(), qrCode: 'unknown' }));
+  check('người ngoài quét QR động có thật hoặc giả đều -> 403', dynamicDenied.status === 403 && unknownDenied.status === 403);
+  await prisma.event.update({ where: { id: dynamicEvent.id }, data: { dynamicQrOnly: true } });
+  const staticDenied = await scan(organizer, dynamicEvent, strict.qrCode);
+  check('dynamicQrOnly chặn mã tĩnh kèm thông tin vé', staticDenied.status === 409 &&
+    staticDenied.body?.result === 'STATIC_QR_NOT_ALLOWED' && Boolean(staticDenied.body?.ticket?.holderName) &&
+    staticDenied.body?.message === 'Sự kiện chỉ nhận mã QR động, nhờ khách mở vé trên điện thoại!');
+  check('mã tĩnh bị chặn không đánh dấu vé', untouched(await ticketRow(strict)));
+  const strictValid = await scan(organizer, dynamicEvent, dynamicQr(strict));
+  check('dynamicQrOnly vẫn nhận QR động -> VALID', strictValid.status === 200 && strictValid.body?.result === 'VALID');
+  const raceCode = dynamicQr(race);
+  const dynamicResults = await Promise.all(Array.from({ length: 20 }, () => scan(organizer, dynamicEvent, raceCode)));
+  check('20 QR động đồng thời: đúng 1 VALID và 19 ALREADY_USED',
+    dynamicResults.filter(r => r.status === 200 && r.body?.result === 'VALID').length === 1 &&
+    dynamicResults.filter(r => r.status === 409 && r.body?.result === 'ALREADY_USED').length === 19);
+  const tooLong = await scan(organizer, dynamicEvent, 'x'.repeat(129));
+  check('qrCode dài 129 ký tự -> 400', tooLong.status === 400);
+  const dynamicOrders = await request(customer.token, '/orders/my-orders');
+  const returnedDynamic = dynamicOrders.body?.data?.find(o => o.id === dynamicOrder.id)?.tickets?.[0];
+  check('my-orders trả serverTime ISO và dynamicQrOnly', dynamicOrders.status === 200 &&
+    typeof dynamicOrders.body?.serverTime === 'string' &&
+    new Date(dynamicOrders.body.serverTime).toISOString() === dynamicOrders.body.serverTime &&
+    returnedDynamic?.ticketType?.event?.dynamicQrOnly === true);
+
 }
 
 async function cleanup() {

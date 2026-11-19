@@ -29,7 +29,7 @@ watch(
     let active = true;
     onCleanup(() => { active = false; });
     failed.value = false;
-    dataUrl.value = '';
+    // Giữ ảnh cũ tới khi vẽ xong ảnh mới (mã QR động đổi mỗi 30 giây, không nên nháy trắng).
 
     if (!value) {
       dataUrl.value = '';

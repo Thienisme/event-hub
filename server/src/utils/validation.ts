@@ -116,6 +116,7 @@ export const exceedsOrderAmount = (price: number, quantity: number): boolean => 
 
 export const createEventSchema = z.object({
   queueEnabled: z.boolean().optional(),
+  dynamicQrOnly: z.boolean().optional(),
   queueActiveLimit: z.number().int().min(1).max(10000).optional(),
   category: z.enum(['MUSIC', 'SPORTS', 'CONFERENCE', 'WORKSHOP', 'THEATER', 'EXHIBITION', 'FESTIVAL', 'FOOD', 'OTHER'], {
     message: 'Danh mục sự kiện không hợp lệ!',
@@ -262,15 +263,15 @@ export const createOrderSchema = z.object({
 });
 
 /**
- * Schema validation cho soát vé. Mã QR do server sinh là 22 ký tự base64url
- * (128 bit); trần 64 chỉ để chặn chuỗi rác dài, không ràng buộc định dạng.
+ * Schema validation cho soát vé: nhận cả mã tĩnh và chuỗi QR động EH1.
+ * Trần 128 ký tự chặn chuỗi rác dài, định dạng động được kiểm tra riêng.
  */
 export const checkInSchema = z.object({
   qrCode: z
     .string({ message: 'Mã vé không hợp lệ!' })
     .trim()
     .min(1, 'Mã vé không được để trống!')
-    .max(64, 'Mã vé không hợp lệ!'),
+    .max(128, 'Mã vé không hợp lệ!'),
 });
 
 /**

@@ -259,7 +259,7 @@ export const MYOrders = async (req: Request, res: Response) => {
               ticketType: {
                 include: {
                   event: {
-                    select: { title: true, startTime: true, location: true, bannerUrl: true, slug: true, endTime: true, category: true, queueEnabled: true, queueActiveLimit: true },
+                    select: { title: true, startTime: true, location: true, bannerUrl: true, slug: true, endTime: true, category: true, queueEnabled: true, dynamicQrOnly: true, queueActiveLimit: true },
                   },
                 },
               },
@@ -275,6 +275,7 @@ export const MYOrders = async (req: Request, res: Response) => {
 
     return res.json({
       message: 'Lấy danh sách đơn hàng thành công!',
+      serverTime: new Date().toISOString(),
       data: orders,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });

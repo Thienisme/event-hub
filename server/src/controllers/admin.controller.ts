@@ -362,6 +362,7 @@ export const listAllEvents = async (req: Request, res: Response) => {
           id: true,
           title: true,
           queueEnabled: true,
+          dynamicQrOnly: true,
           queueActiveLimit: true,
           location: true,
           startTime: true,

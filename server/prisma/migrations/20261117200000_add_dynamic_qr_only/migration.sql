@@ -1,0 +1,1 @@
+ALTER TABLE `events` ADD COLUMN `dynamicQrOnly` BOOLEAN NOT NULL DEFAULT false;
