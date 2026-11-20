@@ -174,7 +174,7 @@ onUnmounted(() => {
             type="button"
             :aria-label="`Xem sự kiện ${index + 1}`"
             :aria-current="index === activeIndex ? 'true' : undefined"
-            class="flex h-6 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+            class="flex h-9 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
             @click="selectSlide(index)"
           >
             <span class="h-1 w-10 overflow-hidden rounded-full bg-white/30">

@@ -25,8 +25,8 @@ interface TicketTypeForm {
   name: string;
   price: number | string;
   totalQuantity: number;
-  saleStart?: string;
-  saleEnd?: string;
+  saleStart: string;
+  saleEnd: string;
 }
 
 interface ApiResponse {
@@ -197,6 +197,8 @@ const addTicketType = () => {
     name: '',
     price: 0,
     totalQuantity: 0,
+    saleStart: '',
+    saleEnd: '',
   });
 };
 
@@ -367,7 +369,11 @@ onUnmounted(() => {
               <h2 id="tickets-heading" class="text-sm font-semibold">Loại vé</h2>
               <div v-if="ticketTypes.length === 0" class="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">Chưa có loại vé nào</div>
               <div v-for="(ticket, index) in ticketTypes" :key="ticket.id ?? index" class="space-y-4 rounded-lg border p-4">
-                <div class="grid grid-cols-1 items-end gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="min-w-0 truncate text-sm font-semibold text-foreground">{{ ticket.name.trim() || `Loại vé ${index + 1}` }}</p>
+                  <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 class="size-4" aria-hidden="true" /></Button>
+                </div>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
                   <div class="space-y-2">
                     <Label :for="`ticket-name-${index}`">Tên loại vé</Label>
                     <Input :id="`ticket-name-${index}`" v-model="ticket.name" :maxlength="LIMITS.TICKET_NAME" placeholder="VD: Vé VIP, vé thường" />
@@ -380,16 +386,15 @@ onUnmounted(() => {
                     <Label :for="`ticket-quantity-${index}`">Số lượng</Label>
                     <Input :id="`ticket-quantity-${index}`" v-model.number="ticket.totalQuantity" type="number" min="1" :max="LIMITS.QUANTITY" />
                   </div>
-                  <Button type="button" variant="ghost" size="icon" class="text-destructive" aria-label="Xoá loại vé" @click="removeTicketType(index)"><Trash2 aria-hidden="true" /></Button>
                 </div>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div class="space-y-2">
                     <Label :for="`ticket-sale-start-${index}`">Mở bán từ (tuỳ chọn)</Label>
-                    <Input :id="`ticket-sale-start-${index}`" v-model="ticket.saleStart" type="datetime-local" />
+                    <DateTimePicker :id="`ticket-sale-start-${index}`" v-model="ticket.saleStart" clearable placeholder="Chọn thời gian mở bán" />
                   </div>
                   <div class="space-y-2">
                     <Label :for="`ticket-sale-end-${index}`">Ngừng bán lúc (tuỳ chọn)</Label>
-                    <Input :id="`ticket-sale-end-${index}`" v-model="ticket.saleEnd" type="datetime-local" :max="endTime || undefined" />
+                    <DateTimePicker :id="`ticket-sale-end-${index}`" v-model="ticket.saleEnd" clearable :min-date="ticket.saleStart || undefined" placeholder="Chọn thời gian ngừng bán" />
                   </div>
                 </div>
               </div>

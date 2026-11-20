@@ -424,16 +424,16 @@ const handleDelete = async () => {
       <div class="mt-8 grid min-w-0 items-start gap-8 lg:grid-cols-3">
         <div class="min-w-0 space-y-10 lg:col-span-2">
           <div class="divide-y divide-border rounded-lg border bg-background">
-            <div class="flex min-w-0 gap-4 p-5">
-              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-tone-soft text-tone-ink"><CalendarDays class="size-5" /></div>
+            <div class="flex min-w-0 items-start gap-4 p-5">
+              <CalendarDays class="size-5 shrink-0 text-tone-ink" aria-hidden="true" />
               <div class="min-w-0 space-y-1">
                 <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Thời gian</p>
                 <p class="break-words font-semibold tabular-nums">{{ eventDates.lines[0] }}</p>
                 <p class="break-words text-sm tabular-nums text-muted-foreground">{{ eventDates.lines[1] }}</p>
               </div>
             </div>
-            <div class="flex min-w-0 gap-4 p-5">
-              <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-tone-soft text-tone-ink"><MapPin class="size-5" /></div>
+            <div class="flex min-w-0 items-start gap-4 p-5">
+              <MapPin class="size-5 shrink-0 text-tone-ink" aria-hidden="true" />
               <div class="min-w-0 space-y-1">
                 <p class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Địa điểm</p>
                 <p class="break-words font-semibold">{{ event.location }}</p>

@@ -173,7 +173,7 @@ async function cancel() {
                   <input v-model="selected" type="radio" name="payment-provider" :value="provider" :disabled="busy || promoBusy" class="mt-1 size-4 shrink-0 accent-primary" />
                   <FlaskConical v-if="provider === 'MOCK'" class="mt-1 size-4 shrink-0" aria-hidden="true" />
                   <span class="min-w-0 flex-1"><span class="block font-semibold">{{ methods[provider].name }}</span><span class="mt-1 block break-words text-sm leading-6 text-muted-foreground">{{ methods[provider].description }}</span></span>
-                  <img v-if="provider !== 'MOCK'" :src="methods[provider].logo" :alt="provider === 'VNPAY' ? 'VNPay' : 'MoMo'" class="h-6 w-auto shrink-0 self-center" />
+                  <span v-if="provider !== 'MOCK'" class="inline-flex shrink-0 self-center items-center rounded-sm bg-white px-1.5 py-1"><img :src="methods[provider].logo" :alt="provider === 'VNPAY' ? 'VNPay' : 'MoMo'" class="h-6 w-auto" /></span>
                 </label>
                 <p v-if="!providers.length" role="alert" class="text-sm text-danger">Hiện chưa có cổng thanh toán khả dụng. Vui lòng thử lại sau.</p>
               </div>
@@ -213,7 +213,7 @@ async function cancel() {
                   <p v-if="promoError" id="promo-error" role="alert" class="break-words text-sm text-danger">{{ promoError }}</p>
                   <div v-if="Number(order.discountAmount) > 0" class="flex flex-wrap justify-between gap-2 text-sm"><span>Giảm giá</span><span class="tabular-nums">−{{ formatPrice(order.discountAmount) }}</span></div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5"><span class="font-semibold">Tổng cộng</span><span class="font-mono text-2xl font-bold text-brand tabular-nums">{{ formatPrice(order.totalAmount) }}</span></div>
+                <div class="flex flex-wrap items-center justify-between gap-2 border-t-2 border-dashed border-paper-foreground/25 pt-5"><span class="font-semibold">Tổng cộng</span><span class="font-mono text-2xl font-bold text-brand tabular-nums">{{ formatPrice(order.totalAmount) }}</span></div>
               </Card>
               <div class="order-3 min-w-0 space-y-3 text-center lg:order-none">
                 <p class="flex items-center justify-center gap-2 text-sm" :class="{ 'text-danger': remaining < 120 }"><Timer class="size-4 shrink-0" :class="remaining < 120 ? 'text-danger' : 'text-warning'" aria-hidden="true" /><span v-if="remaining > 0">Vé được giữ trong <strong class="tabular-nums font-semibold">{{ countdown }}</strong></span><span v-else role="status">Hết thời gian giữ vé</span></p>

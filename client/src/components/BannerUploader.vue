@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { Link2 } from '@lucide/vue';
 import apiClient from '../api/axios';
 import { resolveMediaUrl, MAX_BANNER_BYTES, ALLOWED_BANNER_TYPES } from '../utils/media';
 import { Button } from './ui/button';
@@ -221,13 +222,16 @@ const onUrlInput = (event: Event) => {
 
     <!-- Dán URL ảnh ngoài cho ai không muốn tải file lên -->
     <div class="mt-3">
-      <button
+      <Button
         type="button"
-        class="-my-2 py-2 text-xs text-muted-foreground underline-offset-4 hover:underline hover:text-foreground transition-colors"
+        variant="link"
+        size="sm"
+        class="gap-1.5 px-0 underline"
         @click="showUrlInput = !showUrlInput"
       >
+        <Link2 class="size-4" aria-hidden="true" />
         {{ showUrlInput ? 'Ẩn ô dán URL ảnh' : 'Hoặc dán URL ảnh' }}
-      </button>
+      </Button>
       <input
         v-if="showUrlInput"
         type="url"

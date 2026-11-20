@@ -16,6 +16,8 @@ const props = withDefaults(defineProps<{
   minDate?: string;
   disabled?: boolean;
   invalid?: boolean;
+  /** Cho phép xoá giá trị đã chọn (trường tuỳ chọn, ví dụ giờ mở bán). */
+  clearable?: boolean;
 }>(), { placeholder: 'Chọn ngày giờ' });
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const open = ref(false);
@@ -57,7 +59,8 @@ function update(date: DateValue | undefined, nextHour = hour.value, nextMinute =
         <NativeSelect :model-value="minute" :disabled="disabled || !selectedDate" aria-label="Chọn phút" @update:model-value="update(selectedDate, hour, String($event))">
           <NativeSelectOption v-for="value in minutes" :key="value" :value="value">{{ value }}</NativeSelectOption>
         </NativeSelect>
-        <Button type="button" class="ml-auto" @click="open = false">Xong</Button>
+        <Button v-if="clearable && modelValue" type="button" variant="ghost" class="ml-auto" @click="emit('update:modelValue', ''); open = false">Xoá</Button>
+        <Button type="button" :class="clearable && modelValue ? '' : 'ml-auto'" @click="open = false">Xong</Button>
       </div>
     </PopoverContent>
   </Popover>

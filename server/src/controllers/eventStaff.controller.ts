@@ -203,7 +203,7 @@ async function sendStaffAddedEmail(toEmail: string, eventTitle: string, eventSta
       to: toEmail,
       subject: title,
       text: `${title}\n\n${detail}\n\nMở trang soát vé: ${link}`,
-      html: `<html lang="vi"><body style="background:#FFFFFF;color:#000000;font-family:Arial,sans-serif;padding:24px"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail).replace(/\n/g, '<br>')}</p><p><a href="${escapeHtml(link)}" style="display:inline-block;background:#8C1C2B;color:#FFFFFF;padding:12px 20px;text-decoration:none">Mở trang soát vé</a></p></body></html>`,
+      html: `<html lang="vi"><body style="background:#FFFFFF;color:#000000;font-family:Arial,sans-serif;padding:24px"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail).replace(/\n/g, '<br>')}</p><p><a href="${escapeHtml(link)}" style="display:inline-block;background:#FF5A1F;color:#111111;font-weight:700;padding:12px 20px;text-decoration:none">Mở trang soát vé</a></p></body></html>`,
     });
   } catch {
     console.error('[email] Không thể gửi email thêm nhân viên soát vé');

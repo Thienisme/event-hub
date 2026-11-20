@@ -28,7 +28,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'ADMIN', label: 'Quản trị viên' },
 ];
 
-const roleVariant = { CUSTOMER: 'secondary', ORGANIZER: 'info', ADMIN: 'default' } as const;
+const roleVariant = { CUSTOMER: 'secondary', ORGANIZER: 'info', ADMIN: 'outline' } as const;
 
 /** Đang chờ xác nhận khoá/mở khoá. */
 const pendingLock = ref<{ user: AdminUser; isActive: boolean } | null>(null);
@@ -282,11 +282,11 @@ watch(
             <Table class="w-full table-fixed text-sm [&_td]:whitespace-normal [&_td]:break-words [&_th]:whitespace-normal">
               <TableHeader class="bg-surface text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <TableRow>
-                  <TableHead class="px-5 py-3 font-semibold">Tài khoản</TableHead>
-                  <TableHead class="px-5 py-3 font-semibold">Vai trò</TableHead>
-                  <TableHead class="px-5 py-3 font-semibold">Trạng thái</TableHead>
-                  <TableHead class="px-5 py-3 font-semibold">Ngày tạo</TableHead>
-                  <TableHead class="px-5 py-3 font-semibold text-right">Thao tác</TableHead>
+                  <TableHead class="px-4 lg:px-5 py-3 font-semibold">Tài khoản</TableHead>
+                  <TableHead class="w-40 lg:w-48 px-4 lg:px-5 py-3 font-semibold">Vai trò</TableHead>
+                  <TableHead class="w-28 lg:w-32 px-4 lg:px-5 py-3 font-semibold">Trạng thái</TableHead>
+                  <TableHead class="w-40 lg:w-44 px-4 lg:px-5 py-3 font-semibold">Ngày tạo</TableHead>
+                  <TableHead class="w-28 lg:w-32 px-4 lg:px-5 py-3 font-semibold text-right">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -296,23 +296,23 @@ watch(
                   :key="user.id"
                   class="hover:bg-surface/70 transition-colors"
                 >
-                  <TableCell class="px-5 py-4">
-                    <div class="flex items-center gap-3">
-                      <Avatar size="lg"><AvatarFallback class="bg-primary/10 text-primary">{{ user.fullName.slice(0, 2).toUpperCase() }}</AvatarFallback></Avatar>
-                      <div class="min-w-0">
-                        <p class="font-medium text-foreground truncate">
+                  <TableCell class="px-4 lg:px-5 py-4">
+                    <div class="flex min-w-0 items-center gap-3">
+                      <Avatar size="lg" class="shrink-0"><AvatarFallback class="bg-primary/10 text-primary">{{ user.fullName.slice(0, 2).toUpperCase() }}</AvatarFallback></Avatar>
+                      <div class="min-w-0 flex-1">
+                        <p class="font-medium text-foreground truncate" :title="user.fullName">
                           {{ user.fullName }}
                           <span
                             v-if="isSelf(user)"
                             class="ml-1 text-[11px] font-normal text-primary"
                           >(bạn)</span>
                         </p>
-                        <p class="text-xs text-muted-foreground truncate">{{ user.email }}</p>
+                        <p class="text-xs text-muted-foreground truncate" :title="user.email">{{ user.email }}</p>
                       </div>
                     </div>
                   </TableCell>
 
-                  <TableCell class="px-5 py-4">
+                  <TableCell class="px-4 lg:px-5 py-4">
                     <!-- Không tự đổi vai trò của chính mình: chỉ hiện badge. -->
                     <Badge v-if="isSelf(user)" :variant="roleVariant[user.role]">{{ ROLE_OPTIONS.find(option => option.value === user.role)?.label }}</Badge>
                     <NativeSelect
@@ -329,15 +329,15 @@ watch(
                     </NativeSelect>
                   </TableCell>
 
-                  <TableCell class="px-5 py-4">
+                  <TableCell class="px-4 lg:px-5 py-4">
                     <Badge :variant="user.isActive ? 'success' : 'danger'">{{ user.isActive ? 'Hoạt động' : 'Bị khoá' }}</Badge>
                   </TableCell>
 
-                  <TableCell class="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                  <TableCell class="px-4 lg:px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
                     {{ formatDateTime(user.createdAt) }}
                   </TableCell>
 
-                  <TableCell class="px-5 py-4 text-right">
+                  <TableCell class="px-4 lg:px-5 py-4 text-right">
                     <Button
                       type="button"
                       :disabled="adminStore.updatingId === user.id || isSelf(user)"

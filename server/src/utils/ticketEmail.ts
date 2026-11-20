@@ -37,7 +37,7 @@ export async function sendOrderEmail(order: TicketEmailOrder, reminder: boolean)
     to: order.user.email,
     subject: title,
     text: `${title}\n\n${details.join('\n\n')}\n\nXem QR: ${link}`,
-    html: `<html lang="vi"><body style="background:#FFFFFF;color:#000000;font-family:Arial,sans-serif;padding:24px"><h1>${escapeHtml(title)}</h1>${details.map(detail => `<p>${escapeHtml(detail).replace(/\n/g, '<br>')}</p>`).join('')}<p><a href="${escapeHtml(link)}" style="display:inline-block;background:#8C1C2B;color:#FFFFFF;padding:12px 20px;text-decoration:none">Xem vé và QR</a></p></body></html>`,
+    html: `<html lang="vi"><body style="background:#FFFFFF;color:#000000;font-family:Arial,sans-serif;padding:24px"><h1>${escapeHtml(title)}</h1>${details.map(detail => `<p>${escapeHtml(detail).replace(/\n/g, '<br>')}</p>`).join('')}<p><a href="${escapeHtml(link)}" style="display:inline-block;background:#FF5A1F;color:#111111;font-weight:700;padding:12px 20px;text-decoration:none">Xem vé và QR</a></p></body></html>`,
   });
 }
 
@@ -56,7 +56,7 @@ export async function sendTransferReceivedEmail(input: {
       to: input.toEmail,
       subject: title,
       text: `${title}\n\n${detail}\n\nXem vé và QR: ${link}`,
-      html: `<html lang="vi"><body style="background:#FFFFFF;color:#000000;font-family:Arial,sans-serif;padding:24px"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail).replace(/\n/g, '<br>')}</p><p><a href="${escapeHtml(link)}" style="display:inline-block;background:#8C1C2B;color:#FFFFFF;padding:12px 20px;text-decoration:none">Xem vé và QR</a></p></body></html>`,
+      html: `<html lang="vi"><body style="background:#FFFFFF;color:#000000;font-family:Arial,sans-serif;padding:24px"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail).replace(/\n/g, '<br>')}</p><p><a href="${escapeHtml(link)}" style="display:inline-block;background:#FF5A1F;color:#111111;font-weight:700;padding:12px 20px;text-decoration:none">Xem vé và QR</a></p></body></html>`,
     });
   } catch {
     console.error('[email] Không thể gửi email nhận vé chuyển nhượng');

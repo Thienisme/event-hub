@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import apiClient from '@/api/axios';
+import type { EventCategory } from '@/utils/categories';
 
 export type DashboardRange = 7 | 30 | 90;
 export const DASHBOARD_RANGES: DashboardRange[] = [7, 30, 90];
@@ -13,11 +14,29 @@ export interface DailySales {
   tickets: number;
 }
 
+export interface PeriodTotals {
+  revenue: number;
+  orders: number;
+  tickets: number;
+}
+
+export interface PeriodComparison {
+  current: PeriodTotals;
+  previous: PeriodTotals;
+}
+
+export interface CategorySales {
+  category: EventCategory;
+  revenue: number;
+  tickets: number;
+}
+
 export interface TicketTypeSales {
   id: string;
   name: string;
   eventId: string;
   eventTitle: string;
+  category: EventCategory;
   price: number;
   total: number;
   sold: number;
@@ -28,6 +47,7 @@ export interface TicketTypeSales {
 export interface EventCheckIn {
   id: string;
   title: string;
+  category: EventCategory;
   startTime: string;
   endTime: string;
   sold: number;
@@ -37,11 +57,13 @@ export interface EventCheckIn {
 export interface SalesDashboard {
   eventId: string | null;
   range: { days: number; from: string; to: string };
-  events: Array<{ id: string; title: string; startTime: string }>;
+  events: Array<{ id: string; title: string; category: EventCategory; startTime: string }>;
   /** Toàn thời gian trong phạm vi sự kiện đang chọn, chỉ đơn đã thanh toán. */
   summary: { revenue: number; discount: number; orders: number; ticketsSold: number; capacity: number; checkedIn: number };
+  period: PeriodComparison;
   daily: DailySales[];
   ticketTypes: TicketTypeSales[];
+  byCategory: CategorySales[];
   eventsCheckIn: EventCheckIn[];
 }
 

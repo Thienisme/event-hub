@@ -90,7 +90,7 @@ onUnmounted(() => inFlight?.abort());
             type="button"
             :disabled="loading"
             @click="loadStats"
-           variant="default" size="sm">
+           variant="outline" size="sm">
             <RefreshCw class="size-4" :class="{ 'animate-spin': loading }" aria-hidden="true" /> {{ loading ? 'Đang tải...' : 'Làm mới' }}
           </Button>
         </div>
@@ -116,7 +116,7 @@ onUnmounted(() => inFlight?.abort());
           <!-- Thẻ số liệu -->
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Người dùng</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><Users class="size-5" aria-hidden="true" /></span></div>
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Người dùng</p><Users class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></div>
               <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">{{ (stats?.users ?? 0) + (stats?.organizers ?? 0) }}</p>
               <p class="mt-1 text-xs text-muted-foreground">
                 {{ stats?.users ?? 0 }} khách hàng · {{ stats?.organizers ?? 0 }} ban tổ chức
@@ -124,13 +124,13 @@ onUnmounted(() => inFlight?.abort());
             </Card>
 
             <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Sự kiện</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><CalendarDays class="size-5" aria-hidden="true" /></span></div>
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Sự kiện</p><CalendarDays class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></div>
               <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-primary">{{ stats?.events ?? 0 }}</p>
               <p class="mt-1 text-xs text-muted-foreground">đang có trên nền tảng</p>
             </Card>
 
             <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Đơn hàng</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><ShoppingCart class="size-5" aria-hidden="true" /></span></div>
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Đơn hàng</p><ShoppingCart class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></div>
               <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">{{ stats?.orders ?? 0 }}</p>
               <p class="mt-1 text-xs text-muted-foreground">
                 {{ stats?.confirmedOrders ?? 0 }} đã xác nhận
@@ -138,7 +138,7 @@ onUnmounted(() => inFlight?.abort());
             </Card>
 
             <Card class="shadow-none ring-0 border border-border bg-background rounded-lg gap-0 p-5">
-              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Doanh thu</p><span class="rounded-md bg-muted p-2 text-muted-foreground"><Wallet class="size-5" aria-hidden="true" /></span></div>
+              <div class="flex items-center justify-between gap-2"><p class="text-sm text-muted-foreground">Doanh thu</p><Wallet class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></div>
               <p class="mt-2 break-words text-2xl lg:text-3xl sm:text-4xl font-extrabold tabular-nums text-foreground">
                 {{ formatPrice(stats?.revenue ?? 0) }}
               </p>

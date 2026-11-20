@@ -45,10 +45,10 @@ onUnmounted(() => controller.abort());
         @error="imageFailed = true"
       />
       <div v-if="imageLoaded && !imageFailed" class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
-      <RouterLink to="/" class="relative self-start text-xl font-extrabold tracking-tight">EventHub</RouterLink>
+      <RouterLink to="/" class="relative self-start text-xl font-extrabold tracking-tight text-white">EventHub</RouterLink>
       <div class="relative space-y-6 lg:mt-16">
         <p class="text-2xl font-extrabold tracking-tight text-white sm:text-3xl xl:text-4xl">Mỗi tấm vé, một trải nghiệm.</p>
-        <RouterLink v-if="event" :data-tone="event.category || undefined" :to="`/events/${event.slug ?? event.id}`" class="hidden w-full max-w-md items-center overflow-hidden rounded-lg lg:flex bg-background text-foreground">
+        <RouterLink v-if="event" :data-tone="event.category || undefined" :to="`/events/${event.slug ?? event.id}`" class="paper hidden w-full max-w-md items-center overflow-hidden rounded-sm lg:flex">
           <div class="flex min-w-0 flex-1 items-center gap-3 p-4">
             <TicketDate :value="event.startTime" :category="event.category" class="shrink-0" />
             <div class="min-w-0">
@@ -57,10 +57,8 @@ onUnmounted(() => controller.abort());
               <p class="mt-1 line-clamp-1 text-sm text-muted-foreground">{{ event.location }}</p>
             </div>
           </div>
-          <div class="relative flex max-w-[40%] self-stretch items-center border-l border-dashed border-border px-4">
-            <span aria-hidden="true" class="absolute -left-2 -top-2 size-4 rounded-full border border-border bg-primary" />
+          <div class="flex max-w-[40%] self-stretch items-center border-l-2 border-dashed border-paper-foreground/25 px-4">
             <p class="text-sm font-semibold tabular-nums text-brand">{{ price }}</p>
-            <span aria-hidden="true" class="absolute -bottom-2 -left-2 size-4 rounded-full border border-border bg-primary" />
           </div>
         </RouterLink>
       </div>

@@ -26,8 +26,9 @@ test('bảng điều khiển: số liệu khớp API, lọc theo sự kiện và
   await expect(page.getByRole('heading', { level: 1, name: 'Bảng điều khiển bán vé' })).toBeVisible();
 
   const totals = page.getByRole('region', { name: 'Toàn thời gian' });
-  await expect(totals.getByText(formatVnd(summary.revenue), { exact: true })).toBeVisible();
-  await expect(totals.getByText(summary.ticketsSold.toLocaleString('vi-VN'), { exact: true }).first()).toBeVisible();
+  // Số toàn thời gian nằm ở dòng chú thích của ô doanh thu và ô vé bán.
+  await expect(totals).toContainText(`Toàn thời gian: ${formatVnd(summary.revenue)}`);
+  await expect(totals).toContainText(`Đã bán ${summary.ticketsSold.toLocaleString('vi-VN')}/`);
 
   const daily = page.getByRole('region', { name: 'Doanh thu theo ngày' });
   await expect(daily.getByText(/^30 ngày gần nhất/)).toBeVisible();

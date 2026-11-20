@@ -17,25 +17,38 @@ Ba câu để tự kiểm tra một màn hình:
 
 ## Màu
 
-Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (`indigo-*`, `gray-*`, `slate-*`...) và không viết mã hex trong component. Giao diện chỉ có chế độ tối: `index.html` gắn sẵn class `dark` (để các biến thể `dark:` của shadcn chạy đúng) và `color-scheme: dark`.
+Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (`indigo-*`, `gray-*`, `slate-*`...) và không viết mã hex trong component.
+
+### Hai chế độ: sáng và tối
+
+- Người dùng chọn **Sáng / Tối / Theo hệ thống** ở nút "Chế độ màu" trên thanh đầu trang (`ThemeToggle.vue`). Mặc định **Theo hệ thống**. Lựa chọn lưu ở `localStorage['theme']`.
+- `client/public/theme-init.js` gắn class `dark` lên `<html>` **trước khi trang vẽ** (không nháy màu). Nó là file riêng vì CSP chỉ cho `script-src 'self'`, không viết inline. `client/src/utils/theme.ts` đổi chế độ khi người dùng chọn; hai file phải cùng quy tắc và cùng màu `theme-color`.
+- Token sáng ở `:root`, token tối ở `.dark` trong `style.css`. Thêm token mới thì **thêm cho cả hai** và đo tương phản cả hai.
+- Bản sáng: nền `#EEF0F3`, card trắng, chữ `#15171C`, chữ phụ `#5B606B`; vé giấy trắng có viền trong mảnh để nổi trên nền xám nhạt. Bản tối: bảng bên dưới.
+- Chữ màu brand (giá, khan hiếm) đọc qua token `brand-ink`: cam trên nền tối, cam sẫm `#C2410C` trên nền sáng, đỏ mộc trên vé giấy. Nút mua luôn là nền cam chữ đen.
+- Kiểm tra giao diện phải chụp **cả hai chế độ**.
+
+Bảng token chế độ tối:
 
 | Token (class) | Giá trị | Dùng cho |
 |---|---|---|
-| `surface` | `#161616` | nền trang (body đã gắn sẵn), khấc vé |
-| `background` / `card` | `#202020` | card, ô nhập, khung form trên nền tối |
-| `foreground` | `#EDEDED` | chữ chính |
-| `muted-foreground` | `#A3A3A3` | chữ phụ, nhãn, ngày giờ |
-| `muted` / `secondary` / `accent` | `#2A2A2A` | nền phụ, hover nút ghost/outline |
-| `border` / `input` | `#333333` / `#3A3A3A` | đường kẻ, viền |
-| `primary` | `#EDEDED`, chữ `#111` | nút chính sáng đặc, vòng focus |
-| `brand` | `#FF5A1F`, chữ `#111` | **điểm nhấn mua hàng**, xem luật bên dưới |
-| `brand-soft` | `#3A1F14` | nền badge khan hiếm trên nền tối |
+| `surface` | `#23252C` | nền trang (body đã gắn sẵn), khấc vé |
+| `background` / `card` | `#2D3039` | card, ô nhập, khung form trên nền tối |
+| `foreground` | `#F2F3F5` | chữ chính |
+| `muted-foreground` | `#AEB2BD` | chữ phụ, nhãn, ngày giờ |
+| `muted` / `secondary` / `accent` | `#383B45` | nền phụ, hover nút ghost/outline |
+| `border` / `input` | `#3E414C` / `#474A56` | đường kẻ, viền |
+| `primary` | `#F2F3F5`, chữ `#111` | nút chính sáng đặc, vòng focus |
+| `brand` | `#FF6A33`, chữ `#111` | **điểm nhấn mua hàng**, xem luật bên dưới |
+| `brand-soft` | `#3D2319` | nền badge khan hiếm trên nền tối |
 | `paper` / `paper-foreground` | `#FAFAFA` / `#111111` | vé giấy |
 | `stamp` | `#C2290B` | mộc đỏ, giá và khan hiếm **trên giấy** |
 | `success` / `warning` / `danger` / `info` | giữ nguyên | chỉ cho trạng thái |
 | `destructive` | đỏ tươi | xoá, huỷ. Khác hẳn `brand` để không nhầm "mua" với "xoá" |
 
-Tương phản đã đo (WCAG): chữ chính trên nền 15,5:1; chữ phụ trên card 6,5:1; cam trên nền 5,8:1; chữ đen trên nút cam 6,1:1; chữ phụ trên giấy 6,6:1; mộc đỏ trên giấy 5,6:1.
+Nền là than ánh xanh nhẹ, không đen thuần (bản `#161616` đầu tiên bị chê "đen sì"). Tương phản đã đo (WCAG): chữ chính trên nền 13,8:1; chữ phụ trên card 6,2:1; cam trên nền 5,4:1, trên card 4,6:1; chữ đen trên nút cam 6,6:1; chữ phụ trên giấy 6,6:1; mộc đỏ trên giấy 5,6:1.
+
+Biểu đồ: một chuỗi số liệu dùng `chart-1` (xanh trời `#6CC9F0`, 7:1 trên card), không dùng cam `brand`; số liệu theo danh mục dùng tông danh mục (`data-tone` + `bg-tone`/`stroke-tone`), luôn kèm chú giải có chữ.
 
 ### Vé giấy (`.paper`)
 

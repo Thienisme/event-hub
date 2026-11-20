@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import sharp from 'sharp';
 import Redis from 'ioredis';
 import { randomBytes } from 'crypto';
-import { saveImage } from '../src/utils/storage';
+import { ensureUploadDir, saveImage } from '../src/utils/storage';
 import { buildExpiresAt } from '../src/config/order';
 
 // Seed thường chạy từ máy cá nhân tới database ở vùng khác (ví dụ TiDB Singapore), mỗi câu lệnh
@@ -426,6 +426,9 @@ async function purgeTestData(yes: boolean): Promise<void> {
 }
 
 async function main() {
+  // Máy mới clone chưa có thư mục uploads (server mới tạo khi khởi động): tạo trước,
+  // nếu không mọi ảnh banner lưu thất bại và sự kiện demo không có ảnh.
+  ensureUploadDir();
   const args = process.argv.slice(2);
   const purgeTest = args.includes('--purge-test');
   const yes = args.includes('--yes');
