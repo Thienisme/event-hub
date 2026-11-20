@@ -28,6 +28,7 @@ body {
   --color-paper: var(--paper);
   --color-paper-foreground: var(--paper-foreground);
   --color-stamp: var(--stamp);
+  --color-brand-ink: var(--brand-ink);
   --color-surface: var(--surface);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
@@ -82,12 +83,67 @@ body {
 }
 
 /*
- * Một bộ token duy nhất, tối là mặc định (index.html gắn sẵn class `dark` cho các
- * biến thể `dark:` của shadcn). Tương phản đã đo theo WCAG:
- * foreground/surface 13.8:1, muted-foreground/card 6.2:1, brand/surface 5.4:1,
- * brand/card 4.6:1, chữ đen trên nút brand 6.6:1. Nền than ánh xanh nhẹ, không đen thuần.
+ * Hai chế độ: sáng (:root) và tối (.dark). Script nhỏ trong index.html đọc lựa chọn
+ * đã lưu ('light' | 'dark' | 'system', mặc định 'system') và gắn class `dark` lên
+ * <html> trước khi trang vẽ, nên không bị nháy. Đổi chế độ: client/src/utils/theme.ts.
+ *
+ * Sáng, đã đo WCAG: chữ/nền 15,7:1; chữ phụ/card 6,3:1; chữ cam (brand-ink)/card 5,2:1;
+ * chữ đen trên nút cam 6,6:1; chart-1/card 4,6:1.
  */
 :root {
+  color-scheme: light;
+  --surface: #EEF0F3;
+  --success: oklch(0.52 0.12 155);
+  --warning: oklch(0.55 0.14 70);
+  --danger: oklch(0.55 0.2 25);
+  --info: oklch(0.5 0.1 245);
+  --radius: 0.25rem;
+  --background: #FFFFFF;
+  --foreground: #15171C;
+  --card: #FFFFFF;
+  --card-foreground: #15171C;
+  --popover: #FFFFFF;
+  --popover-foreground: #15171C;
+  --primary: #15171C;
+  --primary-foreground: #FFFFFF;
+  /* Nút mua vẫn cam chữ đen; chữ màu brand trên nền sáng dùng brand-ink sẫm hơn. */
+  --brand: #FF6A33;
+  --brand-foreground: #111111;
+  --brand-ink: #C2410C;
+  --brand-soft: #FEF0EA;
+  --secondary: #E7E9EE;
+  --secondary-foreground: #15171C;
+  --muted: #E7E9EE;
+  --muted-foreground: #5B606B;
+  --accent: #E7E9EE;
+  --accent-foreground: #15171C;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #D9DCE3;
+  --input: #CBCFD8;
+  --ring: #15171C;
+  --paper: #FFFFFF;
+  --paper-foreground: #111111;
+  --stamp: #C2290B;
+  --chart-1: #0E7CB8;
+  --chart-2: #15171C;
+  --chart-3: #5B606B;
+  --chart-4: #9AA0AB;
+  --chart-5: #D9DCE3;
+  --sidebar: #F6F7F9;
+  --sidebar-foreground: #15171C;
+  --sidebar-primary: #15171C;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E7E9EE;
+  --sidebar-accent-foreground: #15171C;
+  --sidebar-border: #D9DCE3;
+  --sidebar-ring: #9AA0AB;
+}
+
+/*
+ * Tối, đã đo WCAG: chữ/nền 13,8:1; chữ phụ/card 6,2:1; cam/nền 5,4:1, cam/card 4,6:1;
+ * chữ đen trên nút cam 6,6:1. Nền than ánh xanh nhẹ, không đen thuần.
+ */
+.dark {
   color-scheme: dark;
   --surface: #23252C;
   --success: oklch(0.72 0.14 155);
@@ -106,6 +162,7 @@ body {
   /* Điểm nhấn duy nhất: nút mua, giá vé, khan hiếm (DESIGN.md). Chữ trên nền brand là màu đen. */
   --brand: #FF6A33;
   --brand-foreground: #111111;
+  --brand-ink: #FF6A33;
   --brand-soft: #3D2319;
   --secondary: #383B45;
   --secondary-foreground: #F2F3F5;
@@ -169,7 +226,12 @@ body {
   --info: oklch(0.5 0.1 245);
 }
 /* Chữ cam trên giấy trắng chỉ đạt 3:1: giá và khan hiếm trên vé dùng màu mộc đỏ. */
-.paper .text-brand { color: var(--stamp); }
+/* Chữ màu brand (giá, khan hiếm) đọc qua brand-ink: cam trên nền tối, cam sẫm trên nền
+   sáng, đỏ mộc trên vé giấy. Viết ngoài @layer để thắng tiện ích text-brand của Tailwind. */
+.text-brand { color: var(--brand-ink); }
+.paper { --brand-ink: var(--stamp); }
+/* Nền sáng: vé giấy trắng trên nền xám nhạt cần một viền mảnh (viền trong, để mask khía vé không cắt mất). */
+:root:not(.dark) .paper { box-shadow: inset 0 0 0 1px #D9DCE3; }
 
 /*
  * Khía răng cưa hai bên đường xé của vé. Đặt --cut (vị trí đường xé tính từ trên,
@@ -227,8 +289,8 @@ body {
 :root, [data-tone] {
   --tone: #BDBDBD;
   --tone-foreground: #111111;
-  --tone-soft: color-mix(in oklch, var(--tone) 22%, #2D3039);
-  --tone-ink: var(--tone);
+  --tone-soft: color-mix(in oklch, var(--tone) 22%, #FFFFFF);
+  --tone-ink: color-mix(in oklch, var(--tone) 45%, #111111);
 }
 /* Tông sáng để chữ đen trên khối màu (cuống vé, ô ngày) đạt từ 7:1 trở lên, và màu tông
    làm chữ trên nền than đạt từ 6:1. */
@@ -240,6 +302,8 @@ body {
 [data-tone="FESTIVAL"]   { --tone: #6CC9F0; }
 [data-tone="EXHIBITION"] { --tone: #7FB2FF; }
 [data-tone="THEATER"]    { --tone: #D98BFF; }
-[data-tone] { --tone-soft: color-mix(in oklch, var(--tone) 22%, #2D3039); --tone-ink: var(--tone); }
+/* Sáng: nền tông nhạt, chữ tông sẫm. Tối: nền tông pha than, chữ chính là tông sáng. */
+[data-tone] { --tone-soft: color-mix(in oklch, var(--tone) 22%, #FFFFFF); --tone-ink: color-mix(in oklch, var(--tone) 45%, #111111); }
+.dark, .dark [data-tone] { --tone-soft: color-mix(in oklch, var(--tone) 22%, #2D3039); --tone-ink: var(--tone); }
 /* Trên vé giấy: nền tông nhạt và chữ tông sẫm để đọc được trên trắng. */
 .paper [data-tone], .paper[data-tone], [data-tone] .paper { --tone-soft: color-mix(in oklch, var(--tone) 22%, #FFFFFF); --tone-ink: color-mix(in oklch, var(--tone) 45%, #111111); }

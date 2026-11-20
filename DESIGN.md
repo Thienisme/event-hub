@@ -17,7 +17,18 @@ Ba câu để tự kiểm tra một màn hình:
 
 ## Màu
 
-Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (`indigo-*`, `gray-*`, `slate-*`...) và không viết mã hex trong component. Giao diện chỉ có chế độ tối: `index.html` gắn sẵn class `dark` (để các biến thể `dark:` của shadcn chạy đúng) và `color-scheme: dark`.
+Chỉ dùng class theo token. **Không viết class màu thô** của Tailwind (`indigo-*`, `gray-*`, `slate-*`...) và không viết mã hex trong component.
+
+### Hai chế độ: sáng và tối
+
+- Người dùng chọn **Sáng / Tối / Theo hệ thống** ở nút "Chế độ màu" trên thanh đầu trang (`ThemeToggle.vue`). Mặc định **Theo hệ thống**. Lựa chọn lưu ở `localStorage['theme']`.
+- `client/public/theme-init.js` gắn class `dark` lên `<html>` **trước khi trang vẽ** (không nháy màu). Nó là file riêng vì CSP chỉ cho `script-src 'self'`, không viết inline. `client/src/utils/theme.ts` đổi chế độ khi người dùng chọn; hai file phải cùng quy tắc và cùng màu `theme-color`.
+- Token sáng ở `:root`, token tối ở `.dark` trong `style.css`. Thêm token mới thì **thêm cho cả hai** và đo tương phản cả hai.
+- Bản sáng: nền `#EEF0F3`, card trắng, chữ `#15171C`, chữ phụ `#5B606B`; vé giấy trắng có viền trong mảnh để nổi trên nền xám nhạt. Bản tối: bảng bên dưới.
+- Chữ màu brand (giá, khan hiếm) đọc qua token `brand-ink`: cam trên nền tối, cam sẫm `#C2410C` trên nền sáng, đỏ mộc trên vé giấy. Nút mua luôn là nền cam chữ đen.
+- Kiểm tra giao diện phải chụp **cả hai chế độ**.
+
+Bảng token chế độ tối:
 
 | Token (class) | Giá trị | Dùng cho |
 |---|---|---|
