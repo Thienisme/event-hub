@@ -1210,7 +1210,7 @@ async function main() {
   console.log(`Mã giảm giá: mới tạo ${summary.createdPromos}, bỏ qua ${summary.skippedPromos}`);
   console.log(`Nhân viên:   mới gán ${summary.createdStaff}, bỏ qua ${summary.skippedStaff}`);
   if (summary.createdUsers > 0) {
-    console.log(`\nMật khẩu tài khoản demo mới tạo: ${PASSWORD}`);
+    console.log(`\nTài khoản demo mới dùng mật khẩu SEED_DEMO_PASSWORD (mặc định demo12345); không in giá trị để tránh lộ mật khẩu môi trường thật.`);
   }
 }
 
