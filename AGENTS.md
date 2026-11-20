@@ -29,7 +29,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Đăng nhập, phân quyền | `server/src/middlewares/auth.middleware.ts`, `server/src/utils/userState.ts` |
 | Email, quên mật khẩu, xác minh email | `server/src/utils/mailer.ts`, `server/src/controllers/emailAuth.controller.ts`, `server/test-password-reset.cjs` |
 | Hồ sơ, đổi mật khẩu | `server/src/controllers/auth.controller.ts`, `client/src/views/ProfileView.vue` |
-| Bảng điều khiển bán vé | `server/src/controllers/dashboard.controller.ts`, `client/src/views/SalesDashboardView.vue`, `client/src/components/RevenueChart.vue`, `server/test-dashboard.cjs` |
+| Bảng điều khiển bán vé | `server/src/controllers/dashboard.controller.ts`, `client/src/views/SalesDashboardView.vue`, `client/src/components/RevenueChart.vue`, `CategoryDonut.vue`, `StatTile.vue`, `server/test-dashboard.cjs` |
 | Quản trị | `server/src/controllers/admin.controller.ts` |
 | Cache, Redis | `server/src/utils/cache.ts`, `server/src/config/redis.ts` |
 | Validation, giới hạn dữ liệu | `server/src/utils/validation.ts`, `server/prisma/schema.prisma` |
@@ -177,7 +177,8 @@ Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không đượ
 - `GET /api/organizer/dashboard?eventId=&days=7|30|90` (ORGANIZER/ADMIN, chỉ sự kiện của chính mình; `eventId` không phải của mình trả 404). Chỉ tính đơn `CONFIRMED`; doanh thu là `totalAmount` sau giảm giá.
 - Ngày là ngày đặt đơn theo giờ Việt Nam, gom bằng `DATE_ADD(createdAt, INTERVAL 7 HOUR)` trong SQL (chạy được cả TiDB, không cần bảng múi giờ). Ngày không bán vẫn trả về với số 0.
 - Doanh thu theo loại vé chia đều tổng tiền đơn cho từng vé (`COUNT(*) OVER (PARTITION BY orderId)`): đúng khi mỗi đơn một loại vé. **Làm "mua nhiều loại vé một đơn" thì phải xem lại cách chia này.**
-- Biểu đồ tự vẽ bằng SVG (`RevenueChart.vue`), không thêm thư viện; màu cột `chart-2`, không dùng `brand`. Có tooltip chuột/phím mũi tên và bảng số liệu trong `<details>`.
+- Trả thêm `period` (kỳ hiện tại và kỳ liền trước cùng độ dài, dùng cho % tăng giảm ở ô số) và `byCategory` (doanh thu theo danh mục, toàn thời gian); sự kiện, loại vé, dòng soát vé có `category`.
+- Biểu đồ tự vẽ bằng SVG (`RevenueChart.vue`, `CategoryDonut.vue`, sparkline trong `StatTile.vue`), không thêm thư viện; một chuỗi số liệu màu `chart-1`, theo danh mục dùng tông danh mục, không dùng `brand`. Có tooltip chuột/phím mũi tên và bảng số liệu trong `<details>`.
 
 ### Xử lý lỗi
 

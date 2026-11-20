@@ -12,7 +12,7 @@ import { formatPrice } from '@/utils/format';
 const props = defineProps<{ daily: DailySales[] }>();
 
 const HEIGHT = 220;
-const PAD = { top: 12, right: 8, bottom: 28, left: 56 };
+const PAD = { top: 16, right: 8, bottom: 28, left: 56 };
 
 const container = ref<HTMLElement | null>(null);
 const width = ref(640);
@@ -104,6 +104,7 @@ function onKey(event: KeyboardEvent) {
 }
 
 const total = computed(() => props.daily.reduce((sum, d) => sum + d.revenue, 0));
+const average = computed(() => (props.daily.length > 0 ? total.value / props.daily.length : 0));
 const best = computed(() => props.daily.reduce<DailySales | null>((top, d) => (d.revenue > (top?.revenue ?? 0) ? d : top), null));
 const summary = computed(() => {
   if (!props.daily.length) return 'Chưa có số liệu.';
@@ -155,9 +156,32 @@ const summary = computed(() => {
           v-for="(day, i) in daily"
           :key="day.date"
           :d="barPath(i, day.revenue)"
-          class="fill-chart-2 transition-opacity"
+          class="fill-chart-1 transition-opacity"
           :class="active !== null && active !== i ? 'opacity-40' : ''"
         />
+
+        <!-- Đường trung bình theo ngày trong khoảng đang xem -->
+        <g v-if="average > 0">
+          <line
+            :x1="PAD.left"
+            :x2="width - PAD.right"
+            :y1="y(average)"
+            :y2="y(average)"
+            class="stroke-muted-foreground"
+            stroke-width="1"
+            stroke-dasharray="4 4"
+            shape-rendering="crispEdges"
+          />
+          <!-- Nhãn đặt sát trục trái để không đè cột mới nhất; viền màu nền giúp đọc được khi đè cột. -->
+          <text
+            :x="PAD.left + 6"
+            :y="y(average) - 5"
+            text-anchor="start"
+            paint-order="stroke"
+            stroke-width="3"
+            class="fill-muted-foreground stroke-background font-mono text-[11px] tabular-nums"
+          >TB {{ compact.format(Math.round(average)) }}</text>
+        </g>
 
         <text
           v-for="tick in xLabels"
