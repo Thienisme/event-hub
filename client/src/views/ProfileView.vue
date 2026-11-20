@@ -60,6 +60,9 @@ const confirmation = ref('');
 const savingPassword = ref(false);
 const passwordError = ref('');
 const nameUnchanged = computed(() => fullName.value.trim() === auth.user?.fullName);
+const passwordIncomplete = computed(
+  () => !currentPassword.value || !newPassword.value || !confirmation.value
+);
 const roleLabel = computed(() => auth.user ? {
   ADMIN: 'Quản trị viên', ORGANIZER: 'Nhà tổ chức', CUSTOMER: 'Khách hàng',
 }[auth.user.role] : '—');
@@ -178,7 +181,7 @@ async function savePassword() {
                   <Label for="confirm-password">Nhập lại mật khẩu mới</Label>
                   <PasswordInput id="confirm-password" v-model="confirmation" autocomplete="new-password" minlength="8" required />
                 </div>
-                <Button type="submit" :disabled="savingPassword" class="w-full sm:w-auto">{{ savingPassword ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu' }}</Button>
+                <Button type="submit" :disabled="savingPassword || passwordIncomplete" class="w-full sm:w-auto">{{ savingPassword ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu' }}</Button>
               </fieldset>
               <p v-if="passwordError" id="password-error" role="alert" class="text-sm text-danger">{{ passwordError }}</p>
             </form>

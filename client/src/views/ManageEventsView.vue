@@ -208,7 +208,7 @@ onUnmounted(() => {
               :data-tone="event.category || undefined"
               class="shadow-none ring-0 border border-border bg-background group gap-0 rounded-lg p-4 transition-colors"
             >
-              <div class="flex flex-col gap-4 sm:grid sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-center">
+              <div class="flex flex-col gap-4 sm:grid sm:grid-cols-[160px_minmax(0,1fr)] lg:grid-cols-[160px_minmax(0,1fr)_auto] lg:items-center">
                 <div class="aspect-video w-full overflow-hidden rounded-lg">
                   <EventBanner :src="event.bannerUrl" :alt="event.title">
                     <template #placeholder>
@@ -262,8 +262,8 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                  <Button as-child size="sm"><router-link
+                <div class="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-1 lg:flex-nowrap">
+                  <Button as-child variant="outline" size="sm"><router-link
                     :to="{ name: 'CheckIn', params: { id: event.id } }"
                     ><ScanLine class="size-4" aria-hidden="true" />Soát vé</router-link></Button>
 

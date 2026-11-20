@@ -80,7 +80,7 @@ const confirmRemove = async () => {
         <Button as-child variant="outline" size="sm">
           <router-link :to="{ name: 'MyEvents' }"><ArrowLeft class="size-4" aria-hidden="true" />Sự kiện của tôi</router-link>
         </Button>
-        <Button as-child size="sm">
+        <Button as-child variant="outline" size="sm">
           <router-link :to="{ name: 'CheckIn', params: { id: eventId } }"><ScanLine class="size-4" aria-hidden="true" />Mở trang soát vé</router-link>
         </Button>
       </div>
