@@ -63,6 +63,13 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Bảng điều khiển bán vé (ORGANIZER / ADMIN); ?eventId=&days= nằm trên URL
+      path: '/my-events/dashboard',
+      name: 'SalesDashboard',
+      component: () => import('@/views/SalesDashboardView.vue'),
+      meta: { requiresAuth: true, organizerOnly: true, title: 'Bảng điều khiển bán vé' },
+    },
+    {
       // Quản lý sự kiện của bản thân (ORGANIZER / ADMIN)
       path: '/my-events',
       name: 'MyEvents',

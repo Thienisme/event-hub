@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { listMyEvents, getOrganizerStats } from '../controllers/organizer.controller';
-import { authenticate } from '../middlewares/auth.middleware';
+import { authenticate, authorize } from '../middlewares/auth.middleware';
+import { getSalesDashboard } from '../controllers/dashboard.controller';
 
 const router = Router();
 
@@ -10,5 +11,7 @@ router.use(authenticate);
 
 router.get('/events', listMyEvents);
 router.get('/stats', getOrganizerStats);
+// Bảng điều khiển bán vé: doanh thu theo ngày, loại vé bán chạy, tỉ lệ vào cổng.
+router.get('/dashboard', authorize('ORGANIZER', 'ADMIN'), getSalesDashboard);
 
 export default router;

@@ -41,6 +41,7 @@ const SUITES = [
   ['test:checkin', 'test-checkin.cjs'],
   ['test:transfer', 'test-ticket-transfer.cjs'],
   ['test:staff', 'test-event-staff.cjs'],
+  ['test:dashboard', 'test-dashboard.cjs'],
   ['test:upload', 'test-upload.cjs'],
   ['test:profile', 'test-profile.cjs'],
   ['test:password-reset', 'test-password-reset.cjs'],

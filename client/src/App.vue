@@ -40,6 +40,7 @@ const roleLabel = computed(() => {
 const menuGroups = computed(() => [
   ...(authStore.isOrganizer ? [{ title: 'Nhà tổ chức', items: [
     { name: 'MyEvents', label: 'Sự kiện của tôi' },
+    { name: 'SalesDashboard', label: 'Bảng điều khiển' },
     { name: 'CreateEvent', label: 'Tạo sự kiện' },
   ] }] : []),
   ...(authStore.isCheckInStaff ? [{ title: 'Nhân viên', items: [

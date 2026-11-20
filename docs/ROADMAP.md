@@ -36,7 +36,7 @@ Xong ở PR #20 (giao diện thanh toán hoàn thiện ở #21).
 
 ## Giai đoạn 3: Công cụ cho nhà tổ chức
 
-- [ ] Bảng điều khiển bán vé: doanh thu theo ngày, tỉ lệ vào cổng, loại vé bán chạy (O, có biểu đồ)
+- [x] **Bảng điều khiển bán vé** `/my-events/dashboard`: số tổng, doanh thu theo ngày (biểu đồ SVG tự vẽ, 7/30/90 ngày), loại vé bán chạy, tỉ lệ vào cổng, lọc theo sự kiện (Cl)
 - [ ] Xuất danh sách khách ra CSV, gửi email cho toàn bộ khách của sự kiện (C)
 - [x] **Nhân viên soát vé** theo từng sự kiện: nhà tổ chức thêm tài khoản bằng email, nhân viên chỉ quét vé và xem số người vào cổng, gỡ là mất quyền ngay; đếm số vé mỗi người đã soát (Cl)
 - [ ] Huỷ cả sự kiện: báo người mua, đánh dấu cần hoàn tiền (C)
