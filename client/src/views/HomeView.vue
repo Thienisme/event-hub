@@ -313,7 +313,7 @@ onUnmounted(() => {
       <section id="all-events" ref="resultsSection" aria-label="Danh sách sự kiện" :aria-busy="eventStore.loading || !loaded" class="scroll-mt-32 space-y-6">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <h2 class="text-xl sm:text-2xl font-bold tracking-tight">{{ hasActiveFilters ? 'Kết quả tìm kiếm' : 'Tất cả sự kiện' }}<span v-if="total !== null && !eventStore.loading && !errorMessage" class="ml-2 text-sm font-normal tabular-nums text-muted-foreground">({{ total.toLocaleString('vi-VN') }})</span></h2>
-          <Tabs :model-value="status" @update:model-value="changeStatus"><TabsList aria-label="Trạng thái sự kiện"><TabsTrigger value="upcoming">Sắp diễn ra</TabsTrigger><TabsTrigger value="ended">Đã kết thúc</TabsTrigger></TabsList></Tabs>
+          <Tabs :model-value="status" @update:model-value="changeStatus"><TabsList aria-label="Trạng thái sự kiện" class="h-10 sm:h-9"><TabsTrigger value="upcoming">Sắp diễn ra</TabsTrigger><TabsTrigger value="ended">Đã kết thúc</TabsTrigger></TabsList></Tabs>
         </div>
       <div class="min-w-0 space-y-3 border-b border-border bg-surface py-3">
         <div class="flex min-w-0 items-start gap-2 sm:gap-3">
