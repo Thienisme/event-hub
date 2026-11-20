@@ -50,6 +50,7 @@
     "test:all": "node run-all-tests.cjs",
     "seed": "ts-node prisma/seed.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",
+    "seed:more": "ts-node prisma/seed-more.ts",
     "test:upload": "node test-upload.cjs",
     "test:profile": "node test-profile.cjs",
     "test:password-reset": "node test-password-reset.cjs",
