@@ -392,7 +392,7 @@ const copyOrderId = async (id: string) => {
                 </div>
                 <div class="relative flex min-w-0 flex-col gap-4 rounded-b-lg border-t-2 border-dashed border-paper-foreground/25 bg-tone-soft p-5 sm:rounded-bl-none sm:rounded-r-lg sm:border-t-0 sm:border-l-2">
                   <span aria-hidden="true" class="absolute -left-2.5 -top-2.5 size-5 rounded-full bg-surface" />
-                  <span aria-hidden="true" class="absolute -right-2.5 -top-2.5 size-5 rounded-full bg-surface sm:-bottom-2.5 sm:-left-2.5 sm:top-auto sm:right-auto" />
+                  <span aria-hidden="true" class="absolute -right-2.5 -top-2.5 size-5 rounded-full bg-surface sm:-bottom-2.5 sm:-left-2.5 sm:top-auto sm:right-auto" :class="{ 'sm:hidden': order.status === 'CONFIRMED' && isQrExpanded(order.id) }" />
                   <div class="flex flex-wrap items-center gap-2"><OrderStatusBadge :status="displayStatus(order)" /><Badge v-if="route.query.order === order.id" variant="outline">Vừa đặt</Badge></div>
                   <div>
                     <p v-if="hasDiscount(order)" class="flex flex-wrap gap-x-2 text-xs tabular-nums"><span class="text-muted-foreground line-through">{{ formatPrice(order.subtotalAmount) }}</span><span class="text-success">Giảm {{ formatPrice(order.discountAmount) }}</span></p>
@@ -410,7 +410,9 @@ const copyOrderId = async (id: string) => {
                   <Button v-else-if="eventOf(order)?.slug" variant="ghost" as-child class="mt-auto min-h-10 w-full"><RouterLink :to="`/events/${eventOf(order)?.slug}`">Xem sự kiện</RouterLink></Button>
                 </div>
               </div>
-              <section v-if="order.status === 'CONFIRMED'" v-show="isQrExpanded(order.id)" :id="`order-tickets-${order.id}`" class="rounded-b-sm border-t-2 border-dashed border-paper-foreground/25 bg-muted/60 p-5 sm:p-6">
+              <section v-if="order.status === 'CONFIRMED'" v-show="isQrExpanded(order.id)" :id="`order-tickets-${order.id}`" class="relative rounded-b-sm border-t-2 border-dashed border-paper-foreground/25 bg-muted/60 p-5 sm:p-6">
+                <span aria-hidden="true" class="absolute -left-2.5 -top-2.5 size-5 rounded-full bg-surface" />
+                <span aria-hidden="true" class="absolute -right-2.5 -top-2.5 size-5 rounded-full bg-surface" />
                 <h3 class="font-semibold">Mã QR vào cổng</h3>
                 <p class="mt-1 text-xs leading-relaxed text-muted-foreground">Xuất trình mã này khi soát vé. Mỗi vé có một mã riêng.</p>
                 <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
