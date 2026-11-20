@@ -44,7 +44,7 @@ async function toggle() {
     />
     <button
       type="button"
-      class="absolute inset-y-0 right-0 my-auto flex size-9 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-ring"
+      class="absolute inset-y-0 right-0 my-auto flex size-9 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-foreground/10"
       :aria-label="visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
       :aria-pressed="visible"
       :aria-controls="($attrs.id as string | undefined) ?? generatedId"
