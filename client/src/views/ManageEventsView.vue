@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import EventBanner from '@/components/EventBanner.vue';
-import { Plus, Search, CalendarDays, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal } from '@lucide/vue';
+import { Plus, Search, CalendarDays, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal, Users } from '@lucide/vue';
 
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -265,6 +265,11 @@ onUnmounted(() => {
                   <Button as-child size="sm" variant="ghost"><router-link
                     :to="{ name: 'PromoCodes', params: { id: event.id } }"
                     ><Percent class="size-4" aria-hidden="true" />Mã giảm giá</router-link></Button>
+
+                  <Button as-child size="sm" variant="ghost"><router-link
+                    :to="{ name: 'EventStaff', params: { id: event.id } }"
+                    :aria-label="`Nhân viên soát vé ${event.title}`"
+                    ><Users class="size-4" aria-hidden="true" />Nhân viên</router-link></Button>
 
                   <DropdownMenu>
                     <DropdownMenuTrigger as-child>

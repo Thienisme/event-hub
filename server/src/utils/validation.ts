@@ -342,6 +342,11 @@ export const previewPromoSchema = createOrderSchema.omit({ promoCode: true }).ex
 export const payOrderSchema = z.object({ provider: z.enum(['VNPAY', 'MOMO'], { error: 'Cổng thanh toán không hợp lệ!' }) });
 
 /** Chuyển nhượng vé: người nhận phải là tài khoản đã đăng ký (tìm theo email). */
+/** Thêm nhân viên soát vé theo email tài khoản EventHub. */
+export const addEventStaffSchema = z.object({
+  email: z.string({ message: 'Email không hợp lệ!' }).trim().toLowerCase().max(255, 'Email không hợp lệ!').email('Email không hợp lệ!'),
+});
+
 export const transferTicketSchema = z.object({
   email: z.string({ message: 'Email không hợp lệ!' }).trim().toLowerCase().max(255, 'Email không hợp lệ!').email('Email không hợp lệ!'),
 });

@@ -16,21 +16,28 @@ import { AppError, handleControllerError } from '../utils/errors';
 export type CheckInResult = 'VALID' | 'ALREADY_USED' | 'NOT_FOUND' | 'WRONG_EVENT' | 'NOT_CONFIRMED' | 'QR_EXPIRED' | 'STATIC_QR_NOT_ALLOWED';
 
 /**
- * Tải sự kiện và kiểm tra quyền soát vé: ORGANIZER của chính sự kiện, hoặc ADMIN.
+ * Tải sự kiện và kiểm tra quyền soát vé: ORGANIZER của chính sự kiện, ADMIN,
+ * hoặc nhân viên soát vé được gán cho sự kiện này (bảng `event_staff`, mọi role).
  *
  * Kiểm tra quyền TRƯỚC khi tra mã QR: người không có quyền không được dùng
  * endpoint này để dò xem một mã có tồn tại hay không.
- * Dùng `currentRole` (đọc từ DB) chứ không phải `role` trong JWT.
+ * Dùng `currentRole` (đọc từ DB) chứ không phải `role` trong JWT. Quyền nhân viên
+ * đọc thẳng từ DB mỗi request (không cache) nên gỡ nhân viên là mất quyền ngay.
  */
 async function loadEventForStaff(req: Request) {
+  const userId = req.user!.userId;
   const event = await prisma.event.findUnique({
     where: { id: req.params.id },
-    select: { id: true, title: true, organizerId: true, dynamicQrOnly: true },
+    select: {
+      id: true, title: true, organizerId: true, dynamicQrOnly: true,
+      staff: { where: { userId }, select: { userId: true } },
+    },
   });
 
   if (!event) throw new AppError('Không tìm thấy sự kiện!', 404);
 
-  if (event.organizerId !== req.user!.userId && req.user?.currentRole !== 'ADMIN') {
+  const isOwner = event.organizerId === userId && req.user?.currentRole === 'ORGANIZER';
+  if (!isOwner && req.user?.currentRole !== 'ADMIN' && event.staff.length === 0) {
     throw new AppError('Bạn không có quyền soát vé cho sự kiện này!', 403);
   }
 

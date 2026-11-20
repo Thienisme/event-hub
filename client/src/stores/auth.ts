@@ -26,6 +26,21 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value);
   const isOrganizer = computed(() => user.value?.role === 'ORGANIZER' || user.value?.role === 'ADMIN');
   const isAdmin = computed(() => user.value?.role === 'ADMIN');
+  /**
+   * Được gán soát vé ít nhất một sự kiện (bảng event_staff, mọi role).
+   * Giữ riêng khỏi `user` vì login/đổi hồ sơ trả về user không kèm cờ này.
+   */
+  const isCheckInStaff = ref(false);
+
+  /** Hỏi lại server sau khi đăng nhập; lỗi thì coi như không phải nhân viên. */
+  async function refreshCheckInStaff() {
+    try {
+      const { data } = await apiClient.get<{ data: unknown[] }>('/check-in/events');
+      isCheckInStaff.value = data.data.length > 0;
+    } catch {
+      isCheckInStaff.value = false;
+    }
+  }
 
   // Đăng nhập
   async function login(credentials: { email: string; password: string }) {
@@ -34,6 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = response.data.user;
     
     localStorage.setItem('token', response.data.token);
+    void refreshCheckInStaff();
     return response.data;
   }
 
@@ -41,8 +57,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchProfile() {
     if (!token.value) return;
     try {
-      const response = await apiClient.get<{ user: User }>('/auth/me');
-      user.value = response.data.user;
+      const response = await apiClient.get<{ user: User & { isCheckInStaff?: boolean } }>('/auth/me');
+      const { isCheckInStaff: staffFlag, ...profile } = response.data.user;
+      user.value = profile;
+      isCheckInStaff.value = staffFlag === true;
     } catch (error: any) {
       // Token hỏng/hết hạn hoặc tài khoản không còn -> dọn sạch state, tránh trạng
       // thái "đăng nhập ma". Lỗi mạng hay 5xx thì giữ phiên: server chập chờn không
@@ -101,6 +119,7 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     user.value = null;
     token.value = null;
+    isCheckInStaff.value = false;
     localStorage.removeItem('token');
   }
 
@@ -110,6 +129,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isOrganizer,
     isAdmin,
+    isCheckInStaff,
+    refreshCheckInStaff,
     login,
     updateProfile,
     updateAvatar,

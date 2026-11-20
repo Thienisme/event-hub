@@ -57,9 +57,15 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
     }
 
+    // Có được gán soát vé sự kiện nào không: client dùng để hiện mục "Soát vé".
+    const staffAssignment = await prisma.eventStaff.findFirst({
+      where: { userId: user.id },
+      select: { eventId: true },
+    });
+
     return res.json({
       message: 'Lấy thông tin tài khoản thành công!',
-      user,
+      user: { ...user, isCheckInStaff: staffAssignment !== null },
     });
   } catch (error) {
     return handleControllerError(res, 'auth.me', error);

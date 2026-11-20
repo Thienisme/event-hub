@@ -70,10 +70,26 @@ const router = createRouter({
       meta: { requiresAuth: true, organizerOnly: true },
     },
     {
+      // Soát vé: nhà tổ chức của sự kiện, ADMIN hoặc nhân viên được gán (mọi role).
+      // Không dùng organizerOnly; server kiểm quyền theo từng sự kiện.
       path: '/my-events/:id/check-in',
       name: 'CheckIn',
       component: () => import('@/views/CheckInView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // Nhân viên soát vé của một sự kiện (ORGANIZER / ADMIN)
+      path: '/my-events/:id/staff',
+      name: 'EventStaff',
+      component: () => import('@/views/EventStaffView.vue'),
       meta: { requiresAuth: true, organizerOnly: true },
+    },
+    {
+      // Các sự kiện mình được gán làm nhân viên soát vé
+      path: '/check-in',
+      name: 'CheckInEvents',
+      component: () => import('@/views/CheckInEventsView.vue'),
+      meta: { requiresAuth: true, title: 'Soát vé' },
     },
     {
       // Quản lý mã giảm giá của một sự kiện (ORGANIZER / ADMIN)

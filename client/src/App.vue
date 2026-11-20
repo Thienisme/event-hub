@@ -42,6 +42,9 @@ const menuGroups = computed(() => [
     { name: 'MyEvents', label: 'Sự kiện của tôi' },
     { name: 'CreateEvent', label: 'Tạo sự kiện' },
   ] }] : []),
+  ...(authStore.isCheckInStaff ? [{ title: 'Nhân viên', items: [
+    { name: 'CheckInEvents', label: 'Soát vé' },
+  ] }] : []),
   ...(authStore.isAdmin ? [{ title: 'Quản trị', items: [
     { name: 'AdminDashboard', label: 'Tổng quan' },
     { name: 'AdminUsers', label: 'Người dùng' },
