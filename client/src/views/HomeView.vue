@@ -285,12 +285,22 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen bg-surface px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
     <div class="mx-auto max-w-6xl min-w-0 space-y-12">
-      <header class="flex flex-wrap items-center justify-between gap-5 pt-4">
-        <div class="min-w-0 space-y-3">
-          <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Khám phá sự kiện</h1>
-          <p class="text-sm leading-6 text-muted-foreground sm:text-base">{{ total !== null && !errorMessage ? `${total.toLocaleString('vi-VN')} sự kiện ${status === 'ended' ? 'đã kết thúc' : 'sắp diễn ra'}` : 'Khám phá sự kiện' }}</p>
+      <!-- Đầu trang kiểu bảng vé: câu lớn bản hẹp, bộ đếm in mono bên phải. -->
+      <header class="grid gap-6 pt-6 sm:pt-10 md:grid-cols-[1fr_auto] md:items-end">
+        <div class="min-w-0 space-y-4">
+          <p class="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">EventHub · Hà Nội · TP.HCM · Đà Nẵng</p>
+          <h1 class="text-5xl font-extrabold leading-[0.95] sm:text-7xl [font-stretch:75%]">
+            <template v-if="status === 'ended'">Những đêm<br>đã <span class="text-brand">qua.</span></template>
+            <template v-else>Chọn một đêm,<br>xé một <span class="text-brand">tấm vé.</span></template>
+          </h1>
+          <div class="flex flex-wrap items-center gap-3">
+            <Button v-if="authStore.isOrganizer" class="shrink-0" @click="router.push({ name: 'CreateEvent' })"><Plus class="size-4" aria-hidden="true" />Tạo sự kiện</Button>
+          </div>
         </div>
-        <Button v-if="authStore.isOrganizer" class="shrink-0" @click="router.push({ name: 'CreateEvent' })"><Plus class="size-4" aria-hidden="true" />Tạo sự kiện</Button>
+        <p class="font-mono text-xs font-semibold uppercase leading-5 tracking-widest text-muted-foreground md:text-right">
+          <span class="block text-6xl font-bold leading-none tracking-tight text-foreground tabular-nums">{{ total !== null && !errorMessage ? String(total).padStart(2, '0') : '—' }}</span>
+          sự kiện {{ status === 'ended' ? 'đã kết thúc' : 'sắp diễn ra' }}
+        </p>
       </header>
 
       <FeaturedEvents v-if="!hasActiveFilters && status === 'upcoming' && currentPage === 1" />

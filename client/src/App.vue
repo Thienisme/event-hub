@@ -182,13 +182,13 @@ const handleLogout = () => {
     <main id="main-content" tabindex="-1" class="flex-1">
       <RouterView />
     </main>
-    <footer v-if="showNavbar" class="site-footer bg-primary text-primary-foreground px-4 sm:px-6 lg:px-8">
+    <footer v-if="showNavbar" class="site-footer border-t border-border bg-surface text-foreground px-4 sm:px-6 lg:px-8">
       <div class="max-w-6xl mx-auto">
         <div class="py-12 sm:py-16 grid gap-x-8 gap-y-10 grid-cols-2 md:grid-cols-5">
           <div class="col-span-2">
-            <router-link to="/" class="inline-block text-3xl font-extrabold tracking-tight rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-foreground">EventHub<span aria-hidden="true" class="text-primary-foreground/50">.</span></router-link>
-            <p class="mt-4 text-sm text-primary-foreground/70 leading-6 max-w-xs">Nền tảng khám phá và đặt vé sự kiện: hoà nhạc, hội thảo, workshop và hơn thế nữa.</p>
-            <p class="mt-6 border-l border-primary-foreground/30 pl-3 text-sm font-medium leading-6">Mỗi tấm vé, một trải nghiệm.</p>
+            <router-link to="/" class="inline-block text-3xl font-extrabold tracking-tight rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-foreground">EventHub<span aria-hidden="true" class="text-foreground/50">.</span></router-link>
+            <p class="mt-4 text-sm text-foreground/70 leading-6 max-w-xs">Nền tảng khám phá và đặt vé sự kiện: hoà nhạc, hội thảo, workshop và hơn thế nữa.</p>
+            <p class="mt-6 border-l border-foreground/30 pl-3 text-sm font-medium leading-6">Mỗi tấm vé, một trải nghiệm.</p>
           </div>
           <div>
             <h2 class="text-sm font-semibold">Khám phá</h2>
@@ -217,7 +217,7 @@ const handleLogout = () => {
             </ul>
           </div>
         </div>
-        <div class="border-t border-primary-foreground/20 py-6 flex flex-col sm:flex-row gap-3 justify-between text-xs text-primary-foreground/60 leading-5">
+        <div class="border-t border-foreground/20 py-6 flex flex-col sm:flex-row gap-3 justify-between text-xs text-foreground/60 leading-5">
           <p>© {{ currentYear }} EventHub. Dự án demo, thanh toán là giả lập.</p>
           <p>Giờ hiển thị theo múi giờ Việt Nam (GMT+7)</p>
         </div>
@@ -231,10 +231,10 @@ const handleLogout = () => {
 @reference "./style.css";
 
 .site-footer h2 {
-  @apply text-xs font-semibold uppercase tracking-widest text-primary-foreground/90;
+  @apply text-xs font-semibold uppercase tracking-widest text-muted-foreground font-mono;
 }
 
 .site-footer li a {
-  @apply inline-block rounded-sm text-primary-foreground/70 underline-offset-4 hover:text-primary-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-foreground;
+  @apply inline-block rounded-sm text-foreground/75 underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-foreground;
 }
 </style>

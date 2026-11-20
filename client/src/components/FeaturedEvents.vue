@@ -109,7 +109,7 @@ onUnmounted(() => {
     aria-roledescription="carousel"
     aria-label="Sự kiện nổi bật"
     :aria-busy="loading"
-    class="relative isolate aspect-[4/5] overflow-hidden rounded-lg border border-border bg-primary text-primary-foreground sm:aspect-[16/9] lg:aspect-[21/9]"
+    class="relative isolate aspect-[4/5] overflow-hidden rounded-sm border border-border bg-background text-white sm:aspect-[16/9] lg:aspect-[21/9]"
     @mouseenter="setHovered(true)"
     @mouseleave="setHovered(false)"
     @focusin="onFocusIn"
@@ -126,7 +126,7 @@ onUnmounted(() => {
         :aria-hidden="index !== activeIndex"
         :inert="index !== activeIndex"
         :data-tone="event.category || undefined"
-        class="absolute inset-0 bg-primary transition-opacity duration-500 motion-reduce:transition-none"
+        class="absolute inset-0 bg-background transition-opacity duration-500 motion-reduce:transition-none"
         :class="index === activeIndex ? 'z-10 opacity-100' : 'pointer-events-none opacity-0'"
       >
         <img
@@ -144,9 +144,9 @@ onUnmounted(() => {
         >
           <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-widest text-white/80">
             <span>Nổi bật ·</span>
-            <span class="rounded-full bg-tone px-2.5 py-0.5 text-tone-foreground">{{ categoryLabel(event.category ?? 'OTHER') }}</span>
+            <span class="rounded-sm bg-tone px-2 py-0.5 font-mono text-tone-foreground">{{ categoryLabel(event.category ?? 'OTHER') }}</span>
           </p>
-          <h2 class="line-clamp-2 text-2xl font-extrabold tracking-tight text-white sm:text-4xl">
+          <h2 class="line-clamp-2 text-3xl font-extrabold leading-none text-white sm:text-6xl [font-stretch:75%]">
             {{ event.title }}
           </h2>
           <div class="flex flex-col gap-2 text-sm text-white/85">
@@ -159,7 +159,7 @@ onUnmounted(() => {
               <span class="line-clamp-2">{{ event.location }}</span>
             </p>
           </div>
-          <p class="font-semibold tabular-nums text-white">{{ priceLabel(event) }}</p>
+          <p class="font-mono font-bold tabular-nums text-white">{{ priceLabel(event) }}</p>
           <Button as-child class="bg-brand text-brand-foreground hover:bg-brand/90 motion-reduce:transform-none motion-reduce:transition-none">
             <RouterLink :to="`/events/${event.slug ?? event.id}`">Đặt vé ngay</RouterLink>
           </button>

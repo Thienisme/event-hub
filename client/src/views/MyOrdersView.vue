@@ -311,7 +311,7 @@ const copyOrderId = async (id: string) => {
           <p class="mt-1 text-sm text-muted-foreground">Vé người khác đã chuyển sang tài khoản của bạn.</p>
         </div>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <article v-for="ticket in orderStore.receivedTickets" :key="ticket.id" :data-tone="ticket.ticketType.event.category" class="flex min-w-0 flex-col gap-4 rounded-lg border bg-background p-4">
+          <article v-for="ticket in orderStore.receivedTickets" :key="ticket.id" :data-tone="ticket.ticketType.event.category" class="paper flex min-w-0 flex-col gap-4 rounded-sm p-4">
             <div class="flex min-w-0 gap-3">
               <TicketDate :value="ticket.ticketType.event.startTime" :category="ticket.ticketType.event.category" class="shrink-0" />
               <div class="min-w-0 space-y-1">
@@ -359,7 +359,7 @@ const copyOrderId = async (id: string) => {
             <Button @click="router.push({ name: 'Home' })">Khám phá sự kiện</Button>
           </Card>
           <div v-else class="space-y-5">
-            <section v-if="activeTab === 'all' && nextOrder" :data-tone="eventOf(nextOrder)?.category" class="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border bg-background p-4 sm:flex-nowrap" aria-label="Sự kiện sắp tới">
+            <section v-if="activeTab === 'all' && nextOrder" :data-tone="eventOf(nextOrder)?.category" class="paper flex min-w-0 flex-wrap items-center gap-3 rounded-sm p-4 sm:flex-nowrap" aria-label="Sự kiện sắp tới">
               <TicketDate :value="eventOf(nextOrder)?.startTime" :category="eventOf(nextOrder)?.category" class="shrink-0" />
               <div class="min-w-0 flex-1 space-y-1">
                 <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">Sắp tới · {{ nextCountdown }}</p>
@@ -368,7 +368,7 @@ const copyOrderId = async (id: string) => {
               </div>
               <Button class="w-full shrink-0 sm:w-auto" @click="revealNextQr"><QrCode class="size-4" aria-hidden="true" />Mở mã QR</Button>
             </section>
-            <article v-for="order in visibleOrders" :data-tone="isClosed(order) ? undefined : eventOf(order)?.category" :id="`order-${order.id}`" :key="order.id" class="group relative min-w-0 scroll-mt-6 rounded-lg border bg-background">
+            <article v-for="order in visibleOrders" :data-tone="isClosed(order) ? undefined : eventOf(order)?.category" :id="`order-${order.id}`" :key="order.id" class="paper group relative min-w-0 scroll-mt-6 rounded-sm">
               <div class="grid min-w-0 sm:grid-cols-[176px_minmax(0,1fr)_200px]">
                 <div class="relative aspect-[2/1] min-h-40 overflow-hidden rounded-t-lg bg-muted sm:aspect-auto sm:rounded-l-lg sm:rounded-tr-none">
                   <img v-if="imageOf(order)" :src="imageOf(order)!" alt="" loading="lazy" class="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] motion-reduce:transform-none" :class="{ 'grayscale opacity-60': isClosed(order) }" @error="failedImages.add(order.id)" />
@@ -376,8 +376,8 @@ const copyOrderId = async (id: string) => {
                   <TicketDate :value="eventOf(order)?.startTime" :category="isClosed(order) ? undefined : eventOf(order)?.category" class="absolute left-3 top-3" />
                 </div>
                 <div class="flex min-w-0 flex-col gap-3 p-5">
-                  <p class="text-xs font-semibold uppercase tracking-widest text-tone-ink">{{ categoryLabel(eventOf(order)?.category ?? 'OTHER') }}</p>
-                  <h2 class="break-words text-lg font-semibold tracking-tight">
+                  <p class="font-mono text-[11px] font-semibold uppercase tracking-widest text-tone-ink">{{ categoryLabel(eventOf(order)?.category ?? 'OTHER') }}</p>
+                  <h2 class="break-words text-2xl font-extrabold leading-tight">
                     <RouterLink v-if="eventOf(order)?.slug" :to="`/events/${eventOf(order)?.slug}`" class="underline-offset-4 hover:underline">{{ eventOf(order)?.title }}</RouterLink>
                     <template v-else>{{ eventOf(order)?.title || 'Sự kiện' }}</template>
                   </h2>
@@ -390,13 +390,13 @@ const copyOrderId = async (id: string) => {
                     <span>Đặt lúc {{ formatDateTime(order.createdAt) }}</span>
                   </div>
                 </div>
-                <div class="relative flex min-w-0 flex-col gap-4 rounded-b-lg border-t border-dashed border-tone/30 bg-tone-soft p-5 sm:rounded-bl-none sm:rounded-r-lg sm:border-t-0 sm:border-l">
-                  <span aria-hidden="true" class="absolute -left-2 -top-2 size-4 rounded-full border bg-surface" />
-                  <span aria-hidden="true" class="absolute -right-2 -top-2 size-4 rounded-full border bg-surface sm:-bottom-2 sm:-left-2 sm:top-auto sm:right-auto" />
+                <div class="relative flex min-w-0 flex-col gap-4 rounded-b-lg border-t-2 border-dashed border-paper-foreground/25 bg-tone-soft p-5 sm:rounded-bl-none sm:rounded-r-lg sm:border-t-0 sm:border-l-2">
+                  <span aria-hidden="true" class="absolute -left-2.5 -top-2.5 size-5 rounded-full bg-surface" />
+                  <span aria-hidden="true" class="absolute -right-2.5 -top-2.5 size-5 rounded-full bg-surface sm:-bottom-2.5 sm:-left-2.5 sm:top-auto sm:right-auto" />
                   <div class="flex flex-wrap items-center gap-2"><OrderStatusBadge :status="displayStatus(order)" /><Badge v-if="route.query.order === order.id" variant="outline">Vừa đặt</Badge></div>
                   <div>
                     <p v-if="hasDiscount(order)" class="flex flex-wrap gap-x-2 text-xs tabular-nums"><span class="text-muted-foreground line-through">{{ formatPrice(order.subtotalAmount) }}</span><span class="text-success">Giảm {{ formatPrice(order.discountAmount) }}</span></p>
-                    <p class="break-words text-2xl font-bold tabular-nums" :class="{ 'text-muted-foreground': isClosed(order) }">{{ formatPrice(order.totalAmount) }}</p>
+                    <p class="break-words font-mono text-2xl font-bold tabular-nums" :class="{ 'text-muted-foreground': isClosed(order) }">{{ formatPrice(order.totalAmount) }}</p>
                   </div>
                   <div v-if="order.status === 'PENDING'" class="mt-auto space-y-2">
                     <p v-if="isHoldExpired(order)" class="text-sm text-muted-foreground">Đã hết thời gian giữ vé</p>
@@ -410,7 +410,7 @@ const copyOrderId = async (id: string) => {
                   <Button v-else-if="eventOf(order)?.slug" variant="ghost" as-child class="mt-auto min-h-10 w-full"><RouterLink :to="`/events/${eventOf(order)?.slug}`">Xem sự kiện</RouterLink></Button>
                 </div>
               </div>
-              <section v-if="order.status === 'CONFIRMED'" v-show="isQrExpanded(order.id)" :id="`order-tickets-${order.id}`" class="rounded-b-lg border-t bg-surface p-5 sm:p-6">
+              <section v-if="order.status === 'CONFIRMED'" v-show="isQrExpanded(order.id)" :id="`order-tickets-${order.id}`" class="rounded-b-sm border-t-2 border-dashed border-paper-foreground/25 bg-muted/60 p-5 sm:p-6">
                 <h3 class="font-semibold">Mã QR vào cổng</h3>
                 <p class="mt-1 text-xs leading-relaxed text-muted-foreground">Xuất trình mã này khi soát vé. Mỗi vé có một mã riêng.</p>
                 <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">

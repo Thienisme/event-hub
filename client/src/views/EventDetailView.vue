@@ -399,7 +399,7 @@ const handleDelete = async () => {
       </Button>
       <EventBanner :src="event.bannerUrl" :alt="event.title" class="rounded-lg [&>img]:aspect-video lg:[&>img]:aspect-[21/9]">
         <template #placeholder>
-          <div class="flex aspect-[3/1] items-end rounded-lg bg-primary p-6 text-primary-foreground sm:aspect-[4/1] sm:p-10">
+          <div class="flex aspect-[3/1] items-end rounded-sm bg-tone p-6 text-tone-foreground sm:aspect-[4/1] sm:p-10">
             <div class="space-y-2"><span class="inline-flex w-fit items-center gap-1.5 rounded-full bg-tone-soft px-2.5 py-0.5 text-xs font-semibold uppercase tracking-widest text-tone-ink"><span class="size-2 rounded-full bg-tone" aria-hidden="true" />{{ categoryLabel(event.category ?? 'OTHER') }}</span><p class="text-2xl font-extrabold tabular-nums sm:text-4xl">{{ eventDates.banner }}</p></div>
           </div>
         </template>
@@ -411,7 +411,7 @@ const handleDelete = async () => {
             <span v-if="event.category" class="inline-flex items-center gap-1.5 rounded-full bg-tone-soft px-2.5 py-0.5 text-xs font-semibold uppercase tracking-widest text-tone-ink"><span class="size-2 rounded-full bg-tone" aria-hidden="true" />{{ categoryLabel(event.category) }}</span>
             <Badge :variant="eventPhase === 'ended' ? 'muted' : eventPhase === 'ongoing' ? 'success' : 'info'">{{ phaseLabel }}</Badge>
           </div>
-          <h1 class="break-words text-3xl sm:text-4xl font-extrabold tracking-tight">{{ event.title }}</h1>
+          <h1 class="break-words text-4xl font-extrabold leading-[0.95] sm:text-6xl [font-stretch:75%]">{{ event.title }}</h1>
           <EventActions :event="event" class="-ml-2" />
         </div>
         <div v-if="authStore.isOrganizer" class="flex shrink-0 flex-wrap gap-2">
@@ -454,7 +454,15 @@ const handleDelete = async () => {
         </div>
 
         <aside id="ticket-selection" ref="ticketSection" class="min-w-0 scroll-mt-20 lg:sticky lg:top-20" aria-label="Đặt vé sự kiện">
-          <Card class="shadow-none ring-0 border border-border bg-background gap-0 overflow-hidden rounded-lg py-0">
+          <!-- Khung chọn vé là một tấm vé giấy: cuống màu danh mục ở trên, đường xé có khía. -->
+          <Card class="paper ticket-notch gap-0 overflow-hidden rounded-none border-0 py-0 shadow-none ring-0" :data-tone="event.category || undefined" style="--cut: 4.5rem">
+            <div class="flex h-[4.5rem] items-center justify-between gap-3 border-b-2 border-dashed border-paper-foreground/25 bg-tone px-5 text-tone-foreground sm:px-6" aria-hidden="true">
+              <div class="min-w-0">
+                <p class="font-mono text-[11px] font-bold uppercase tracking-widest">Vé vào cửa</p>
+                <p class="truncate text-2xl font-extrabold leading-tight [font-stretch:75%]">{{ eventDates.banner }}</p>
+              </div>
+              <span class="barcode h-8 w-20 shrink-0 opacity-80" />
+            </div>
             <CardHeader class="border-b p-5 sm:p-6"><CardTitle class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Ticket class="size-5 text-tone-ink" />Chọn loại vé</CardTitle><p class="mt-2 text-sm leading-6 text-muted-foreground">Chọn số lượng, đặt vé rồi thanh toán để nhận mã QR.</p></CardHeader>
             <CardContent v-if="event.queueEnabled && !queueActive" class="space-y-4 p-5 sm:p-6">
               <p class="text-sm leading-6">Sự kiện đang có nhiều người mua. Vui lòng vào phòng chờ</p>

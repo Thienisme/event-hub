@@ -179,7 +179,7 @@ async function cancel() {
               </div>
             </section>
             <aside class="contents min-w-0 lg:order-2 lg:block lg:space-y-5" aria-labelledby="summary-heading">
-              <Card :data-tone="event?.category || undefined" class="order-1 min-w-0 overflow-hidden rounded-lg gap-5 border border-border bg-background p-5 shadow-none ring-0 sm:p-6 lg:order-none">
+              <Card :data-tone="event?.category || undefined" class="paper order-1 min-w-0 overflow-hidden rounded-sm gap-5 border-0 p-5 shadow-none ring-0 sm:p-6 lg:order-none">
                 <div class="relative -mx-5 -mt-5 bg-tone-soft sm:-mx-6 sm:-mt-6" :class="{ 'h-24': !event?.bannerUrl || imageFailed }">
                   <img v-if="event?.bannerUrl && !imageFailed" :src="resolveMediaUrl(event.bannerUrl) ?? undefined" alt="" class="aspect-[16/9] w-full rounded-t-lg object-cover" @error="imageFailed = true" />
                   <TicketDate :value="event?.startTime" :category="event?.category" class="absolute left-3 top-3" />
@@ -213,7 +213,7 @@ async function cancel() {
                   <p v-if="promoError" id="promo-error" role="alert" class="break-words text-sm text-danger">{{ promoError }}</p>
                   <div v-if="Number(order.discountAmount) > 0" class="flex flex-wrap justify-between gap-2 text-sm"><span>Giảm giá</span><span class="tabular-nums">−{{ formatPrice(order.discountAmount) }}</span></div>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5"><span class="font-semibold">Tổng cộng</span><span class="text-2xl font-bold text-brand tabular-nums">{{ formatPrice(order.totalAmount) }}</span></div>
+                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5"><span class="font-semibold">Tổng cộng</span><span class="font-mono text-2xl font-bold text-brand tabular-nums">{{ formatPrice(order.totalAmount) }}</span></div>
               </Card>
               <div class="order-3 min-w-0 space-y-3 text-center lg:order-none">
                 <p class="flex items-center justify-center gap-2 text-sm" :class="{ 'text-danger': remaining < 120 }"><Timer class="size-4 shrink-0" :class="remaining < 120 ? 'text-danger' : 'text-warning'" aria-hidden="true" /><span v-if="remaining > 0">Vé được giữ trong <strong class="tabular-nums font-semibold">{{ countdown }}</strong></span><span v-else role="status">Hết thời gian giữ vé</span></p>
