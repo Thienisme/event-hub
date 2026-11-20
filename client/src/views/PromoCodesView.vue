@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import DateTimePicker from '@/components/DateTimePicker.vue';
 import DataState from '@/components/DataState.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import apiClient from '@/api/axios';
 import { usePromoStore } from '@/stores/promo';
 import type { PromoCode, PromoDiscountType } from '@/stores/promo';
 import { useToastStore } from '@/stores/toast';
@@ -50,6 +51,21 @@ const creating = ref(false);
 const togglingId = ref('');
 const pendingDelete = ref<PromoCode | null>(null);
 const deleteBusy = ref(false);
+const eventTitle = ref('');
+let eventTitleRequestId = 0;
+
+async function fetchEventTitle(id: string) {
+  const requestId = ++eventTitleRequestId;
+  eventTitle.value = '';
+  try {
+    const { data } = await apiClient.get<{ data?: { title?: string } }>(`/events/${id}`);
+    if (requestId === eventTitleRequestId) {
+      eventTitle.value = data.data?.title ?? '';
+    }
+  } catch {
+    // Lỗi tải tên sự kiện thì bỏ qua, không chặn trang.
+  }
+}
 
 const valueLabel = computed(() =>
   form.discountType === 'PERCENT' ? 'Giá trị giảm (%)' : 'Giá trị giảm (₫)'
@@ -221,11 +237,13 @@ watch(
   (id) => {
     promoStore.reset();
     void promoStore.list(id);
+    void fetchEventTitle(id);
   },
   { immediate: true }
 );
 
 onUnmounted(() => {
+  eventTitleRequestId += 1;
   promoStore.reset();
 });
 </script>
@@ -240,6 +258,7 @@ onUnmounted(() => {
       <header class="space-y-2">
         <p class="flex items-center gap-2 text-sm font-medium text-primary"><Percent class="size-4" aria-hidden="true" />Ưu đãi</p>
         <h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl">Mã giảm giá</h1>
+        <p v-if="eventTitle" class="break-words text-sm font-medium text-muted-foreground">{{ eventTitle }}</p>
         <p class="text-sm text-muted-foreground">{{ promoStore.codes.length }} mã giảm giá</p>
       </header>
 
@@ -247,7 +266,7 @@ onUnmounted(() => {
       <Card class="gap-5 rounded-lg border border-border bg-background p-5 shadow-none ring-0 sm:p-6">
         <h2 class="text-lg font-semibold tracking-tight">Tạo mã mới</h2>
         <form class="grid gap-4 sm:grid-cols-2" novalidate @submit.prevent="submitCreate">
-          <div class="space-y-2">
+          <div class="space-y-2 sm:col-span-2">
             <Label for="promo-code">Mã</Label>
             <Input
               id="promo-code"
@@ -265,7 +284,7 @@ onUnmounted(() => {
 
           <div class="space-y-2">
             <Label for="promo-type">Loại giảm</Label>
-            <NativeSelect id="promo-type" v-model="form.discountType">
+            <NativeSelect id="promo-type" v-model="form.discountType" class="w-full">
               <NativeSelectOption value="PERCENT">Phần trăm</NativeSelectOption>
               <NativeSelectOption value="FIXED">Số tiền</NativeSelectOption>
             </NativeSelect>
