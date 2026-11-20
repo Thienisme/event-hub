@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import EventBanner from '@/components/EventBanner.vue';
-import { Plus, Search, CalendarDays, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal, Users } from '@lucide/vue';
+import { Plus, Search, CalendarDays, Eye, Pencil, Trash2, ScanLine, Percent, MoreHorizontal, Users, BarChart3 } from '@lucide/vue';
 
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -121,12 +121,17 @@ onUnmounted(() => {
           <h1 class="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">Sự kiện của tôi</h1>
         </div>
 
-        <Button
-          type="button"
-          @click="router.push({ name: 'CreateEvent' })"
-         variant="default" size="sm">
-          <Plus class="size-4" aria-hidden="true" /> Tạo sự kiện
-        </Button>
+        <div class="flex flex-wrap gap-2">
+          <Button as-child variant="outline" size="sm">
+            <router-link :to="{ name: 'SalesDashboard' }"><BarChart3 class="size-4" aria-hidden="true" />Bảng điều khiển</router-link>
+          </Button>
+          <Button
+            type="button"
+            @click="router.push({ name: 'CreateEvent' })"
+           variant="default" size="sm">
+            <Plus class="size-4" aria-hidden="true" /> Tạo sự kiện
+          </Button>
+        </div>
       </div>
 
       <!-- Thẻ thống kê -->
@@ -281,6 +286,9 @@ onUnmounted(() => {
                       </DropdownMenuItem>
                       <DropdownMenuItem as-child>
                         <router-link :to="{ name: 'EditEvent', params: { id: event.id } }"><Pencil class="size-4" aria-hidden="true" />Sửa</router-link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem as-child>
+                        <router-link :to="{ name: 'SalesDashboard', query: { eventId: event.id } }"><BarChart3 class="size-4" aria-hidden="true" />Thống kê bán vé</router-link>
                       </DropdownMenuItem>
                       <DropdownMenuItem variant="destructive" class="text-destructive" @select="pendingDelete = event"><Trash2 class="size-4" aria-hidden="true" />Xoá</DropdownMenuItem>
                     </DropdownMenuContent>
