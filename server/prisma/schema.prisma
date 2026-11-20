@@ -60,6 +60,7 @@ model User {
   heldTickets      Ticket[] @relation("TicketHolder")
   transfersSent     TicketTransfer[] @relation("TransferFrom")
   transfersReceived TicketTransfer[] @relation("TransferTo")
+  staffAssignments  EventStaff[]
 
   @@index([role])
   @@index([isActive])
@@ -117,6 +118,7 @@ model Event {
   organizer   User     @relation("OrganizerEvents", fields: [organizerId], references: [id])
   ticketTypes TicketType[]
   promoCodes PromoCode[]
+  staff       EventStaff[]
 
   @@index([createdAt])
   @@index([category, startTime])
@@ -213,6 +215,21 @@ model TicketTransfer {
   @@index([fromUserId])
   @@index([toUserId])
   @@map("ticket_transfers")
+}
+
+/// Nhân viên soát vé của một sự kiện: chỉ được quét vé và xem thống kê vào cổng,
+/// không sửa sự kiện. Gán theo từng sự kiện, không phải role toàn cục.
+model EventStaff {
+  eventId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([userId])
+  @@map("event_staff")
 }
 
 // Lưu ảnh trong database vì ổ đĩa của Render free không bền vững.

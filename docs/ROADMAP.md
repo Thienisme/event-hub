@@ -38,7 +38,7 @@ Xong ở PR #20 (giao diện thanh toán hoàn thiện ở #21).
 
 - [ ] Bảng điều khiển bán vé: doanh thu theo ngày, tỉ lệ vào cổng, loại vé bán chạy (O, có biểu đồ)
 - [ ] Xuất danh sách khách ra CSV, gửi email cho toàn bộ khách của sự kiện (C)
-- [ ] Tài khoản nhân viên soát vé: chỉ được quét vé, không sửa sự kiện (C)
+- [x] **Nhân viên soát vé** theo từng sự kiện: nhà tổ chức thêm tài khoản bằng email, nhân viên chỉ quét vé và xem số người vào cổng, gỡ là mất quyền ngay; đếm số vé mỗi người đã soát (Cl)
 - [ ] Huỷ cả sự kiện: báo người mua, đánh dấu cần hoàn tiền (C)
 
 ## Giai đoạn 4: Khám phá và cộng đồng

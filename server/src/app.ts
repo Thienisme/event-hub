@@ -19,6 +19,7 @@ import waitlistRoutes from './routes/waitlist.routes';
 import eventRoutes from './routes/event.routes';
 import orderRoutes from './routes/order.routes';
 import ticketRoutes from './routes/ticket.routes';
+import checkInRoutes from './routes/checkin.routes';
 import paymentRoutes from './routes/payment.routes';
 import promoRoutes from './routes/promo.routes';
 import adminRoutes from './routes/admin.routes';
@@ -135,6 +136,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/ticket-types', waitlistRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/check-in', checkInRoutes);
 app.use('/api/promo-codes', promoRoutes);
 // Quản trị (chỉ ADMIN) và quản lý sự kiện của bản thân (ORGANIZER/ADMIN).
 app.use('/api/admin', adminRoutes);

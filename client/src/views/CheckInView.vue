@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import apiClient from '@/api/axios';
 import { formatDateTime } from '@/utils/format';
+import { useAuthStore } from '@/stores/auth';
 
 // Bộ giải mã QR (zxing-wasm) mặc định tải file .wasm từ CDN jsDelivr. Tự phục vụ
 // file đó cùng origin: CSP chỉ cho `connect-src 'self'`, và máy soát vé ở cổng
@@ -34,6 +35,7 @@ interface Scan extends CheckInResponse { id: number; scannedAt: string }
 interface Stats { eventTitle: string; total: number; checkedIn: number }
 
 const route = useRoute();
+const authStore = useAuthStore();
 const stats = ref<Stats | null>(null);
 const statsError = ref('');
 const statsLoading = ref(false);
@@ -160,7 +162,10 @@ function resultClass(scan: CheckInResponse): string {
 <template>
   <main class="min-h-screen bg-surface px-4 py-8 sm:px-6 lg:px-8">
     <div class="mx-auto max-w-6xl space-y-6">
-      <Button as-child variant="outline" size="sm"><router-link :to="{ name: 'MyEvents' }"><ArrowLeft class="size-4" aria-hidden="true" />Sự kiện của tôi</router-link></Button>
+      <Button as-child variant="outline" size="sm">
+        <router-link v-if="authStore.isOrganizer" :to="{ name: 'MyEvents' }"><ArrowLeft class="size-4" aria-hidden="true" />Sự kiện của tôi</router-link>
+        <router-link v-else :to="{ name: 'CheckInEvents' }"><ArrowLeft class="size-4" aria-hidden="true" />Sự kiện cần soát vé</router-link>
+      </Button>
       <header class="space-y-2">
         <p class="text-sm font-medium text-primary">Soát vé QR</p>
         <h1 class="break-words text-3xl sm:text-4xl font-extrabold tracking-tight">{{ stats?.eventTitle || 'Soát vé sự kiện' }}</h1>

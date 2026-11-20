@@ -156,6 +156,19 @@ export const resendVerificationLimiter = rateLimit({
  * Chuyển nhượng vé: 10 lần / 15 phút theo user. Chặn dò email tài khoản qua
  * thông báo "không tìm thấy tài khoản" và chặn chuyền vé qua lại liên tục.
  */
+/**
+ * Thêm nhân viên soát vé: tra tài khoản theo email nên giới hạn theo user để
+ * không thành công cụ dò email nào đã đăng ký.
+ */
+export const eventStaffRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
+  message: { message: 'Bạn thêm nhân viên quá nhiều lần. Vui lòng thử lại sau 15 phút!' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const ticketTransferRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,

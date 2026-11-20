@@ -45,6 +45,7 @@
     "test:filters": "node test-event-filters.cjs",
     "test:checkin": "node test-checkin.cjs",
     "test:transfer": "node test-ticket-transfer.cjs",
+    "test:staff": "node test-event-staff.cjs",
     "test:all": "node run-all-tests.cjs",
     "seed": "ts-node prisma/seed.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",

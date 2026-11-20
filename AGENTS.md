@@ -23,6 +23,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Phòng chờ ảo | `docs/WAITING-ROOM.md`, `server/src/utils/waitingRoom.ts`, `server/src/controllers/queue.controller.ts`, `server/test-waiting-room.cjs` |
 | Chuyển nhượng vé | `server/src/controllers/ticket.controller.ts`, `server/test-ticket-transfer.cjs`, `client/src/components/TransferTicketDialog.vue` |
 | Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
+| Nhân viên soát vé | `server/src/controllers/eventStaff.controller.ts`, `client/src/views/EventStaffView.vue`, `client/src/views/CheckInEventsView.vue`, `server/test-event-staff.cjs` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Danh mục, bộ lọc danh sách sự kiện | `server/src/utils/eventFilters.ts`, `client/src/utils/categories.ts`, `client/src/views/HomeView.vue` |
 | Đăng nhập, phân quyền | `server/src/middlewares/auth.middleware.ts`, `server/src/utils/userState.ts` |
@@ -114,7 +115,10 @@ Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không đượ
 ### Soát vé (check-in)
 
 - `POST /api/events/:id/check-in` `{ qrCode }`, trả `result`: `VALID` (200), `ALREADY_USED` (409, kèm `checkedInAt`), `NOT_FOUND` (404), `WRONG_EVENT` (409), `NOT_CONFIRMED` (409). `GET /api/events/:id/check-in/stats` đếm vé đã thanh toán và đã vào cổng.
-- Chỉ ORGANIZER của chính sự kiện hoặc ADMIN (`currentRole`). **Kiểm tra quyền trước khi tra mã QR** để người ngoài không dò được mã nào tồn tại.
+- Được soát: ORGANIZER của chính sự kiện, ADMIN (`currentRole`), hoặc nhân viên được gán trong bảng `event_staff` (mọi role). **Kiểm tra quyền trước khi tra mã QR** để người ngoài không dò được mã nào tồn tại.
+- Route soát vé không dùng `authorize(role)` vì nhân viên thường là CUSTOMER; quyền kiểm trong `loadEventForStaff`, đọc thẳng DB mỗi request nên gỡ nhân viên là mất quyền ngay.
+- Nhân viên chỉ quét vé và xem thống kê của sự kiện được gán; mọi route sửa sự kiện, loại vé, mã giảm giá, nhân viên vẫn yêu cầu ORGANIZER chủ sự kiện hoặc ADMIN.
+- Quản lý nhân viên: `GET/POST /api/events/:id/staff`, `DELETE /api/events/:id/staff/:userId`; nhân viên xem sự kiện được gán qua `GET /api/check-in/events`, `/auth/me` trả `isCheckInStaff`. Tối đa 20 người mỗi sự kiện: `POST` khoá dòng `events` bằng `FOR UPDATE` rồi mới đếm.
 - **Chốt chặn quét trùng là `updateMany` có điều kiện `checkedInAt: null`**, ghi kèm `checkedInById`. Không đổi thành đọc rồi mới ghi. `test-checkin.cjs` bắn 20 request đồng thời cùng một mã và chỉ chấp nhận đúng 1 `VALID`.
 - QR động có dạng `EH1.<ticketId>.<step>.<sig>`; HMAC-SHA256 dùng UTF-8 của `ticket.qrCode` làm khoá, lấy 16 byte đầu rồi base64url.
 - Mỗi step dài 30 giây, nhận cửa sổ ±1 step theo đồng hồ server; `my-orders` trả `serverTime` để client bù lệch giờ.
