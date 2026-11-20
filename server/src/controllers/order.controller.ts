@@ -22,6 +22,19 @@ const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'CONFIRMED'];
 
 const ORDER_INCLUDE = { tickets: true } as const;
 
+/**
+ * Che `qrCode` của vé người mua đã chuyển nhượng: mã đó giờ là của người nhận.
+ * Mọi response trả `tickets` của đơn cho người mua phải đi qua hàm này.
+ */
+function hideTransferredQr<T extends { tickets: { holderId: string | null; qrCode: string | null }[] }>(order: T, userId: string): T {
+  return {
+    ...order,
+    tickets: order.tickets.map(ticket => (
+      ticket.holderId !== null && ticket.holderId !== userId ? { ...ticket, qrCode: null } : ticket
+    )),
+  };
+}
+
 export const createOrder = async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { ticketTypeId, quantity, promoCode } = req.body;
@@ -256,6 +269,7 @@ export const MYOrders = async (req: Request, res: Response) => {
         include: {
           tickets: {
             include: {
+              holder: { select: { fullName: true } },
               ticketType: {
                 include: {
                   event: {
@@ -273,10 +287,46 @@ export const MYOrders = async (req: Request, res: Response) => {
       prisma.order.count({ where }),
     ]);
 
+    // Vé người mua đã chuyển đi: ẩn qrCode (đã là mã của người nhận), chỉ báo tên người nhận.
+    const data = orders.map(({ tickets, ...order }) => ({
+      ...order,
+      tickets: tickets.map(({ holder, holderId, ...ticket }) => {
+        const transferred = holderId !== null && holderId !== userId;
+        return {
+          ...ticket,
+          qrCode: transferred ? null : ticket.qrCode,
+          transferred,
+          transferredTo: transferred ? { fullName: holder?.fullName ?? '' } : null,
+        };
+      }),
+    }));
+
+    // Vé người khác mua rồi chuyển cho mình (và mình còn giữ). Không phân trang:
+    // số vé được nhận của một người nhỏ, cần hiện đủ để vào cổng.
+    const received = await prisma.ticket.findMany({
+      where: { holderId: userId, order: { userId: { not: userId } } },
+      select: {
+        id: true, qrCode: true, checkedInAt: true,
+        ticketType: {
+          select: {
+            name: true, price: true,
+            event: { select: { id: true, title: true, slug: true, startTime: true, endTime: true, location: true, bannerUrl: true, category: true, dynamicQrOnly: true } },
+          },
+        },
+        transfers: { where: { toUserId: userId }, orderBy: { createdAt: 'desc' }, take: 1, select: { fromUser: { select: { fullName: true } } } },
+      },
+      orderBy: { ticketType: { event: { startTime: 'asc' } } },
+    });
+    const receivedTickets = received.map(({ transfers, ...ticket }) => ({
+      ...ticket,
+      fromUser: { fullName: transfers[0]?.fromUser.fullName ?? '' },
+    }));
+
     return res.json({
       message: 'Lấy danh sách đơn hàng thành công!',
       serverTime: new Date().toISOString(),
-      data: orders,
+      data,
+      receivedTickets,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -333,7 +383,7 @@ export const confirmOrder = async (req: Request, res: Response) => {
     // Transaction đã commit; gửi nền chỉ khi lần này thực sự đổi trạng thái.
     if (newlyConfirmed) emailConfirmedOrder(order.id);
 
-    return res.json({ message: 'Thanh toán thành công!', order });
+    return res.json({ message: 'Thanh toán thành công!', order: hideTransferredQr(order, userId) });
   } catch (error) {
     return handleControllerError(res, 'confirmOrder', error);
   }
@@ -406,7 +456,7 @@ export const getOrder = async (req: Request, res: Response) => {
       where: { id: req.params.id, userId: req.user!.userId }, include: CHECKOUT_INCLUDE,
     });
     if (!order) throw new AppError('Không tìm thấy đơn hàng!', 404);
-    return res.json({ message: 'Lấy đơn hàng thành công!', data: checkoutOrder(order) });
+    return res.json({ message: 'Lấy đơn hàng thành công!', data: checkoutOrder(hideTransferredQr(order, req.user!.userId)) });
   } catch (error) {
     return handleControllerError(res, 'getOrder', error);
   }

@@ -340,3 +340,8 @@ export const updatePromoSchema = promoFields.partial().extend({ active: z.boolea
 export const previewPromoSchema = createOrderSchema.omit({ promoCode: true }).extend({ code: promoCodeField });
 
 export const payOrderSchema = z.object({ provider: z.enum(['VNPAY', 'MOMO'], { error: 'Cổng thanh toán không hợp lệ!' }) });
+
+/** Chuyển nhượng vé: người nhận phải là tài khoản đã đăng ký (tìm theo email). */
+export const transferTicketSchema = z.object({
+  email: z.string({ message: 'Email không hợp lệ!' }).trim().toLowerCase().max(255, 'Email không hợp lệ!').email('Email không hợp lệ!'),
+});

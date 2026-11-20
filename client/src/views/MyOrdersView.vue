@@ -6,11 +6,11 @@ import OrderStatusBadge from '@/components/OrderStatusBadge.vue';
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useOrderStore } from '../stores/order';
-import type { Order, OrderStatus, OrderTicket } from '../stores/order';
+import type { Order, OrderStatus, OrderTicket, ReceivedTicket } from '../stores/order';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { formatPrice, formatDateTime } from '../utils/format';
-import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle, QrCode, ChevronDown } from '@lucide/vue';
+import { CalendarDays, MapPin, Copy, Ticket, Timer, AlertCircle, QrCode, ChevronDown, Send, Gift } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DynamicTicketQr from '../components/DynamicTicketQr.vue';
+import TransferTicketDialog from '../components/TransferTicketDialog.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -187,6 +188,27 @@ const openQr = (order: Order, ticket: OrderTicket) => {
   };
 };
 
+const openReceivedQr = (ticket: ReceivedTicket) => {
+  if (!ticket.qrCode) return;
+  selectedQr.value = {
+    ticketId: ticket.id,
+    qrCode: ticket.qrCode,
+    label: `${ticket.ticketType.name} · ${ticket.ticketType.event.title}`,
+    dynamicQrOnly: ticket.ticketType.event.dynamicQrOnly ?? false,
+  };
+};
+
+/** Vé đang mở hộp thoại chuyển nhượng. */
+const transferTarget = ref<{ id: string; label: string } | null>(null);
+
+/** Server cũng kiểm lại; ở đây chỉ để ẩn nút khi chắc chắn không chuyển được. */
+const canTransfer = (ticket: { qrCode?: string | null; checkedInAt?: string | null; transferred?: boolean }, startTime?: string) =>
+  !!ticket.qrCode && !ticket.checkedInAt && !ticket.transferred && !!startTime && new Date(startTime).getTime() > Date.now();
+
+const openTransfer = (id: string, label: string) => {
+  transferTarget.value = { id, label };
+};
+
 /**
  * BE tạo mỗi vé là 1 record riêng (quantity vé = quantity record),
  * nên gom lại theo ticketTypeId để hiển thị thành dòng "VIP x 2".
@@ -224,7 +246,9 @@ const failedImages = ref(new Set<string>());
 const imageOf = (order: Order) => failedImages.value.has(order.id) ? null : resolveMediaUrl(eventOf(order)?.bannerUrl);
 const isClosed = (order: Order) => ['CANCELLED', 'EXPIRED'].includes(displayStatus(order));
 const upcomingOrders = computed(() => orderStore.orders
-  .filter(order => order.status === 'CONFIRMED' && new Date(eventOf(order)?.startTime ?? '').getTime() > now.value)
+  // Đơn đã chuyển hết vé cho người khác không còn là "vé sắp tới" của mình.
+  .filter(order => order.status === 'CONFIRMED' && order.tickets.some(ticket => !ticket.transferred)
+    && new Date(eventOf(order)?.startTime ?? '').getTime() > now.value)
   .sort((a, b) => new Date(eventOf(a)!.startTime).getTime() - new Date(eventOf(b)!.startTime).getTime()));
 const nextOrder = computed(() => upcomingOrders.value[0]);
 const summary = computed(() => {
@@ -281,6 +305,34 @@ const copyOrderId = async (id: string) => {
         <p v-if="loaded && !orderStore.loading && !errorMessage && summary" class="mt-2 text-sm text-muted-foreground">{{ summary }}</p>
       </header>
 
+      <section v-if="orderStore.receivedTickets.length" aria-labelledby="received-title" class="space-y-4">
+        <div>
+          <h2 id="received-title" class="flex items-center gap-2 text-xl font-bold tracking-tight"><Gift class="size-5 text-primary" aria-hidden="true" />Vé được chuyển cho bạn</h2>
+          <p class="mt-1 text-sm text-muted-foreground">Vé người khác đã chuyển sang tài khoản của bạn.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <article v-for="ticket in orderStore.receivedTickets" :key="ticket.id" :data-tone="ticket.ticketType.event.category" class="flex min-w-0 flex-col gap-4 rounded-lg border bg-background p-4">
+            <div class="flex min-w-0 gap-3">
+              <TicketDate :value="ticket.ticketType.event.startTime" :category="ticket.ticketType.event.category" class="shrink-0" />
+              <div class="min-w-0 space-y-1">
+                <h3 class="line-clamp-2 font-semibold">{{ ticket.ticketType.event.title }}</h3>
+                <p class="flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays class="size-3.5 shrink-0" aria-hidden="true" />{{ formatDateTime(ticket.ticketType.event.startTime) }}</p>
+                <p class="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin class="size-3.5 shrink-0" aria-hidden="true" /><span class="line-clamp-1">{{ ticket.ticketType.event.location }}</span></p>
+                <p class="text-xs">{{ ticket.ticketType.name }} · <span class="text-muted-foreground">Từ {{ ticket.fromUser.fullName }}</span></p>
+              </div>
+            </div>
+            <Badge variant="outline" class="h-auto max-w-full self-center whitespace-normal py-1 text-center leading-snug" :class="ticket.checkedInAt ? 'border-success/30 bg-success/10 text-success' : 'text-muted-foreground'">
+              {{ ticket.checkedInAt ? `Đã check-in lúc ${formatDateTime(ticket.checkedInAt)}` : 'Chưa check-in' }}
+            </Badge>
+            <DynamicTicketQr v-if="ticket.qrCode" :ticket-id="ticket.id" :qr-code="ticket.qrCode" :size="132" :offset-ms="orderStore.clockOffsetMs" />
+            <div class="mt-auto flex flex-wrap justify-center gap-2">
+              <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="text-primary" @click="openReceivedQr(ticket)">Xem lớn</Button>
+              <Button v-if="canTransfer(ticket, ticket.ticketType.event.startTime)" variant="outline" size="sm" @click="openTransfer(ticket.id, `${ticket.ticketType.name} · ${ticket.ticketType.event.title}`)"><Send class="size-4" aria-hidden="true" />Chuyển vé</Button>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <Tabs v-model="activeTab" class="min-w-0 gap-5">
         <TabsList aria-label="Lọc đơn theo trạng thái" class="grid h-auto! w-full grid-cols-2 gap-1 rounded-lg p-1 sm:grid-cols-4">
           <TabsTrigger v-for="tab in statusTabs" :key="tab.value" :value="tab.value" class="min-w-0 gap-1.5 px-2 py-2.5 text-xs sm:text-sm">
@@ -302,7 +354,7 @@ const copyOrderId = async (id: string) => {
             <Button @click="loadOrders(orderStore.pagination.page, orderStore.pagination.limit)">Thử lại</Button>
           </Card>
           <Card v-else-if="visibleOrders.length === 0" class="shadow-none ring-0 border border-border bg-background items-center rounded-lg px-5 py-12 text-center">
-            <div><h2 class="text-lg font-semibold tracking-tight">{{ orderStore.orders.length === 0 ? 'Bạn chưa có vé nào' : 'Không có đơn nào ở mục này' }}</h2>
+            <div><h2 class="text-lg font-semibold tracking-tight">{{ orderStore.orders.length === 0 ? (orderStore.receivedTickets.length ? 'Bạn chưa mua vé nào' : 'Bạn chưa có vé nào') : 'Không có đơn nào ở mục này' }}</h2>
               <p class="mt-2 text-sm text-muted-foreground">{{ orderStore.orders.length === 0 ? 'Vé đã đặt sẽ xuất hiện ở đây.' : 'Chọn mục khác để xem các đơn đã đặt.' }}</p></div>
             <Button @click="router.push({ name: 'Home' })">Khám phá sự kiện</Button>
           </Card>
@@ -367,9 +419,11 @@ const copyOrderId = async (id: string) => {
                     <Badge variant="outline" class="mb-3 h-auto max-w-full whitespace-normal py-1 text-center leading-snug" :class="ticket.checkedInAt ? 'border-success/30 bg-success/10 text-success' : 'text-muted-foreground'">
                       {{ ticket.checkedInAt ? `Đã check-in lúc ${formatDateTime(ticket.checkedInAt)}` : 'Chưa check-in' }}
                     </Badge>
-                    <DynamicTicketQr v-if="ticket.qrCode" :ticket-id="ticket.id" :qr-code="ticket.qrCode" :size="132" :offset-ms="orderStore.clockOffsetMs" />
+                    <p v-if="ticket.transferred" class="flex flex-1 items-center py-6 text-center text-xs text-muted-foreground">Đã chuyển cho {{ ticket.transferredTo?.fullName }}</p>
+                    <DynamicTicketQr v-else-if="ticket.qrCode" :ticket-id="ticket.id" :qr-code="ticket.qrCode" :size="132" :offset-ms="orderStore.clockOffsetMs" />
                     <p v-else class="py-6 text-center text-xs text-muted-foreground">Chưa có mã QR</p>
-                    <Button v-if="ticket.qrCode" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
+                    <Button v-if="ticket.qrCode && !ticket.transferred" variant="ghost" size="sm" class="mt-2 text-primary" :aria-label="`Xem lớn mã QR vé ${index + 1}`" @click="openQr(order, ticket)">Xem lớn</Button>
+                    <Button v-if="canTransfer(ticket, ticket.ticketType?.event?.startTime ?? eventOf(order)?.startTime)" variant="outline" size="sm" class="mt-1" :aria-label="`Chuyển vé ${index + 1}`" @click="openTransfer(ticket.id, `${ticket.ticketType?.name ?? 'Vé'} · Vé ${index + 1}/${order.tickets.length}`)"><Send class="size-4" aria-hidden="true" />Chuyển vé</Button>
                   </div>
                 </div>
               </section>
@@ -389,6 +443,7 @@ const copyOrderId = async (id: string) => {
     </div>
 
     <ConfirmDialog :open="cancelTarget !== null" title="Huỷ đơn hàng?" :message="cancelMessage" confirm-label="Huỷ đơn" cancel-label="Giữ lại" danger :loading="cancelLoading" @cancel="cancelTarget = null" @confirm="handleCancel" />
+    <TransferTicketDialog :ticket="transferTarget" @close="transferTarget = null" />
     <Dialog :open="selectedQr !== null" @update:open="(open) => { if (!open) selectedQr = null; }">
       <DialogContent class="max-w-sm rounded-lg">
         <template v-if="selectedQr">

@@ -43,6 +43,8 @@ const TICKET_SELECT = {
   checkedInAt: true,
   ticketType: { select: { name: true, eventId: true, event: { select: { title: true } } } },
   order: { select: { status: true, user: { select: { fullName: true } } } },
+  // Người giữ vé sau chuyển nhượng; NULL = người mua.
+  holder: { select: { fullName: true } },
 } as const;
 
 /**
@@ -91,7 +93,7 @@ export const checkInTicket = async (req: Request, res: Response) => {
     const info = {
       ticketTypeName: ticket.ticketType.name,
       eventTitle: ticket.ticketType.event.title,
-      holderName: ticket.order.user.fullName,
+      holderName: (ticket.holder ?? ticket.order.user).fullName,
     };
 
     if (!parsed && event.dynamicQrOnly) {
@@ -112,15 +114,20 @@ export const checkInTicket = async (req: Request, res: Response) => {
 
     const now = new Date();
     const claimed = await prisma.ticket.updateMany({
-      where: { id: ticket.id, checkedInAt: null },
+      // Kèm `qrCode` vừa tra: vé bị chuyển nhượng giữa lúc tra mã và lúc chiếm
+      // (qrCode đã đổi) thì mã cũ không được soát.
+      where: { id: ticket.id, checkedInAt: null, qrCode: ticket.qrCode },
       data: { checkedInAt: now, checkedInById: req.user!.userId },
     });
 
     if (claimed.count === 0) {
       const used = await prisma.ticket.findUnique({
         where: { id: ticket.id },
-        select: { checkedInAt: true },
+        select: { checkedInAt: true, qrCode: true },
       });
+      if (used?.qrCode !== ticket.qrCode) {
+        return res.status(404).json({ result: 'NOT_FOUND', message: 'Vé không tồn tại!' });
+      }
       return res.status(409).json({
         result: 'ALREADY_USED',
         message: 'Vé đã được sử dụng!',

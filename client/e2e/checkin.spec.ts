@@ -58,7 +58,8 @@ test('khách thấy mã QR động ở Vé của tôi và mã động soát đư
   // Khách mở "Vé của tôi": vé sắp tới mở sẵn mã QR, phải thấy nhãn mã động.
   await loginAs(page, request, customer);
   await page.goto('/my-orders');
-  await expect(page.getByText(/Mã đổi sau \d+s/).first()).toBeVisible();
+  // Mục QR của các đơn thu gọn vẫn nằm trong DOM (v-show), chỉ lấy cái đang hiện.
+  await expect(page.getByText(/Mã đổi sau \d+s/).filter({ visible: true }).first()).toBeVisible();
 
   // Nhân viên nhập mã động (client tự tính) ở trang soát vé -> hợp lệ.
   // Tránh bước ranh giới 30 giây: đồng hồ máy test có thể lệch nhẹ với server.

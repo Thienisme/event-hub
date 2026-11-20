@@ -21,6 +21,7 @@ Hệ thống bán vé sự kiện: `client/` (Vue 3, Pinia, Tailwind, shadcn-vue
 | Đơn hết hạn | `server/src/jobs/expireOrders.job.ts` |
 | Thanh toán VNPay/MoMo, mã giảm giá, danh sách chờ | `docs/PAYMENTS.md` (luồng, chốt chặn, cách test), `server/src/payments/`, `server/src/controllers/payment.controller.ts` |
 | Phòng chờ ảo | `docs/WAITING-ROOM.md`, `server/src/utils/waitingRoom.ts`, `server/src/controllers/queue.controller.ts`, `server/test-waiting-room.cjs` |
+| Chuyển nhượng vé | `server/src/controllers/ticket.controller.ts`, `server/test-ticket-transfer.cjs`, `client/src/components/TransferTicketDialog.vue` |
 | Soát vé QR (check-in) | `server/src/controllers/checkin.controller.ts`, `client/src/views/CheckInView.vue` |
 | Sự kiện, loại vé | `server/src/controllers/event.controller.ts` |
 | Danh mục, bộ lọc danh sách sự kiện | `server/src/utils/eventFilters.ts`, `client/src/utils/categories.ts`, `client/src/views/HomeView.vue` |
@@ -120,6 +121,14 @@ Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không đượ
 - `dynamicQrOnly` mặc định false nhận cả mã tĩnh và động; true chỉ nhận mã động.
 - Chữ ký đúng ngoài cửa sổ trả `QR_EXPIRED` (409); mã tĩnh đúng sự kiện chỉ nhận động trả `STATIC_QR_NOT_ALLOWED` (409). Chữ ký sai trả `NOT_FOUND`.
 
+### Chuyển nhượng vé
+
+- `POST /api/tickets/:id/transfer` `{ email }`: người giữ hiện tại là `holderId ?? order.userId`; người nhận phải có tài khoản đang hoạt động. Chỉ vé của đơn CONFIRMED, chưa check-in, sự kiện chưa bắt đầu. Vé không tồn tại và vé của người khác trả cùng 404.
+- **Chốt chặn là `updateMany` có điều kiện `qrCode` + `holderId` vừa đọc + `checkedInAt: null`**, đổi người giữ và sinh `qrCode` mới cùng lúc; thua trả 409 `TICKET_CHANGED`. Mã cũ (tĩnh, động, email, ảnh chụp) chết ngay vì khoá QR động là `qrCode`.
+- Check-in chiếm vé kèm điều kiện `qrCode` vừa tra, nên vé bị chuyển giữa lúc tra và lúc chiếm trả `NOT_FOUND`. `test-ticket-transfer.cjs` bắn chuyển và soát đồng thời, không bao giờ được cả hai cùng thắng.
+- Mọi response trả `tickets` của đơn cho người mua phải che `qrCode` vé đã chuyển (`hideTransferredQr`, `MYOrders`); email vé và nhắc lịch chỉ liệt kê vé người mua còn giữ (`holderId: null`). Email báo người nhận không ghi mã vé.
+- Giới hạn: người nhận chưa có email nhắc lịch; vé đã chuyển vẫn tính vào hạn mức mua của người mua.
+
 ### Phòng chờ ảo
 
 - Cấp lượt bằng Lua nguyên khối, lấy giờ từ Redis TIME; không tách đọc/ghi thành lệnh JS vì có thể cấp quá giới hạn.
@@ -191,7 +200,7 @@ Bảng đầy đủ các môi trường ở `deploy/ENVIRONMENTS.md`, các bư�
 - **Production demo: Render free + TiDB Cloud Starter + Render Key Value.** Một image từ `Dockerfile` ở gốc: Node phục vụ cả build Vue (`SERVE_CLIENT_DIR`) và `/api`, chạy `prisma migrate deploy` khi khởi động. Cấu hình trong `render.yaml` (Blueprint, Singapore), tự deploy khi push `main`.
 - Giữ **một web service duy nhất** (750 giờ miễn phí mỗi tháng) và image `linux/amd64`.
 - Render ngủ sau 15 phút không có request: UptimeRobot gọi `/api/health` mỗi 5 phút và báo email khi web chết; `.github/workflows/keepalive.yml` chỉ là dự phòng vì lịch của GitHub Actions hay chạy trễ hàng giờ.
-- `main` có branch protection: phải qua PR và hai check CI xanh. Đổi tên job trong `ci.yml` thì sửa cả tên check bắt buộc.
+- `main` có branch protection: phải qua PR và ba check CI xanh (Server, Client, E2E). Đổi tên job trong `ci.yml` thì sửa cả tên check bắt buộc.
 - **TiDB có thể tắt `CHECK` constraint**, nên lớp chống bán quá số vé ở database có thể không có tác dụng. Chạy test trên TiDB trước khi khẳng định.
 - Backup và khôi phục: `deploy/cloud/backup-db.sh`, `deploy/cloud/restore-db.sh`. Chúng đọc `server/.env.render.local` mà không `source` file đó.
 - `deploy/*.sh`, `deploy/Caddyfile`, `deploy/docker-compose.deploy.yml` và `.github/workflows/deploy.yml` thuộc hướng VPS ARM64 trước đây, **không dùng cho Render**; `deploy.yml` chỉ chạy khi bấm tay.

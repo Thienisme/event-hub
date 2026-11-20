@@ -151,3 +151,16 @@ export const resendVerificationLimiter = rateLimit({
   max: 3,
   keyGenerator: (req) => req.user!.userId,
 });
+
+/**
+ * Chuyển nhượng vé: 10 lần / 15 phút theo user. Chặn dò email tài khoản qua
+ * thông báo "không tìm thấy tài khoản" và chặn chuyền vé qua lại liên tục.
+ */
+export const ticketTransferRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.user?.userId ?? req.ip ?? 'unknown',
+  message: { message: 'Bạn chuyển vé quá nhiều lần. Vui lòng thử lại sau 15 phút!' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
