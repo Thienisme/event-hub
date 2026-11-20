@@ -16,7 +16,7 @@ import { categoryLabel } from '@/utils/categories';
 import AppAlert from '../components/AppAlert.vue';
 import EventActions from '../components/EventActions.vue';
 import EventBanner from '../components/EventBanner.vue';
-import { ArrowLeft, CalendarDays, MapPin, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell } from '@lucide/vue';
+import { ArrowLeft, CalendarDays, MapPin, Clock, Minus, Plus, Pencil, Trash2, Ticket, TicketPercent, CircleAlert, Bell, ChevronDownIcon } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -131,8 +131,16 @@ const eventDates = computed(() => {
       : [`Từ ${start.slice(11)} ${dateLabel(start)}`, `Đến ${end.slice(11)} ${dateLabel(end)}`],
   };
 });
-const soldQuantity = (ticket: TicketType) => Math.max(0, ticket.totalQuantity - ticket.availableQuantity);
-const soldPercent = (ticket: TicketType) => ticket.totalQuantity > 0 ? Math.min(100, soldQuantity(ticket) / ticket.totalQuantity * 100) : 0;
+const MAX_VISIBLE_TICKETS = 5;
+const showAllTickets = ref(false);
+
+const ticketStatus = (ticket: TicketType): { label: string; low: boolean } => {
+  if (ticket.saleStart && new Date(ticket.saleStart).getTime() > now.value) return { label: 'Chưa mở bán', low: false };
+  if (ticket.saleEnd && new Date(ticket.saleEnd).getTime() <= now.value) return { label: 'Đã ngừng bán', low: false };
+  if (ticket.availableQuantity <= 0) return { label: 'Hết vé', low: false };
+  if (ticket.availableQuantity <= ticket.totalQuantity * 0.1) return { label: `Chỉ còn ${ticket.availableQuantity} vé`, low: true };
+  return { label: `Còn ${ticket.availableQuantity}`, low: false };
+};
 
 /** Số lượng vé user chọn cho từng loại vé, key = ticketTypeId */
 const quantities = ref<Record<string, number>>({});
@@ -152,6 +160,26 @@ const isWaitingTicket = (ticket: TicketType): boolean =>
   !!event.value && waitlistStore.isWaiting(event.value.id, ticket.id);
 
 const waitlistBusyId = ref<string | null>(null);
+
+const isPinnedTicket = (ticket: TicketType): boolean =>
+  Number(quantities.value[ticket.id]) > 1
+  || submittingId.value === ticket.id
+  || waitlistBusyId.value === ticket.id;
+
+// Sắp loại vé: còn bán trước, hết vé xuống cuối; cùng nhóm thì giá tăng dần.
+const sortedTickets = computed(() => [...(event.value?.ticketTypes ?? [])].sort((a, b) =>
+  Number(a.availableQuantity <= 0) - Number(b.availableQuantity <= 0) || Number(a.price) - Number(b.price)
+));
+
+const visibleTickets = computed(() => {
+  const list = sortedTickets.value;
+  if (showAllTickets.value || list.length <= MAX_VISIBLE_TICKETS) return list;
+  return list.filter((ticket, index) => index < MAX_VISIBLE_TICKETS || isPinnedTicket(ticket));
+});
+
+const hiddenTicketCount = computed(() =>
+  Math.max(0, (event.value?.ticketTypes?.length ?? 0) - visibleTickets.value.length)
+);
 
 const handleWaitlist = async (ticket: TicketType) => {
   const eventId = event.value?.id;
@@ -203,6 +231,7 @@ const loadEvent = async (id: string) => {
   event.value = null;
   offers.value = [];
   quantities.value = {};
+  showAllTickets.value = false;
   isLoading.value = true;
 
   try {
@@ -476,36 +505,52 @@ const handleDelete = async () => {
               <p v-if="isEnded" class="rounded-lg bg-muted p-3 text-sm text-muted-foreground">Sự kiện đã kết thúc và không còn nhận đặt vé.</p>
               <p v-if="!event.ticketTypes?.length" class="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Sự kiện này chưa mở bán loại vé nào.</p>
               <p v-if="offers.length" class="rounded-md bg-brand-soft px-3 py-2 text-sm text-brand"><TicketPercent class="mr-1 inline size-4" aria-hidden="true" /><strong>Có ưu đãi</strong> · {{ bestOfferText(offers) }}<span class="text-muted-foreground"> · áp dụng ở bước thanh toán</span></p>
-              <div v-for="ticket in event.ticketTypes" :key="ticket.id" class="min-w-0 space-y-4 rounded-lg border p-4 transition-colors" :class="{ 'bg-muted/50': ticket.availableQuantity <= 0, 'opacity-60': ticket.availableQuantity <= 0 && !canJoinWaitlist(ticket) }">
-                <div class="space-y-1"><h3 class="break-words font-semibold">{{ ticket.name }}</h3><p class="break-words text-xl font-semibold tabular-nums text-brand">{{ formatPrice(ticket.price) }}</p>
-                </div>
+              <div v-if="event.ticketTypes?.length">
                 <div>
-                  <div class="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
-                    <span>Đã bán {{ soldQuantity(ticket) }} / {{ ticket.totalQuantity }}</span>
-                    <span :class="ticket.availableQuantity > 0 && ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'text-brand font-medium' : ''">{{ ticket.availableQuantity <= 0 ? 'Hết vé' : ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? `Chỉ còn ${ticket.availableQuantity} vé` : `Còn ${ticket.availableQuantity}` }}</span>
+                  <div
+                    v-for="ticket in visibleTickets"
+                    :key="ticket.id"
+                    class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border py-3 first:pt-0 last:border-b-0 last:pb-0"
+                    :class="{ 'opacity-60': ticket.availableQuantity <= 0 && !canJoinWaitlist(ticket) }"
+                  >
+                    <div class="min-w-28 flex-1">
+                      <h3 class="break-words text-sm font-semibold leading-snug">{{ ticket.name }}</h3>
+                      <div class="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span class="font-mono text-sm font-semibold tabular-nums text-brand">{{ Number(ticket.price) === 0 ? 'Miễn phí' : formatPrice(ticket.price) }}</span>
+                        <span class="text-xs tabular-nums" :class="ticketStatus(ticket).low ? 'font-medium text-brand' : 'text-muted-foreground'">{{ ticketStatus(ticket).label }}</span>
+                      </div>
+                      <p v-if="ticket.saleStart && new Date(ticket.saleStart).getTime() > now" class="mt-0.5 text-xs text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
+                    </div>
+                    <div class="flex w-full shrink-0 items-center gap-1.5 sm:w-auto" :aria-busy="submittingId === ticket.id">
+                      <!-- Hết vé thì bộ chọn số lượng vô nghĩa: nhường chỗ cho nút danh sách chờ -->
+                      <div v-if="!canJoinWaitlist(ticket)" class="inline-flex h-9 shrink-0 items-center rounded-md border border-border bg-background">
+                        <Button variant="ghost" size="icon" class="h-full w-8 rounded-none rounded-l-md sm:w-7" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus class="size-3.5" /></Button>
+                        <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-full w-10 min-w-0 appearance-none bg-transparent text-center font-mono text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed sm:w-8 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
+                        <Button variant="ghost" size="icon" class="h-full w-8 rounded-none rounded-r-md sm:w-7" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus class="size-3.5" /></Button>
+                      </div>
+                      <Button v-if="canJoinWaitlist(ticket)" variant="outline" class="h-9 flex-1 rounded-md sm:flex-none" :disabled="waitlistBusyId === ticket.id" @click="handleWaitlist(ticket)">
+                        <Bell />
+                        <span v-if="waitlistBusyId === ticket.id">Đang xử lý...</span><span v-else-if="isWaitingTicket(ticket)">Đang chờ vé · Huỷ</span><span v-else>Báo tôi khi có vé</span>
+                      </Button>
+                      <Button v-else class="h-9 flex-1 rounded-md px-3 sm:flex-none" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" @click="handleBook(ticket)">
+                        <span v-if="isEnded">Đã kết thúc</span><span v-else-if="saleLabel(ticket)">{{ ticket.saleStart && new Date(ticket.saleStart).getTime() > now ? 'Chưa mở bán' : 'Đã ngừng bán' }}</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
+                      </Button>
+                    </div>
+                    <p v-if="!canJoinWaitlist(ticket) && Number.isInteger(Number(quantities[ticket.id])) && Number(quantities[ticket.id]) > 1" class="w-full text-xs text-muted-foreground" aria-live="polite" aria-atomic="true">
+                      Thành tiền: <span class="font-mono font-semibold tabular-nums text-foreground">{{ ticketSubtotal(ticket) }}</span>
+                    </p>
                   </div>
-                  <div class="mt-2 h-1.5 overflow-hidden rounded-md bg-muted" role="progressbar" :aria-valuenow="soldQuantity(ticket)" :aria-valuemax="ticket.totalQuantity" :aria-valuemin="0" :aria-label="`Số vé đã bán loại ${ticket.name}`"><div class="h-full rounded-md" :class="ticket.availableQuantity <= ticket.totalQuantity * 0.1 ? 'bg-brand' : 'bg-tone'" :style="{ width: `${soldPercent(ticket)}%` }" /></div>
                 </div>
-                <p v-if="saleLabel(ticket)" class="text-sm text-muted-foreground" aria-live="polite">{{ saleLabel(ticket) }}</p>
-                <div v-if="!canJoinWaitlist(ticket)" class="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
-                  <span class="text-muted-foreground">Thành tiền</span>
-                  <span class="font-semibold tabular-nums" aria-live="polite" aria-atomic="true">{{ ticketSubtotal(ticket) }}</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-3" :aria-busy="submittingId === ticket.id">
-                  <!-- Hết vé thì bộ chọn số lượng vô nghĩa: nhường chỗ cho nút danh sách chờ -->
-                  <div v-if="!canJoinWaitlist(ticket)" class="flex items-center rounded-lg border bg-background">
-                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Giảm số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] <= 1" @click="quantities[ticket.id] = Number(quantities[ticket.id]) - 1; normalizeQuantity(ticket)"><Minus /></Button>
-                    <input v-model.number="quantities[ticket.id]" type="number" min="1" :max="ticket.availableQuantity" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" :aria-label="`Số lượng vé ${ticket.name}`" class="h-9 w-12 min-w-0 appearance-none bg-transparent text-center text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @blur="normalizeQuantity(ticket)" />
-                    <Button variant="ghost" size="icon" class="rounded-md" :aria-label="`Tăng số lượng vé ${ticket.name}`" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 || quantities[ticket.id] >= ticket.availableQuantity" @click="quantities[ticket.id] = Number(quantities[ticket.id]) + 1; normalizeQuantity(ticket)"><Plus /></Button>
-                  </div>
-                  <Button v-if="canJoinWaitlist(ticket)" variant="outline" class="min-w-24 flex-1 rounded-md" :disabled="waitlistBusyId === ticket.id" @click="handleWaitlist(ticket)">
-                    <Bell />
-                    <span v-if="waitlistBusyId === ticket.id">Đang xử lý...</span><span v-else-if="isWaitingTicket(ticket)">Đang chờ vé · Huỷ</span><span v-else>Báo tôi khi có vé</span>
-                  </Button>
-                  <Button v-else class="min-w-24 flex-1 rounded-md" :class="isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0 ? '' : 'bg-brand text-brand-foreground hover:bg-brand/90'" :disabled="!!submittingId || isEnded || !!saleLabel(ticket) || ticket.availableQuantity <= 0" @click="handleBook(ticket)">
-                    <span v-if="isEnded">Đã kết thúc</span><span v-else-if="saleLabel(ticket)">{{ ticket.saleStart && new Date(ticket.saleStart).getTime() > now ? 'Chưa mở bán' : 'Đã ngừng bán' }}</span><span v-else-if="submittingId === ticket.id">Đang xử lý...</span><span v-else-if="ticket.availableQuantity <= 0">Hết vé</span><span v-else>Đặt vé</span>
-                  </Button>
-                </div>
+                <Button
+                  v-if="event.ticketTypes.length > MAX_VISIBLE_TICKETS && (showAllTickets || hiddenTicketCount > 0)"
+                  variant="ghost"
+                  class="mt-2 w-full text-muted-foreground hover:text-foreground"
+                  :aria-expanded="showAllTickets"
+                  @click="showAllTickets = !showAllTickets"
+                >
+                  <span>{{ showAllTickets ? 'Thu gọn' : `Xem thêm ${hiddenTicketCount} loại vé` }}</span>
+                  <ChevronDownIcon class="size-4 motion-safe:transition-transform motion-safe:duration-200" :class="{ 'rotate-180': showAllTickets }" aria-hidden="true" />
+                </Button>
               </div>
             </CardContent>
           </Card>

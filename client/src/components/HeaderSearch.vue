@@ -24,7 +24,7 @@ function submit() {
 </script>
 
 <template>
-  <form role="search" aria-label="Tìm sự kiện" class="flex h-10 min-w-0 items-center rounded-md bg-muted" @submit.prevent="submit">
+  <form role="search" aria-label="Tìm sự kiện" class="flex h-10 min-w-0 items-center rounded-md border border-transparent bg-muted transition-colors focus-within:border-foreground/25 focus-within:bg-background focus-within:ring-[3px] focus-within:ring-foreground/8" @submit.prevent="submit">
     <Select :model-value="location || 'all'" @update:model-value="value => { location = String(value) === 'all' ? '' : String(value); submit(); }">
       <SelectTrigger aria-label="Thành phố" class="h-10 w-28 shrink-0 rounded-r-none border-0 border-r border-border bg-transparent px-2 shadow-none md:w-36 lg:w-40"><SelectValue /></SelectTrigger>
       <SelectContent>
@@ -34,6 +34,6 @@ function submit() {
       </SelectContent>
     </Select>
     <Search class="ml-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-    <input v-model="search" type="search" aria-label="Từ khoá tìm kiếm" placeholder="Tìm sự kiện, nghệ sĩ, địa điểm..." class="h-full w-full min-w-0 rounded-md bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+    <input v-model="search" type="search" aria-label="Từ khoá tìm kiếm" placeholder="Tìm sự kiện, nghệ sĩ, địa điểm..." class="h-full w-full min-w-0 rounded-md bg-transparent px-2 text-sm outline-none" />
   </form>
 </template>
