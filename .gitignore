@@ -32,3 +32,6 @@ Thumbs.db
 tmp/
 # Backup chứa dữ liệu người dùng
 backups/
+
+# Cache Python khi chạy script của skill trong .claude/skills
+__pycache__/

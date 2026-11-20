@@ -195,6 +195,13 @@ Chi tiết và cách test ở `docs/PAYMENTS.md`. Những điều không đượ
 
 Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ dài cột trong `schema.prisma`. `CHECK` constraint không biểu diễn được trong Prisma, nên viết tay trong migration SQL.
 
+### Skill UI/UX (`ui-ux-pro-max`)
+
+- `.claude/skills/ui-ux-pro-max/` là skill bên ngoài (MIT, nextlevelbuilder/ui-ux-pro-max-skill, ghim commit `2de1134`, đã bỏ thư mục test). Claude Code tự nạp; AI khác đọc `SKILL.md` và `references/` nếu cần. Không sửa tay file trong đó; nâng cấp thì chép lại bản mới và soát lại script.
+- Chạy từ gốc repo: `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<truy vấn>" --domain ux` (hoặc `--design-system`, `--stack vue`, `--stack shadcn`). `SKILL.md` ghi đường dẫn theo `${CLAUDE_PLUGIN_ROOT}` của bản plugin; ở repo này bỏ phần đó. Script chỉ dùng thư viện chuẩn Python, không gọi mạng.
+- Kết quả của skill là gợi ý, **`DESIGN.md` và token trong `style.css` luôn thắng**. Kiểm lại trước khi dùng: font phải có dấu tiếng Việt (skill từng gợi ý Righteous, Poppins không có), màu chữ trên nút phải đạt tương phản 4.5:1.
+- Không dùng `--persist` ghi `design-system/` vào repo nếu chưa được chủ dự án đồng ý.
+
 ### Client
 
 - **Sửa giao diện phải theo `DESIGN.md`:** chỉ dùng class theo token (`bg-primary`, `text-muted-foreground`, `border-border`, `text-brand`...), không viết class màu thô của Tailwind (`indigo-*`, `gray-*`...) hay mã hex trong component. Màu đỏ rượu `brand` chỉ cho nút mua hàng, giá vé và badge khan hiếm.
