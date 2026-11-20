@@ -50,10 +50,10 @@ async function createUser(tag, role) {
   return { id: user.id, token: body.token };
 }
 
-async function createEvent(organizerId, title, types) {
+async function createEvent(organizerId, title, types, category = 'OTHER') {
   const event = await prisma.event.create({
     data: {
-      slug: `su-kien-${randomUUID()}`, title, location: 'HN',
+      slug: `su-kien-${randomUUID()}`, title, location: 'HN', category,
       startTime: new Date(Date.now() + DAY * 5), endTime: new Date(Date.now() + DAY * 6), organizerId,
       ticketTypes: { create: types.map(([name, price, total]) => ({ name, price, totalQuantity: total, availableQuantity: total })) },
     },
@@ -90,8 +90,8 @@ async function main() {
   const empty = await createUser('empty', 'ORGANIZER');
   const buyer = await createUser('buyer', 'CUSTOMER');
 
-  const eventA = await createEvent(organizer.id, 'DASH A', [['A1', 100000, 50], ['A2', 250000, 20]]);
-  const eventB = await createEvent(organizer.id, 'DASH B', [['B1', 50000, 100]]);
+  const eventA = await createEvent(organizer.id, 'DASH A', [['A1', 100000, 50], ['A2', 250000, 20]], 'MUSIC');
+  const eventB = await createEvent(organizer.id, 'DASH B', [['B1', 50000, 100]], 'SPORTS');
   const eventC = await createEvent(other.id, 'DASH C', [['C1', 999000, 10]]);
 
   // Mốc 0h hôm nay theo giờ Việt Nam (tính bằng UTC).
@@ -158,7 +158,22 @@ async function main() {
   const bad = (await dashboard(organizer, '?days=13')).body?.data;
   check('days không hợp lệ -> mặc định 30', bad?.range?.days === 30 && bad.daily.length === 30);
 
-  console.log(`\n${D}4. Lọc theo sự kiện${X}`);
+  console.log(`\n${D}4. So sánh kỳ trước và doanh thu theo danh mục${X}`);
+  check('7 ngày: kỳ hiện tại 600.000đ, kỳ trước 150.000đ (ngày 7..13)',
+    d7?.period?.current?.revenue === 600000 && d7?.period?.previous?.revenue === 150000,
+    JSON.stringify(d7?.period));
+  check('30 ngày: kỳ hiện tại 750.000đ, kỳ trước 50.000đ (1 đơn, 1 vé)',
+    data?.period?.current?.revenue === 750000 && data?.period?.previous?.revenue === 50000 &&
+    data?.period?.previous?.orders === 1 && data?.period?.previous?.tickets === 1,
+    JSON.stringify(data?.period));
+  const cats = data?.byCategory ?? [];
+  check('theo danh mục (mọi sự kiện): MUSIC 600.000đ (5 vé), SPORTS 200.000đ (4 vé)',
+    cats.length === 2 &&
+    cats[0]?.category === 'MUSIC' && cats[0]?.revenue === 600000 && cats[0]?.tickets === 5 &&
+    cats[1]?.category === 'SPORTS' && cats[1]?.revenue === 200000 && cats[1]?.tickets === 4,
+    JSON.stringify(cats));
+
+  console.log(`\n${D}5. Lọc theo sự kiện${X}`);
   const onlyB = await dashboard(organizer, `?eventId=${eventB.id}`);
   const b = onlyB.body?.data;
   check('lọc sự kiện B -> 200', onlyB.status === 200 && b?.eventId === eventB.id);
@@ -166,12 +181,16 @@ async function main() {
     b.summary.ticketsSold === 4 && b.summary.capacity === 100 && b.summary.checkedIn === 3, JSON.stringify(b?.summary));
   check('B: chỉ loại vé B1, vẫn trả danh sách mọi sự kiện cho bộ chọn', b?.ticketTypes?.length === 1 && b.ticketTypes[0].name === 'B1' && b.events.length === 2);
   check('B: 30 ngày chỉ có đơn 10 ngày trước', b && sum(b.daily, 'revenue') === 150000);
+  check('B: theo danh mục chỉ có SPORTS 200.000đ',
+    b?.byCategory?.length === 1 && b.byCategory[0]?.category === 'SPORTS' &&
+    b.byCategory[0]?.revenue === 200000 && b.byCategory[0]?.tickets === 4,
+    JSON.stringify(b?.byCategory));
   const notMine = await dashboard(organizer, `?eventId=${eventC.id}`);
   const missing = await dashboard(organizer, `?eventId=${randomUUID()}`);
   check('sự kiện của người khác -> 404, giống sự kiện không tồn tại', notMine.status === 404 && missing.status === 404 &&
     notMine.body?.message === missing.body?.message);
 
-  console.log(`\n${D}5. Quyền xem${X}`);
+  console.log(`\n${D}6. Quyền xem${X}`);
   check('khách thường -> 403', (await dashboard(buyer)).status === 403);
   check('chưa đăng nhập -> 401', (await request('', '/organizer/dashboard')).status === 401);
   const otherData = (await dashboard(other)).body?.data;
