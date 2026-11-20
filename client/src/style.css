@@ -148,8 +148,8 @@ body {
   --surface: #23252C;
   --success: oklch(0.72 0.14 155);
   --warning: oklch(0.8 0.14 80);
-  --danger: oklch(0.7 0.17 20);
-  --info: oklch(0.72 0.12 240);
+  --danger: oklch(0.76 0.15 20);
+  --info: oklch(0.8 0.1 240);
   --radius: 0.25rem;
   --background: #2D3039;
   --foreground: #F2F3F5;
@@ -170,9 +170,9 @@ body {
   --muted-foreground: #AEB2BD;
   --accent: #383B45;
   --accent-foreground: #F2F3F5;
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: oklch(0.75 0.17 22);
   --border: #3E414C;
-  --input: #474A56;
+  --input: #5A5E6B;
   --ring: #F2F3F5;
   /* Vé giấy: nền trắng ngà, mực đen; mộc đỏ cho khan hiếm trên giấy. */
   --paper: #FAFAFA;
@@ -277,6 +277,11 @@ body {
   h1, h2, h3 {
     font-stretch: 80%;
     letter-spacing: -0.015em;
+  }
+  /* Tiêu đề cỡ nhỏ (nhãn khối, tên loại vé) bóp hẹp thì khó đọc: trả về độ rộng thường. */
+  :is(h1, h2, h3):is(.text-xs, .text-sm, .text-base, .text-lg) {
+    font-stretch: 100%;
+    letter-spacing: normal;
   }
 }
 

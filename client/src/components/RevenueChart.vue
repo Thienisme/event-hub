@@ -186,9 +186,9 @@ const summary = computed(() => {
         <text
           v-for="tick in xLabels"
           :key="tick.i"
-          :x="xCenter(tick.i)"
+          :x="tick.i === daily.length - 1 ? Math.min(xCenter(tick.i), width - PAD.right) : xCenter(tick.i)"
           :y="HEIGHT - 8"
-          text-anchor="middle"
+          :text-anchor="tick.i === daily.length - 1 ? 'end' : 'middle'"
           class="fill-muted-foreground text-[11px] tabular-nums"
         >{{ tick.label }}</text>
       </svg>

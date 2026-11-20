@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { CalendarDays, MapPin, ScanLine } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,7 @@ import { resolveMediaUrl } from '@/utils/media';
 
 /** Các sự kiện tài khoản này được gán làm nhân viên soát vé. */
 const staffStore = useStaffStore();
+const router = useRouter();
 const authStore = useAuthStore();
 
 onMounted(async () => {
@@ -47,6 +49,8 @@ const events = computed(() => [...staffStore.myEvents].sort((a, b) => {
         :empty="events.length === 0"
         empty-title="Bạn chưa được giao soát vé sự kiện nào"
         empty-description="Khi nhà tổ chức thêm email của bạn làm nhân viên soát vé, sự kiện sẽ hiện ở đây."
+        empty-action-label="Về trang chủ"
+        @empty-action="router.push({ name: 'Home' })"
         @retry="staffStore.fetchMyEvents()"
       >
         <ul class="space-y-3">

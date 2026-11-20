@@ -35,7 +35,8 @@ const calendar = computed(() => {
   const date = new Date(props.event.startTime);
   if (Number.isNaN(date.getTime())) return { day: '—', month: '—', weekday: '' };
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: APP_TIMEZONE, day: '2-digit', month: '2-digit' }).formatToParts(date);
-  const weekday = new Intl.DateTimeFormat('vi-VN', { timeZone: APP_TIMEZONE, weekday: 'short' }).format(date);
+  // "Th 6" -> "T6" để dòng cuống vé không lặp chữ "TH" với tháng.
+  const weekday = new Intl.DateTimeFormat('vi-VN', { timeZone: APP_TIMEZONE, weekday: 'short' }).format(date).replace(/^Th\s*/, 'T');
   return { day: parts.find(part => part.type === 'day')?.value, month: parts.find(part => part.type === 'month')?.value, weekday };
 });
 const when = computed(() => formatEventDateShort(props.event.startTime, props.event.endTime));
@@ -73,12 +74,12 @@ const serial = computed(() => String(parseInt(props.event.id.replace(/[^0-9a-f]/
       <div class="flex h-[4.5rem] shrink-0 items-stretch border-t-2 border-dashed border-border">
         <div class="flex min-w-[5.25rem] flex-col justify-center bg-tone px-3 text-tone-foreground" aria-hidden="true">
           <span class="text-3xl font-extrabold leading-none tabular-nums [font-stretch:75%]">{{ calendar.day }}</span>
-          <span class="mt-1 font-mono text-[11px] font-bold uppercase">Th{{ calendar.month }} · {{ calendar.weekday }}</span>
+          <span class="mt-1 font-mono text-[11px] font-bold uppercase">{{ calendar.weekday }} · Th{{ calendar.month }}</span>
         </div>
         <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-3">
           <p class="truncate font-mono text-sm font-bold tabular-nums">
             <template v-if="minPrice === null"><span class="font-medium text-muted-foreground">Chưa mở bán</span></template>
-            <template v-else><span v-if="minPrice !== 0" class="mr-1 font-medium text-muted-foreground">Từ</span><span class="text-brand">{{ minPrice === 0 ? 'Miễn phí' : formatPrice(minPrice) }}</span></template>
+            <template v-else><span v-if="minPrice !== 0" class="mr-1 font-medium text-muted-foreground">Từ</span><span :class="minPrice === 0 ? 'text-paper-foreground' : 'text-brand'">{{ minPrice === 0 ? 'Miễn phí' : formatPrice(minPrice) }}</span></template>
           </p>
           <div class="flex items-center gap-2 text-paper-foreground/80" aria-hidden="true">
             <span class="barcode h-4 flex-1" />
