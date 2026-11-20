@@ -197,7 +197,7 @@ Giới hạn trong `LIMITS` (`utils/validation.ts`) phải khớp với độ d�
 
 ### Client
 
-- **Sửa giao diện phải theo `DESIGN.md`:** chỉ dùng class theo token (`bg-primary`, `text-muted-foreground`, `border-border`, `text-brand`...), không viết class màu thô của Tailwind (`indigo-*`, `gray-*`...) hay mã hex trong component. Màu đỏ rượu `brand` chỉ cho nút mua hàng, giá vé và badge khan hiếm.
+- **Sửa giao diện phải theo `DESIGN.md`:** chỉ dùng class theo token (`bg-primary`, `text-muted-foreground`, `border-border`, `text-brand`...), không viết class màu thô của Tailwind (`indigo-*`, `gray-*`...) hay mã hex trong component. Hệ "Cuống vé": nền than tối, vé giấy `.paper` cho thẻ sự kiện/khung chọn vé/vé của tôi; màu cam `brand` chỉ cho nút mua hàng, giá vé và khan hiếm (trên giấy `text-brand` tự thành đỏ mộc).
 - **`api/axios.ts` nhận diện loại lỗi 403 bằng regex trên message tiếng Việt** ("token", "bị khoá", "không có quyền"). Đổi các thông báo này ở `auth.middleware.ts` thì phải sửa cả regex.
 - `api/session.ts` là kênh callback giữa axios và `main.ts`, tránh vòng import với router.
 - `token` lưu ở `localStorage`, `user` chỉ nằm trong RAM. Router guard của route cần role phải chờ `authStore.ensureProfile()`.
